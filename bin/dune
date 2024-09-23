@@ -1,4 +1,4 @@
 (executable
  (public_name ComRaTT)
  (name main)
- (libraries ComRaTT))
+ (libraries ComRaTTlib))

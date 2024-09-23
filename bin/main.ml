@@ -1,3 +1,4 @@
+open ComRaTTlib 
 let () = print_endline "Hello, World!"
 
-let adr_bdr = Stack.Empty
+let _ = Absyn.CstI 42
