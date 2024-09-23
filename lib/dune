@@ -1,4 +1,3 @@
 (library
  (name ComRaTTlib)
-  (modules absyn)
- )
+ (modules absyn))
