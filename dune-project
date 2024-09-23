@@ -17,7 +17,7 @@
 
 (package
  (name ComRaTT)
- (synopsis "A short synopsis")
+ (synopsis "A compiled Async RaTT implementation")
  (description "A longer description")
  (depends ocaml dune)
  (tags
