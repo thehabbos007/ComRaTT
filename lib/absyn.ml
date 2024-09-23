@@ -1,1 +1,1 @@
-type texpr = | CstI of int
+type texpr = CstI of int
