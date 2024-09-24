@@ -30,3 +30,8 @@ setup.log
 
 # Local OPAM switch
 _opam/
+
+
+prog.wat
+
+result
