@@ -60,6 +60,7 @@
         buildInputs =
           devPackages
           ++ [
+            pkgs.wasmer
             # You can add packages from nixpkgs here
           ];
       };
