@@ -19,6 +19,7 @@
       on = opam-nix.lib.${system};
       devPackagesQuery = {
         # You can add "development" packages here. They will get added to the devShell automatically.
+        utop = "*";
         ocaml-lsp-server = "*";
         ocamlformat = "*";
         dune = "*";
