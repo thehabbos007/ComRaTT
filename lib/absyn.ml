@@ -12,6 +12,7 @@ type expr =
 
 type typ =
   | TInt
+  | TVar of int
   | TArrow of typ * typ
 
 (** Symbol i.e. variables *)
@@ -63,6 +64,43 @@ let rec interp (x : annot_expr) env =
     let e1' = interp e1 env in
     let env' = Environment.add name e1' env in
     interp e2 env'
+;;
+
+(* Type inference *)
+let type_counter = ref 0
+
+let fresh_type () =
+  incr type_counter;
+  TVar !type_counter
+;;
+
+type substitution = (int * typ) list
+
+let rec apply_subst subst = function
+  | TInt -> TInt
+  | TVar n ->
+    (try List.assoc n subst with
+     | Not_found -> TVar n)
+  | TArrow (t1, t2) -> TArrow (apply_subst subst t1, apply_subst subst t2)
+;;
+
+let rec unify subst t1 t2 =
+  let t1 = apply_subst subst t1 in
+  let t2 = apply_subst subst t2 in
+  match t1, t2 with
+  | TVar n1, TVar n2 when n1 = n2 -> subst
+  | TInt, TInt -> subst
+  | TArrow (a1, r1), TArrow (a2, r2) ->
+    let subst' = unify subst a1 a2 in
+    unify subst' r1 r2
+  | TVar n, t | t, TVar n ->
+    if occurs n t then failwith "occurs check" else (n, t) :: subst
+  | _t1, _t2 -> failwith "Type mismatch"
+
+and occurs n = function
+  | TVar m -> n = m
+  | TArrow (a, r) -> occurs n a || occurs n r
+  | TInt -> false
 ;;
 
 let id = ALam ("x", TInt, AVar ("x", TInt))
