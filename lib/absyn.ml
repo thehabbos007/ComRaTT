@@ -103,32 +103,84 @@ and occurs n = function
   | TInt -> false
 ;;
 
-let id = ALam ("x", TInt, AVar ("x", TInt))
-let empty : value Environment.t = Environment.empty
-let env = Environment.add "y" (VInt 125) empty
-let example = AApp (id, ACstI (84, TInt), TInt)
-let evaluated = interp example env
-let add_example = APrim (Add, ACstI (42, TInt), ACstI (42, TInt), TInt)
-let add_eval = interp add_example Environment.empty
-let sub_example = APrim (Sub, ACstI (42, TInt), ACstI (42, TInt), TInt)
-let sub_eval = interp sub_example Environment.empty
-let square_fun = ALam ("x", TInt, APrim (Mul, AVar ("x", TInt), AVar ("x", TInt), TInt))
-let five_squared = interp (AApp (square_fun, ACstI (5, TInt), TInt)) Environment.empty
+(* follows https://stanford-cs242.github.io/f19/lectures/02-2-type-systems partly*)
+let rec infer env subst = function
+  | CstI _ -> subst, TInt
+  | Var x ->
+    (try
+       let t = List.assoc x env in
+       subst, apply_subst subst t
+     with
+     | Not_found -> failwith ("unbound variable: " ^ x))
+  | Lam (x, e) ->
+    let arg_type = fresh_type () in
+    let subst', result_type = infer ((x, arg_type) :: env) subst e in
+    subst', TArrow (apply_subst subst' arg_type, result_type)
+  | App (e1, e2) ->
+    let subst1, t1 = infer env subst e1 in
+    let subst2, t2 = infer env subst1 e2 in
+    let result_type = fresh_type () in
+    let subst3 = unify subst2 t1 (TArrow (t2, result_type)) in
+    subst3, apply_subst subst3 result_type
+  | Prim (_, e1, e2) ->
+    let subst1, t1 = infer env subst e1 in
+    let subst2, t2 = infer env subst1 e2 in
+    let subst3 = unify subst2 t1 TInt in
+    let subst4 = unify subst3 t2 TInt in
+    subst4, TInt
+;;
+
+(* Annotation *)
+let rec annotate env subst expr =
+  match expr with
+  | Var x ->
+    let subst', t = infer env subst expr in
+    subst', AVar (x, t), t
+  | Lam (x, e) ->
+    let arg_type = fresh_type () in
+    let subst', body_annot, body_type = annotate ((x, arg_type) :: env) subst e in
+    ( subst'
+    , ALam (x, apply_subst subst' arg_type, body_annot)
+    , TArrow (apply_subst subst' arg_type, body_type) )
+  | App (e1, e2) ->
+    let subst1, annot1, t1 = annotate env subst e1 in
+    let subst2, annot2, t2 = annotate env subst1 e2 in
+    let result_type = fresh_type () in
+    let subst3 = unify subst2 t1 (TArrow (t2, result_type)) in
+    ( subst3
+    , AApp (annot1, annot2, apply_subst subst3 result_type)
+    , apply_subst subst3 result_type )
+  | CstI i -> subst, ACstI (i, TInt), TInt
+  | Prim (op, e1, e2) ->
+    let subst1, annot1, t1 = annotate env subst e1 in
+    let subst2, annot2, t2 = annotate env subst1 e2 in
+    let subst3 = unify subst2 t1 TInt in
+    let subst4 = unify subst3 t2 TInt in
+    subst4, APrim (op, annot1, annot2, TInt), TInt
+;;
+
+let run_example ast ~(env : value Environment.t) =
+  let _, annotated, _ = annotate [ "x", TInt ] [] ast in
+  interp annotated env
+;;
+
+let id = Lam ("x", Var "x")
+let square_fun = Lam ("x", Prim (Mul, Var "x", Var "x"))
+let example = App (id, CstI 84) |> run_example ~env:Environment.empty
+let add_example = Prim (Add, CstI 42, CstI 42) |> run_example ~env:Environment.empty
+let sub_example = Prim (Sub, CstI 42, CstI 42) |> run_example ~env:Environment.empty
 
 let binop_with_defined_variable_does_not_fail =
-  interp
-    (APrim (Add, ACstI (42, TInt), AVar ("x", TInt), TInt))
-    (Environment.add "x" (VInt 42) Environment.empty)
+  run_example
+    (Prim (Add, CstI 42, Var "x"))
+    ~env:(Environment.add "x" (VInt 42) Environment.empty)
 ;;
+
+let binop_with_lambda_fails = run_example (Prim (Add, CstI 42, Lam ("x", CstI 2)))
+let five_squared = App (square_fun, CstI 5) |> run_example ~env:Environment.empty
 
 let binop_with_undefined_variable_fails =
-  interp
-    (APrim (Add, ACstI (42, TInt), AVar ("x", TInt), TInt))
-    (Environment.add "y" (VInt 42) Environment.empty)
-;;
-
-let binop_with_lambda_fails =
-  interp
-    (APrim (Add, ACstI (42, TInt), ALam ("x", TInt, ACstI (2, TInt)), TInt))
-    Environment.empty
+  run_example
+    (Prim (Add, CstI 42, Var "x"))
+    ~env:(Environment.add "y" (VInt 42) Environment.empty)
 ;;
