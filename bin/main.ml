@@ -10,7 +10,7 @@ let mock_program =
     local.get $rhs
     i32.add
   )
-  (export "add" (func $add))
+  (export "init" (func $init))
 )
   |}
 ;;

@@ -1,20 +1,4 @@
-type binop =
-  | Add
-  | Mul
-  | Sub
-
-type expr =
-  | CstI of int
-  | Var of string
-  | Lam of string * expr
-  | App of expr * expr
-  | Prim of binop * expr * expr
-  | Let of string * expr * expr
-
-type typ =
-  | TInt
-  | TVar of int
-  | TArrow of typ * typ
+open Source
 
 (** Symbol i.e. variables *)
 type sym = string
@@ -25,6 +9,11 @@ module Environment = Map.Make (struct
     let compare = String.compare
   end)
 
+type typ =
+  | TInt
+  | TVar of int
+  | TArrow of typ * typ
+
 (** Annotated expression (Types) *)
 type annot_expr =
   | ACstI of int * typ
@@ -33,39 +22,6 @@ type annot_expr =
   | AApp of annot_expr * annot_expr * typ
   | APrim of binop * annot_expr * annot_expr * typ
   | ALet of sym * typ * annot_expr * annot_expr
-
-type value =
-  | VInt of int
-  | VClosure of string * annot_expr * value Environment.t
-
-let rec interp (x : annot_expr) env =
-  match x with
-  | ACstI (i, _) -> VInt i
-  | AVar (v, _) ->
-    (match Environment.find_opt v env with
-     | Some var -> var
-     | None -> failwith "variable not defined in environment")
-  | ALam (param, _, body) -> VClosure (param, body, env)
-  | APrim (op, e1, e2, _) ->
-    (match interp e1 env, interp e2 env with
-     | VInt x, VInt y ->
-       (match op with
-        | Add -> VInt (x + y)
-        | Mul -> VInt (x * y)
-        | Sub -> VInt (x - y))
-     | VClosure _, VClosure _ -> failwith "cannot do primitive operations on two closures"
-     | _, VClosure _ -> failwith "cannot do primitive operations on int and closure"
-     | VClosure _, _ -> failwith "cannot do primitive operations on closure and int")
-  | AApp (body, arg', _) ->
-    let arg = interp arg' env in
-    (match interp body env with
-     | VClosure (param, body', env') -> interp body' (Environment.add param arg env')
-     | _ -> failwith "Cannot apply to non-closure")
-  | ALet (name, _, e1, e2) ->
-    let e1' = interp e1 env in
-    let env' = Environment.add name e1' env in
-    interp e2 env'
-;;
 
 (* Type inference *)
 let type_counter = ref 0
@@ -168,28 +124,9 @@ let rec annotate env subst expr =
     subst2, ALet (x, t1, annot1, annot2), t2
 ;;
 
-let run_example ast ~(env : value Environment.t) =
-  let _, annotated, _ = annotate [ "x", TInt ] [] ast in
-  interp annotated env
-;;
-
-let id = Lam ("x", Var "x")
-let square_fun = Lam ("x", Prim (Mul, Var "x", Var "x"))
-let example = App (id, CstI 84) |> run_example ~env:Environment.empty
-let add_example = Prim (Add, CstI 42, CstI 42) |> run_example ~env:Environment.empty
-let sub_example = Prim (Sub, CstI 42, CstI 42) |> run_example ~env:Environment.empty
-
-let binop_with_defined_variable_does_not_fail =
-  run_example
-    (Prim (Add, CstI 42, Var "x"))
-    ~env:(Environment.add "x" (VInt 42) Environment.empty)
-;;
-
-let binop_with_lambda_fails = run_example (Prim (Add, CstI 42, Lam ("x", CstI 2)))
-let five_squared = App (square_fun, CstI 5) |> run_example ~env:Environment.empty
-
-let binop_with_undefined_variable_fails =
-  run_example
-    (Prim (Add, CstI 42, Var "x"))
-    ~env:(Environment.add "y" (VInt 42) Environment.empty)
+(* Pretty printing *)
+let rec string_of_type = function
+  | TInt -> "int"
+  | TVar n -> "t" ^ string_of_int n
+  | TArrow (t1, t2) -> "(" ^ string_of_type t1 ^ " -> " ^ string_of_type t2 ^ ")"
 ;;
