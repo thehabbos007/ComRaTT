@@ -9,6 +9,7 @@ type expr =
   | Lam of string * expr
   | App of expr * expr
   | Prim of binop * expr * expr
+  | Let of string * expr * expr
 
 type typ =
   | TInt
@@ -128,6 +129,10 @@ let rec infer env subst = function
     let subst3 = unify subst2 t1 TInt in
     let subst4 = unify subst3 t2 TInt in
     subst4, TInt
+  | Let (x, e1, e2) ->
+    let subst1, t1 = infer env subst e1 in
+    let subst2, t2 = infer ((x, t1) :: env) subst1 e2 in
+    subst2, t2
 ;;
 
 (* Annotation *)
@@ -157,6 +162,10 @@ let rec annotate env subst expr =
     let subst3 = unify subst2 t1 TInt in
     let subst4 = unify subst3 t2 TInt in
     subst4, APrim (op, annot1, annot2, TInt), TInt
+  | Let (x, e1, e2) ->
+    let subst1, annot1, t1 = annotate env subst e1 in
+    let subst2, annot2, t2 = annotate ((x, t1) :: env) subst1 e2 in
+    subst2, ALet (x, t1, annot1, annot2), t2
 ;;
 
 let run_example ast ~(env : value Environment.t) =
