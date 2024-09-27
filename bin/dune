@@ -1,4 +1,4 @@
-(executable
- (public_name ComRaTT)
- (name main)
+(executables
+ (public_names ComRaTT playground)
+ (names main playground)
  (libraries ComRaTTlib))

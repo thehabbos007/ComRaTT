@@ -17,6 +17,9 @@
     flake-utils.lib.eachDefaultSystem (system: let
       pkgs = nixpkgs.legacyPackages.${system};
       on = opam-nix.lib.${system};
+      localPackagesQuery =
+        builtins.mapAttrs (_: pkgs.lib.last)
+        (on.listRepo (on.makeOpamRepo ./.));
       devPackagesQuery = {
         # You can add "development" packages here. They will get added to the devShell automatically.
         utop = "*";
@@ -44,8 +47,9 @@
         });
       };
       scope' = scope.overrideScope' overlay;
-      # The main package containing the executable
-      main = scope'.${package};
+      # Packages in this workspace
+      packages =
+        pkgs.lib.getAttrs (builtins.attrNames localPackagesQuery) scope';
       # Packages from devPackagesQuery
       devPackages =
         builtins.attrValues
@@ -53,10 +57,10 @@
     in {
       legacyPackages = scope';
 
-      packages.default = main;
+      packages = packages // {default = packages.ComRaTT;};
 
       devShells.default = pkgs.mkShell {
-        inputsFrom = [main];
+        inputsFrom = builtins.attrValues packages;
         buildInputs =
           devPackages
           ++ [
