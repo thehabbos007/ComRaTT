@@ -19,6 +19,6 @@ let () =
   let oc = open_out prog in
   Printf.fprintf oc "%s" mock_program;
   close_out oc;
-  let args = Sys.argv |> Array.to_list |> String.concat " " in
+  let args = Sys.argv |> Array.to_list |> List.tl |> String.concat " " in
   Sys.command (Printf.sprintf "wasmer %s --invoke init %s" prog args) |> ignore
 ;;
