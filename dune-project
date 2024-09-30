@@ -1,4 +1,4 @@
-(lang dune 3.12)
+(lang dune 3.7)
 
 (name ComRaTT)
 
@@ -19,7 +19,7 @@
  (name ComRaTT)
  (synopsis "A compiled Async RaTT implementation")
  (description "A longer description")
- (depends ocaml dune)
+ (depends ocaml dune ppx_deriving)
  (tags
   (topics "to describe" your project)))
 

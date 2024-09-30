@@ -1,4 +1,6 @@
 (executables
  (public_names ComRaTT playground)
+ (preprocess
+  (pps ppx_deriving.show ppx_deriving.ord))
  (names main playground)
  (libraries ComRaTTlib))
