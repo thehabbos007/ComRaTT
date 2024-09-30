@@ -1,3 +1,5 @@
 (library
  (name ComRaTTlib)
- (modules source annotate interpret))
+ (preprocess
+  (pps ppx_deriving.show ppx_deriving.ord))
+ (modules source annotate interpret compile))

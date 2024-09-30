@@ -17,7 +17,7 @@ let rec interp (x : annot_expr) env =
     (match Environment.find_opt v env with
      | Some var -> var
      | None -> failwith ("variable not defined in environment: " ^ v))
-  | ALam (param, _, body) -> VClosure (param, body, env)
+  | ALam ([ (param, _) ], body) -> VClosure (param, body, env)
   | APrim (op, e1, e2, _) ->
     (match interp e1 env, interp e2 env with
      | VInt x, VInt y ->
@@ -37,4 +37,5 @@ let rec interp (x : annot_expr) env =
     let e1' = interp e1 env in
     let env' = Environment.add name e1' env in
     interp e2 env'
+  | _ -> failwith "oopsie, applied more than one lambda arg.."
 ;;
