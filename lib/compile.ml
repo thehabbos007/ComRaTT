@@ -33,3 +33,16 @@ and rename_call annot old_name new_name =
   | ALet (x, t, e1, e2) ->
     ALet (x, t, rename_call e1 old_name new_name, rename_call e2 old_name new_name)
 ;;
+
+(** Step 2, name anonymous lambdas*)
+let rec lambda_lift_anon_names annot =
+  match annot with
+  | ACstI _ -> annot
+  | AVar _ -> annot
+  | ALam (args, body) -> failwith "not impl"
+  | APrim (op, e1, e2, t) ->
+    APrim (op, lambda_lift_anon_names e1, lambda_lift_anon_names e2, t)
+  | AApp (e1, e2, t) -> AApp (lambda_lift_anon_names e1, lambda_lift_anon_names e2, t)
+  | ALet (x, t, e1, e2) ->
+    ALet (x, t, lambda_lift_anon_names e1, lambda_lift_anon_names e2)
+;;
