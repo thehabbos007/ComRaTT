@@ -39,7 +39,7 @@ let rec lambda_lift_anon_names annot =
   match annot with
   | ACstI _ -> annot
   | AVar _ -> annot
-  | ALam (args, body) -> failwith "not impl"
+  | ALam (_, _) -> failwith "not impl"
   | APrim (op, e1, e2, t) ->
     APrim (op, lambda_lift_anon_names e1, lambda_lift_anon_names e2, t)
   | AApp (e1, e2, t) -> AApp (lambda_lift_anon_names e1, lambda_lift_anon_names e2, t)
