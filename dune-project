@@ -19,7 +19,7 @@
  (name ComRaTT)
  (synopsis "A compiled Async RaTT implementation")
  (description "A longer description")
- (depends ocaml dune ppx_deriving ppx_inline_test ppx_assert)
+ (depends ocaml dune ppx_deriving ounit2)
  (tags
   (topics "to describe" your project)))
 
