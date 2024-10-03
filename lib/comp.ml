@@ -10,7 +10,8 @@ let binop_to_wasm op ty = match (op, ty) with
 let wasm_type_of_type ty = 
   match ty with
   | TInt -> "i64"
-  | _ -> failwith "not implemented"
+  | TVar x -> string_of_int x
+  | TArrow (_t1, _t2) -> "arrow"
 
 let rec args_to_str (arg_list : (sym * typ) list) =
   match arg_list with
@@ -36,8 +37,19 @@ let lambda_let_str name ret_ty body args =
 
 let apply_str name arg = Printf.sprintf "(call $%s (%s))" name arg
 
+let acsti_to_str annot_expr = match  annot_expr with
+| ACstI (number, _) -> string_of_int number
+| _ -> failwith "hanzo"
 
+let rec push_args args = match args with
+| [] -> ""
+| head::tail -> "i64.const " ^ (acsti_to_str head) ^ "\n" ^ push_args tail
 
+let create_outer ret_ty to_be_called name args = Printf.sprintf "%s (func $caller (result %s)
+ %s
+ call $%s 
+
+) (export \"caller\" (func $caller))" to_be_called ret_ty (push_args args) name
 (*
   what is fastest: string concat or format strings? 
   
@@ -52,10 +64,23 @@ let rec comp (expr : annot_expr ) : string =
     let e1_comp = comp e1 in
     let e2_comp = comp e2 in
     e1_comp ^ "\n" ^ e2_comp ^ "\n" ^ binop_to_wasm op ty
-  | AApp (name, args, _) -> apply_str (comp name) (List.fold_left (fun acc arg -> acc ^ (comp arg)) "" args)
+  | AApp (_name, _args, _) -> failwith "AApp no impl" (*apply_str (comp name) (List.fold_left (fun acc arg -> acc ^ (comp arg)) "" args)*)
+  (* TODO rhs of let binding is not handled at all
+    we still need to handle the call part of functions
+    -> explicitly handled in the pattern below
+  *)
+  | ALet (_name, _ret_ty, ALam(_largs, _body), AApp (_appname, _args, _ty)) ->
+    create_outer (wasm_type_of_type _ret_ty) (lambda_let_str _name (wasm_type_of_type _ret_ty) (comp _body) _largs) _name _args
   | ALet (name, ret_ty, ALam(args, body), _) -> lambda_let_str name (wasm_type_of_type ret_ty) (comp body) args
   | ALet (name, ret_ty, body, _) -> let_str name (wasm_type_of_type ret_ty) (comp body)
   | _ -> failwith "not supported"
+
+and 
+call_function name _args = Printf.sprintf "(call $%s (%s))" (comp name) (List.fold_left (fun acc arg -> acc ^ (comp arg) ^ " ") "" _args)
+and
+
+comp_rhs rhs _lhs = Printf.sprintf "(%s)" (comp rhs)
+
 
 let init_wat (expr : annot_expr) = 
   Printf.sprintf "(module \n%s)" (comp expr)
