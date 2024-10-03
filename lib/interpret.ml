@@ -31,7 +31,7 @@ let rec interp (x : annot_expr) env =
   | AApp (body, args', _) -> 
     let args = List.map (fun arg' -> interp arg' env) args' in
     (match interp body env with
-     | VClosure (params, body', env') -> (*interp body' (Environment.add param arg env')*)
+     | VClosure (params, body', env') ->
       let zipped = List.combine params args in
       let env'' = List.fold_left (fun acc (param, arg) -> Environment.add param arg acc) env' zipped in
       interp body' env''
