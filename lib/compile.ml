@@ -4,45 +4,43 @@ let name_counter = ref 0
 
 let unique_name x =
   incr name_counter;
-  "#" ^ x ^ string_of_int !name_counter
+  Printf.sprintf "#%s_%d" x !name_counter
 ;;
 
-(** Step 1, rename all lambdas to a unique identifier*)
-let rec lambda_lift_rename annot =
-  match annot with
-  | ACstI _ -> annot
-  | AVar _ -> annot
-  | ALam (args, body) -> ALam (args, lambda_lift_rename body)
-  | APrim (op, e1, e2, t) -> APrim (op, lambda_lift_rename e1, lambda_lift_rename e2, t)
-  | AApp (e1, e2, t) -> AApp (lambda_lift_rename e1, lambda_lift_rename e2, t)
-  | ALet (x, t, (ALam _ as e1), e2) ->
-    let new_name = unique_name x in
-    let e2' = lambda_lift_rename e2 in
-    ALet (new_name, t, lambda_lift_rename e1, rename_call e2' x new_name)
-  | ALet (x, t, e1, e2) -> ALet (x, t, lambda_lift_rename e1, lambda_lift_rename e2)
-
-and rename_call annot old_name new_name =
-  match annot with
-  | ACstI _ -> annot
-  | AVar (x, t) -> if x = old_name then AVar (new_name, t) else annot
-  | ALam (args, body) -> ALam (args, rename_call body old_name new_name)
-  | APrim (op, e1, e2, t) ->
-    APrim (op, rename_call e1 old_name new_name, rename_call e2 old_name new_name, t)
-  | AApp (e1, e2, t) ->
-    AApp (rename_call e1 old_name new_name, rename_call e2 old_name new_name, t)
+let rec free_vars = function
+  | ACstI _ -> []
+  | AVar (x, t) -> [ x, t ]
+  | ALam (params, body, _) ->
+    let param_names = List.map fst params in
+    List.filter (fun (x, _) -> not (List.mem x param_names)) (free_vars body)
+  | AApp (e1, e2, _) ->
+    List.sort_uniq compare (free_vars e1 @ (List.map free_vars e2 |> List.concat))
+  | APrim (_, e1, e2, _) -> List.sort_uniq compare (free_vars e1 @ free_vars e2)
   | ALet (x, t, e1, e2) ->
-    ALet (x, t, rename_call e1 old_name new_name, rename_call e2 old_name new_name)
+    let fv1 = free_vars e1 in
+    let fv2 = List.filter (( <> ) (x, t)) (free_vars e2) in
+    List.sort_uniq compare (fv1 @ fv2)
 ;;
 
-(** Step 2, name anonymous lambdas*)
-let rec lambda_lift_anon_names annot =
-  match annot with
-  | ACstI _ -> annot
-  | AVar _ -> annot
-  | ALam (args, body) -> failwith "not impl"
-  | APrim (op, e1, e2, t) ->
-    APrim (op, lambda_lift_anon_names e1, lambda_lift_anon_names e2, t)
-  | AApp (e1, e2, t) -> AApp (lambda_lift_anon_names e1, lambda_lift_anon_names e2, t)
-  | ALet (x, t, e1, e2) ->
-    ALet (x, t, lambda_lift_anon_names e1, lambda_lift_anon_names e2)
+let closure_convert globals expr =
+  let rec convert = function
+    | ALet (x, t1, ALam (params, body, t2), e2) ->
+      ALet (x, t1, ALam (params, convert body, t2), convert e2)
+    | ALam (params, body, t) as e ->
+      let free_vars =
+        List.filter
+          (fun (v, _) -> not (List.mem v globals || List.mem v (List.map fst params)))
+          (free_vars e)
+      in
+      let new_params = free_vars @ params in
+      let converted_body = convert body in
+      let lambda = ALam (new_params, converted_body, t) in
+      AApp (lambda, List.map (fun (x, t) -> AVar (x, t)) free_vars, TInt)
+    | AApp (e1, e2, t) -> AApp (convert e1, List.map convert e2, t)
+    | APrim (op, e1, e2, t) -> APrim (op, convert e1, convert e2, t)
+    | ALet (x, t, e1, e2) -> ALet (x, t, convert e1, convert e2)
+    | e -> e
+  in
+  convert expr
+;;
 ;;
