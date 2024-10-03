@@ -1,83 +1,114 @@
+open Source
 open Annotate
 
-let name_counter = ref 0
-
-let unique_name x =
-  incr name_counter;
-  Printf.sprintf "#%s_%d" x !name_counter
+let binop_to_wasm op ty =
+  match op, ty with
+  | Add, TInt -> "i64.add"
+  | Sub, TInt -> "i64.sub"
+  | Mul, TInt -> "i64.mul"
+  | _ -> failwith "binop_to_wasm not supported for type"
 ;;
 
-let rec free_vars = function
-  | ACstI _ -> []
-  | AVar (x, t) -> [ x, t ]
-  | ALam (params, body, _) ->
-    let param_names = List.map fst params in
-    List.filter (fun (x, _) -> not (List.mem x param_names)) (free_vars body)
-  | AApp (e1, e2, _) ->
-    List.sort_uniq compare (free_vars e1 @ (List.map free_vars e2 |> List.concat))
-  | APrim (_, e1, e2, _) -> List.sort_uniq compare (free_vars e1 @ free_vars e2)
-  | ALet (x, t, e1, e2) ->
-    let fv1 = free_vars e1 in
-    let fv2 = List.filter (( <> ) (x, t)) (free_vars e2) in
-    List.sort_uniq compare (fv1 @ fv2)
+let wasm_type_of_type ty =
+  match ty with
+  | TInt -> "i64"
+  | TVar x -> string_of_int x
+  | TArrow (_t1, _t2) -> "arrow"
 ;;
 
-let convert_params_to_arrow params ret_type =
-  List.fold_right (fun (_, t) acc -> TArrow (t, acc)) params ret_type
+let rec args_to_str (arg_list : (sym * typ) list) =
+  match arg_list with
+  | [] -> ""
+  | (name, typ) :: tail ->
+    Printf.sprintf "(param $%s %s) %s" name (wasm_type_of_type typ) (args_to_str tail)
 ;;
 
-let closure_convert globals expr =
-  let rec convert = function
-    | ALet (x, t1, ALam (params, body, t2), e2) ->
-      ALet (x, t1, ALam (params, convert body, t2), convert e2)
-    | ALam (params, body, t) as e ->
-      let free_vars =
-        List.filter
-          (fun (v, _) -> not (List.mem v globals || List.mem v (List.map fst params)))
-          (free_vars e)
-      in
-      let new_params = free_vars @ params in
-      let converted_body = convert body in
-      let lambda = ALam (new_params, converted_body, t) in
-      let substitute_type = convert_params_to_arrow params t in
-      AApp (lambda, List.map (fun (x, t) -> AVar (x, t)) free_vars, substitute_type)
-    | AApp (e1, e2, t) -> AApp (convert e1, List.map convert e2, t)
-    | APrim (op, e1, e2, t) -> APrim (op, convert e1, convert e2, t)
-    | ALet (x, t, e1, e2) -> ALet (x, t, convert e1, convert e2)
-    | e -> e
-  in
-  convert expr
+(* den går ikke, for det er jo let der har navne...*)
+let fun_string name args ret_typ =
+  Printf.sprintf "(func $%s %s (result %s))" name (args_to_str args) ret_typ
 ;;
 
-type global_def =
-  { name : sym
-  ; args : (sym * typ) list
-  ; body : annot_expr
-  ; ret_type : typ
-  }
+let var_str name = "local.get $" ^ name
 
-let lift_lambdas expr =
-  let definitions = ref [] in
-  let rec lift = function
-    (* Important pattern: keep top-level lambda bindings,
-       these are user-defined top-levelfunctions *)
-    | ALet (x, t1, ALam (params, body, t2), e2) ->
-      ALet (x, t1, ALam (params, lift body, t2), lift e2)
-    | ALam (params, body, ret_type) ->
-      let lifted_body = lift body in
-      let name = unique_name "global_lam" in
-      definitions := { name; args = params; body = lifted_body; ret_type } :: !definitions;
-      AVar (name, ret_type)
-    | AApp (e1, e2, t) -> AApp (lift e1, List.map lift e2, t)
-    | APrim (op, e1, e2, t) -> APrim (op, lift e1, lift e2, t)
-    | ALet (x, t, e1, e2) -> ALet (x, t, lift e1, lift e2)
-    | e -> e
-  in
-  let lifted_expr = lift expr in
-  lifted_expr, !definitions
+(* what to do with let right hand side?*)
+let let_str name ret_ty body =
+  Printf.sprintf "(func $%s args? (result %s)\n    %s\n  )" name ret_ty body
 ;;
 
-let lambda_lift_expr globals expr =
-  let closed_expr = closure_convert globals expr in
-  lift_lambdas closed_expr
+let lambda_let_str name ret_ty body args =
+  Printf.sprintf
+    "(func $%s %s (result %s)\n    %s\n  ) (export \"%s\" (func $%s))"
+    name
+    (args_to_str args)
+    ret_ty
+    body
+    name
+    name
 ;;
+
+let apply_str name arg = Printf.sprintf "(call $%s (%s))" name arg
+
+let acsti_to_str annot_expr =
+  match annot_expr with
+  | ACstI (number, _) -> string_of_int number
+  | _ -> failwith "hanzo"
+;;
+
+let rec push_args args =
+  match args with
+  | [] -> ""
+  | head :: tail -> "i64.const " ^ acsti_to_str head ^ "\n" ^ push_args tail
+;;
+
+let create_outer ret_ty to_be_called name args =
+  Printf.sprintf
+    "%s (func $caller (result %s)\n\
+    \ %s\n\
+    \ call $%s \n\n\
+     ) (export \"caller\" (func $caller))"
+    to_be_called
+    ret_ty
+    (push_args args)
+    name
+;;
+
+(*
+   what is fastest: string concat or format strings?
+
+   assume: lambdas are never nested and all lambdas are in a top level let binding
+*)
+let rec comp (expr : annot_expr) : string =
+  match expr with
+  | AVar (name, _) -> var_str name
+  (* type of ACstI is always int, discard for now *)
+  | ACstI (num, _) -> "i64.const " ^ string_of_int num
+  | APrim (op, e1, e2, ty) ->
+    let e1_comp = comp e1 in
+    let e2_comp = comp e2 in
+    e1_comp ^ "\n" ^ e2_comp ^ "\n" ^ binop_to_wasm op ty
+  | AApp (_name, _args, _) -> failwith "AApp no impl"
+  (*apply_str (comp name) (List.fold_left (fun acc arg -> acc ^ (comp arg)) "" args)*)
+  (* TODO rhs of let binding is not handled at all
+     we still need to handle the call part of functions
+     -> explicitly handled in the pattern below
+  *)
+  | ALet (_name, _ret_ty, ALam (_largs, _body, _t), AApp (_appname, _args, _ty)) ->
+    create_outer
+      (wasm_type_of_type _ret_ty)
+      (lambda_let_str _name (wasm_type_of_type _ret_ty) (comp _body) _largs)
+      _name
+      _args
+  | ALet (name, ret_ty, ALam (args, body, _t), _) ->
+    lambda_let_str name (wasm_type_of_type ret_ty) (comp body) args
+  | ALet (name, ret_ty, body, _) -> let_str name (wasm_type_of_type ret_ty) (comp body)
+  | _ -> failwith "not supported"
+
+and call_function name _args =
+  Printf.sprintf
+    "(call $%s (%s))"
+    (comp name)
+    (List.fold_left (fun acc arg -> acc ^ comp arg ^ " ") "" _args)
+
+and comp_rhs rhs _lhs = Printf.sprintf "(%s)" (comp rhs)
+
+let init_wat (expr : annot_expr) = Printf.sprintf "(module \n%s)" (comp expr)

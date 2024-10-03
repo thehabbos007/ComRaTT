@@ -1,6 +1,6 @@
 open ComRaTTlib.Source
 open ComRaTTlib.Annotate
-open ComRaTTlib.Compile
+open ComRaTTlib.Preprocess
 open OUnit2
 
 (* Helper function to create test cases *)

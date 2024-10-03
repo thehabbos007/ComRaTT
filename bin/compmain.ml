@@ -1,6 +1,6 @@
 open ComRaTTlib.Source
 open ComRaTTlib.Annotate
-open ComRaTTlib.Comp
+open ComRaTTlib.Compile
 open ComRaTTlib.Interpret
 
 let _run_example ast ~(env : value Environment.t) =

@@ -1,6 +1,6 @@
 open ComRaTTlib.Source
 open ComRaTTlib.Annotate
-open ComRaTTlib.Comp
+open ComRaTTlib.Compile
 
 let _let_example =
   ALet
