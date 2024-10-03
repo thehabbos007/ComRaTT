@@ -22,6 +22,10 @@ let rec free_vars = function
     List.sort_uniq compare (fv1 @ fv2)
 ;;
 
+let convert_params_to_arrow params ret_type =
+  List.fold_right (fun (_, t) acc -> TArrow (t, acc)) params ret_type
+;;
+
 let closure_convert globals expr =
   let rec convert = function
     | ALet (x, t1, ALam (params, body, t2), e2) ->
@@ -35,7 +39,8 @@ let closure_convert globals expr =
       let new_params = free_vars @ params in
       let converted_body = convert body in
       let lambda = ALam (new_params, converted_body, t) in
-      AApp (lambda, List.map (fun (x, t) -> AVar (x, t)) free_vars, TInt)
+      let substitute_type = convert_params_to_arrow params t in
+      AApp (lambda, List.map (fun (x, t) -> AVar (x, t)) free_vars, substitute_type)
     | AApp (e1, e2, t) -> AApp (convert e1, List.map convert e2, t)
     | APrim (op, e1, e2, t) -> APrim (op, convert e1, convert e2, t)
     | ALet (x, t, e1, e2) -> ALet (x, t, convert e1, convert e2)

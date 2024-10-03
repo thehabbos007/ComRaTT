@@ -1,7 +1,7 @@
 open Source
 
 (** Symbol i.e. variables *)
-type sym = string [@@deriving show]
+type sym = string [@@deriving show, eq]
 
 module Environment = Map.Make (struct
     type t = sym
@@ -13,7 +13,7 @@ type typ =
   | TInt
   | TVar of int
   | TArrow of typ * typ
-[@@deriving show]
+[@@deriving show, eq]
 
 (** Annotated expression (Types) *)
 type annot_expr =
@@ -23,7 +23,7 @@ type annot_expr =
   | AApp of annot_expr * annot_expr list * typ
   | APrim of binop * annot_expr * annot_expr * typ
   | ALet of sym * typ * annot_expr * annot_expr
-[@@deriving show]
+[@@deriving show, eq]
 
 (* Type inference *)
 let type_counter = ref 0
