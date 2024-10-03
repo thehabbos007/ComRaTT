@@ -1,7 +1,6 @@
 open ComRaTTlib.Source
 open ComRaTTlib.Annotate
 open ComRaTTlib.Interpret
-open ComRaTTlib.Compile
 
 let run_example ast ~(env : value Environment.t) =
   let _, annotated, _ = annotate [ "x", TInt ] [] ast in
