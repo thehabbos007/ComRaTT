@@ -28,10 +28,10 @@ let rec interp (x : annot_expr) env =
      | VClosure _, VClosure _ -> failwith "cannot do primitive operations on two closures"
      | _, VClosure _ -> failwith "cannot do primitive operations on int and closure"
      | VClosure _, _ -> failwith "cannot do primitive operations on closure and int")
-  | AApp (body, arg', _) ->
-    let arg = interp arg' env in
+  | AApp (body, [ arg ], _) ->
+    let arg' = interp arg env in
     (match interp body env with
-     | VClosure (param, body', env') -> interp body' (Environment.add param arg env')
+     | VClosure (param, body', env') -> interp body' (Environment.add param arg' env')
      | _ -> failwith "Cannot apply to non-closure")
   | ALet (name, _, e1, e2) ->
     let e1' = interp e1 env in

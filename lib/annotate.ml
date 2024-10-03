@@ -20,7 +20,7 @@ type annot_expr =
   | ACstI of int * typ
   | AVar of sym * typ
   | ALam of (sym * typ) list * annot_expr * typ
-  | AApp of annot_expr * annot_expr * typ
+  | AApp of annot_expr * annot_expr list * typ
   | APrim of binop * annot_expr * annot_expr * typ
   | ALet of sym * typ * annot_expr * annot_expr
 [@@deriving show]
@@ -111,7 +111,7 @@ let rec annotate env subst expr =
     let result_type = fresh_type () in
     let subst3 = unify subst2 t1 (TArrow (t2, result_type)) in
     ( subst3
-    , AApp (annot1, annot2, apply_subst subst3 result_type)
+    , AApp (annot1, [ annot2 ], apply_subst subst3 result_type)
     , apply_subst subst3 result_type )
   | CstI i -> subst, ACstI (i, TInt), TInt
   | Prim (op, e1, e2) ->
