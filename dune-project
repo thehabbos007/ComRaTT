@@ -15,11 +15,13 @@
 
 (documentation https://url/to/documentation)
 
+(using menhir 2.1)
+
 (package
  (name ComRaTT)
  (synopsis "A compiled Async RaTT implementation")
  (description "A longer description")
- (depends ocaml dune ppx_deriving)
+ (depends ocaml dune ppx_deriving ounit2 menhir)
  (tags
   (topics "to describe" your project)))
 

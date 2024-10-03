@@ -1,7 +1,7 @@
 open Source
 
 (** Symbol i.e. variables *)
-type sym = string
+type sym = string [@@deriving show, eq]
 
 module Environment = Map.Make (struct
     type t = sym
@@ -13,15 +13,17 @@ type typ =
   | TInt
   | TVar of int
   | TArrow of typ * typ
+[@@deriving show, eq]
 
 (** Annotated expression (Types) *)
 type annot_expr =
   | ACstI of int * typ
   | AVar of sym * typ
-  | ALam of sym * typ * annot_expr
-  | AApp of annot_expr * annot_expr * typ
+  | ALam of (sym * typ) list * annot_expr * typ
+  | AApp of annot_expr * annot_expr list * typ
   | APrim of binop * annot_expr * annot_expr * typ
   | ALet of sym * typ * annot_expr * annot_expr
+[@@deriving show, eq]
 
 (* Type inference *)
 let type_counter = ref 0
@@ -101,7 +103,7 @@ let rec annotate env subst expr =
     let arg_type = fresh_type () in
     let subst', body_annot, body_type = annotate ((x, arg_type) :: env) subst e in
     ( subst'
-    , ALam (x, apply_subst subst' arg_type, body_annot)
+    , ALam ([ x, apply_subst subst' arg_type ], body_annot, body_type)
     , TArrow (apply_subst subst' arg_type, body_type) )
   | App (e1, e2) ->
     let subst1, annot1, t1 = annotate env subst e1 in
@@ -109,7 +111,7 @@ let rec annotate env subst expr =
     let result_type = fresh_type () in
     let subst3 = unify subst2 t1 (TArrow (t2, result_type)) in
     ( subst3
-    , AApp (annot1, annot2, apply_subst subst3 result_type)
+    , AApp (annot1, [ annot2 ], apply_subst subst3 result_type)
     , apply_subst subst3 result_type )
   | CstI i -> subst, ACstI (i, TInt), TInt
   | Prim (op, e1, e2) ->

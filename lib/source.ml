@@ -2,6 +2,7 @@ type binop =
   | Add
   | Mul
   | Sub
+[@@deriving show, eq]
 
 type expr =
   | CstI of int
@@ -10,6 +11,7 @@ type expr =
   | App of expr * expr
   | Prim of binop * expr * expr
   | Let of string * expr * expr
+[@@deriving show, eq]
 
 (* Pretty printing *)
 

@@ -38,6 +38,8 @@
           ## - or force ocamlfind to be a certain version:
           # ocamlfind = "1.9.2";
           ppx_deriving = "*";
+          ounit2 = "*";
+          menhir = "*";
         };
       scope = on.buildDuneProject {} "ComRaTT" ./. query;
       overlay = final: prev: {
