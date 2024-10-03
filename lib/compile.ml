@@ -43,4 +43,7 @@ let closure_convert globals expr =
   in
   convert expr
 ;;
+let lambda_lift_expr globals expr =
+  let closed_expr = closure_convert globals expr in
+  closed_expr
 ;;
