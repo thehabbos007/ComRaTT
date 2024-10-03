@@ -43,7 +43,36 @@ let closure_convert globals expr =
   in
   convert expr
 ;;
+
+type global_def =
+  { name : sym
+  ; args : (sym * typ) list
+  ; body : annot_expr
+  ; ret_type : typ
+  }
+
+let lift_lambdas expr =
+  let definitions = ref [] in
+  let rec lift = function
+    (* Important pattern: keep top-level lambda bindings,
+       these are user-defined top-levelfunctions *)
+    | ALet (x, t1, ALam (params, body, t2), e2) ->
+      ALet (x, t1, ALam (params, lift body, t2), lift e2)
+    | ALam (params, body, ret_type) ->
+      let lifted_body = lift body in
+      let name = unique_name "global_lam" in
+      definitions := { name; args = params; body = lifted_body; ret_type } :: !definitions;
+      AVar (name, ret_type)
+    | AApp (e1, e2, t) -> AApp (lift e1, List.map lift e2, t)
+    | APrim (op, e1, e2, t) -> APrim (op, lift e1, lift e2, t)
+    | ALet (x, t, e1, e2) -> ALet (x, t, lift e1, lift e2)
+    | e -> e
+  in
+  let lifted_expr = lift expr in
+  lifted_expr, !definitions
+;;
+
 let lambda_lift_expr globals expr =
   let closed_expr = closure_convert globals expr in
-  closed_expr
+  lift_lambdas closed_expr
 ;;

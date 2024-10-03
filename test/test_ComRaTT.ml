@@ -26,7 +26,7 @@ let rec expr_equal e1 e2 =
 let make_test name input expected =
   name
   >:: fun _ ->
-  let result = lambda_lift_expr [] input in
+  let result, _ = lambda_lift_expr [] input in
   assert_bool
     ("Expected:\n" ^ show_annot_expr expected ^ "\nBut got:\n" ^ show_annot_expr result)
     (expr_equal result expected)
