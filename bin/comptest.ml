@@ -2,7 +2,7 @@ open ComRaTTlib.Source
 open ComRaTTlib.Annotate
 open ComRaTTlib.Comp
 
-let _let_example = ALet ("inc", TInt, ALam ([("x", TInt)], APrim(Add, AVar ("x", TInt), ACstI (1, TInt), TInt)), AApp (AVar ("inc", TInt), ACstI (41, TInt), TInt));;
+let _let_example = ALet ("inc", TInt, ALam ([("x", TInt)], APrim(Add, AVar ("x", TInt), ACstI (1, TInt), TInt)), AApp (AVar ("inc", TInt), [ACstI (41, TInt)], TInt));;
 
 (*
  let x = 41 in x+1
@@ -21,7 +21,7 @@ let _let_example = ALet ("inc", TInt, ALam ([("x", TInt)], APrim(Add, AVar ("x",
 
 *)
 
-let _reallet = ALet ("x", TInt, ALam([("y", TInt)], APrim(Add, AVar ("y", TInt), ACstI (1, TInt), TInt)), AApp (AVar ("x", TInt), ACstI (42, TInt), TInt));;
+let _reallet = ALet ("x", TInt, ALam([("y", TInt)], APrim(Add, AVar ("y", TInt), ACstI (1, TInt), TInt)), AApp (AVar ("x", TInt), [ACstI (42, TInt)], TInt));;
 
 let _newlet = ALet ("x", TInt, ACstI (42, TInt), ALam ([("x", TInt)], APrim(Add, AVar ("x", TInt), ACstI (1, TInt), TInt)));;
 

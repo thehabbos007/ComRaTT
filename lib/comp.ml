@@ -42,7 +42,6 @@ let apply_str name arg = Printf.sprintf "(call $%s (%s))" name arg
   what is fastest: string concat or format strings? 
   
   assume: lambdas are never nested and all lambdas are in a top level let binding
-
 *)
 let rec comp (expr : annot_expr ) : string = 
   match expr with
@@ -53,7 +52,7 @@ let rec comp (expr : annot_expr ) : string =
     let e1_comp = comp e1 in
     let e2_comp = comp e2 in
     e1_comp ^ "\n" ^ e2_comp ^ "\n" ^ binop_to_wasm op ty
-  | AApp (name, arg, _) -> apply_str (comp name) (comp arg)
+  | AApp (name, args, _) -> apply_str (comp name) (List.fold_left (fun acc arg -> acc ^ (comp arg)) "" args)
   | ALet (name, ret_ty, ALam(args, body), _) -> lambda_let_str name (wasm_type_of_type ret_ty) (comp body) args
   | ALet (name, ret_ty, body, _) -> let_str name (wasm_type_of_type ret_ty) (comp body)
   | _ -> failwith "not supported"

@@ -14,7 +14,7 @@ let rec lambda_lift_rename annot =
   | AVar _ -> annot
   | ALam (args, body) -> ALam (args, lambda_lift_rename body)
   | APrim (op, e1, e2, t) -> APrim (op, lambda_lift_rename e1, lambda_lift_rename e2, t)
-  | AApp (e1, e2, t) -> AApp (lambda_lift_rename e1, lambda_lift_rename e2, t)
+  | AApp (e1, e2s, t) -> AApp (lambda_lift_rename e1, List.map lambda_lift_rename e2s, t)
   | ALet (x, t, (ALam _ as e1), e2) ->
     let new_name = unique_name x in
     let e2' = lambda_lift_rename e2 in
@@ -28,8 +28,8 @@ and rename_call annot old_name new_name =
   | ALam (args, body) -> ALam (args, rename_call body old_name new_name)
   | APrim (op, e1, e2, t) ->
     APrim (op, rename_call e1 old_name new_name, rename_call e2 old_name new_name, t)
-  | AApp (e1, e2, t) ->
-    AApp (rename_call e1 old_name new_name, rename_call e2 old_name new_name, t)
+  | AApp (e1, e2s, t) ->
+    AApp (rename_call e1 old_name new_name, List.map (fun e2 -> rename_call e2 old_name new_name) e2s, t)
   | ALet (x, t, e1, e2) ->
     ALet (x, t, rename_call e1 old_name new_name, rename_call e2 old_name new_name)
 ;;
@@ -42,7 +42,7 @@ let rec lambda_lift_anon_names annot =
   | ALam (_, _) -> failwith "not impl"
   | APrim (op, e1, e2, t) ->
     APrim (op, lambda_lift_anon_names e1, lambda_lift_anon_names e2, t)
-  | AApp (e1, e2, t) -> AApp (lambda_lift_anon_names e1, lambda_lift_anon_names e2, t)
+  | AApp (e1, e2s, t) -> AApp (lambda_lift_anon_names e1, List.map lambda_lift_anon_names e2s, t)
   | ALet (x, t, e1, e2) ->
     ALet (x, t, lambda_lift_anon_names e1, lambda_lift_anon_names e2)
 ;;
