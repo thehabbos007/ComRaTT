@@ -43,7 +43,7 @@ let _newlet =
 let _var_example = AVar ("x", TInt)
 let _prim_example = APrim (Add, AVar ("x", TInt), ACstI (41, TInt), TInt)
 let _simple_let = ALet ("testfun", TInt, ACstI (42, TInt), ACstI (20, TInt))
-let () = print_endline (init_wat _reallet) |> ignore
+let () = print_endline (init_wat _reallet []) |> ignore
 (*
    let _ =  print_endline (init_wat var_example) |> ignore in
    let _ = print_endline (comp prim_example) |> ignore in

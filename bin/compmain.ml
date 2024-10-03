@@ -73,7 +73,7 @@ let _let_example =
 ;;
 
 (*let _let_example_annotated = run_example _let_example ~env:Environment.empty;;*)
-let _program = init_wat _multiargCsti
+let _program = init_wat _multiargCsti []
 
 let () =
   (*print_endline (_program)*)

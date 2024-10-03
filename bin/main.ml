@@ -30,13 +30,24 @@ let process_stdin () =
   parse_and_print lexbuf
 ;;
 
+let ( let* ) = Result.bind
+
+let print_global ({ name; body; _ } : Preprocess.global_def) =
+  Printf.fprintf stdout "%s = %s\n" name (Annotate.show_annot_expr body) |> ignore
+;;
+
 let () =
-  let processed = process_stdin () in
-  Result.map (Annotate.annotate [] []) processed
-  |> Result.map (fun (_, ast, _) -> ast)
-  |> Result.map (Preprocess.lambda_lift_expr [])
-  |> Result.map (fun (lifted, _globals) -> Annotate.show_annot_expr lifted)
-  |> Result.map print_endline
+  (let* processed = process_stdin () in
+   let _, annotated, _ = Annotate.annotate [] [] processed in
+   let lifted, globals = Preprocess.lambda_lift_expr [] annotated in
+   print_endline "----- Top level functions -----";
+   print_endline (Annotate.show_annot_expr lifted);
+   print_endline "----- Globally lifted lambdas -----";
+   List.iter print_global globals;
+   print_endline "----- WAT -----";
+   let compiled = Compile.init_wat lifted globals in
+   print_endline compiled;
+   Result.ok ())
   |> Result.map_error print_endline
   |> ignore
 ;;

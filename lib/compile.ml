@@ -86,8 +86,8 @@ let rec comp (expr : annot_expr) : string =
     let e1_comp = comp e1 in
     let e2_comp = comp e2 in
     e1_comp ^ "\n" ^ e2_comp ^ "\n" ^ binop_to_wasm op ty
-  | AApp (_name, _args, _) -> failwith "AApp no impl"
-  (*apply_str (comp name) (List.fold_left (fun acc arg -> acc ^ (comp arg)) "" args)*)
+  | AApp (name, args, _) ->
+    apply_str (comp name) (List.fold_left (fun acc arg -> acc ^ comp arg) "" args)
   (* TODO rhs of let binding is not handled at all
      we still need to handle the call part of functions
      -> explicitly handled in the pattern below
@@ -99,6 +99,8 @@ let rec comp (expr : annot_expr) : string =
       _name
       _args
   | ALet (name, ret_ty, ALam (args, body, _t), _) ->
+    (* Maybe we put together the RHS of all let bindings
+       in some glued together main function? *)
     lambda_let_str name (wasm_type_of_type ret_ty) (comp body) args
   | ALet (name, ret_ty, body, _) -> let_str name (wasm_type_of_type ret_ty) (comp body)
   | _ -> failwith "not supported"
@@ -111,4 +113,14 @@ and call_function name _args =
 
 and comp_rhs rhs _lhs = Printf.sprintf "(%s)" (comp rhs)
 
-let init_wat (expr : annot_expr) = Printf.sprintf "(module \n%s)" (comp expr)
+let comp_global_defs (globals : Preprocess.global_def list) =
+  List.fold_left
+    (fun acc ({ name; body; ret_type; _ } : Preprocess.global_def) ->
+      acc ^ comp (ALet (name, ret_type, body, ACstI (0, TInt))) ^ "\n")
+    ""
+    globals
+;;
+
+let init_wat (main_expr : annot_expr) (globals : Preprocess.global_def list) =
+  Printf.sprintf "(module \n%s\n%s)" (comp_global_defs globals) (comp main_expr)
+;;
