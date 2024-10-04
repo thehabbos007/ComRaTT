@@ -98,7 +98,7 @@ let rec comp (expr : annot_expr) : string =
       (lambda_let_str _name (wasm_type_of_type _ret_ty) (comp _body) _largs)
       _name
       _args
-  | ALet (name, ret_ty, ALam (args, body, _t), _) ->
+  | ALet (name, _, ALam (args, body, ret_ty), _) ->
     (* Maybe we put together the RHS of all let bindings
        in some glued together main function? *)
     lambda_let_str name (wasm_type_of_type ret_ty) (comp body) args

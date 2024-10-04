@@ -81,7 +81,30 @@ open struct
   ;;
 end
 
-let lambda_lift_expr globals expr =
-  let closed_expr = closure_convert globals expr in
-  lift_lambdas closed_expr
+module Lift = struct
+  let lambda_lift_expr globals expr =
+    let closed_expr = closure_convert globals expr in
+    lift_lambdas closed_expr
+  ;;
+end
+
+module ConstantFold = struct
+  (* Fold constants into expression that can be eliminated *)
+  let rec constant_fold_expr expr =
+    match expr with
+    | ACstI _ -> expr
+    | AVar _ -> expr
+    | APrim (Add, ACstI (n1, TInt), ACstI (n2, TInt), TInt) -> ACstI (n1 + n2, TInt)
+    | APrim (Sub, ACstI (n1, TInt), ACstI (n2, TInt), TInt) -> ACstI (n1 - n2, TInt)
+    | APrim (Mul, ACstI (n1, TInt), ACstI (n2, TInt), TInt) -> ACstI (n1 * n2, TInt)
+    | APrim (op, e1, e2, t) -> APrim (op, constant_fold_expr e1, constant_fold_expr e2, t)
+    | ALet (x, t, e1, e2) -> ALet (x, t, constant_fold_expr e1, constant_fold_expr e2)
+    | AApp (e1, e2, t) -> AApp (constant_fold_expr e1, List.map constant_fold_expr e2, t)
+    | ALam (params, body, t) -> ALam (params, constant_fold_expr body, t)
+  ;;
+end
+
+let optimize expr =
+  let expr = ConstantFold.constant_fold_expr expr in
+  Lift.lambda_lift_expr [] expr
 ;;

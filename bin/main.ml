@@ -39,7 +39,7 @@ let print_global ({ name; body; _ } : Preprocess.global_def) =
 let () =
   (let* processed = process_stdin () in
    let _, annotated, _ = Annotate.annotate [] [] processed in
-   let lifted, globals = Preprocess.lambda_lift_expr [] annotated in
+   let lifted, globals = Preprocess.optimize annotated in
    print_endline "----- Top level functions -----";
    print_endline (Annotate.show_annot_expr lifted);
    print_endline "----- Globally lifted lambdas -----";
