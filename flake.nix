@@ -40,6 +40,7 @@
           ppx_deriving = "*";
           ounit2 = "*";
           menhir = "*";
+          monads = "*";
         };
       scope = on.buildDuneProject {} "ComRaTT" ./. query;
       overlay = final: prev: {

@@ -104,92 +104,115 @@ module ConstantFold = struct
   ;;
 end
 
-let list_take n list = 
+let list_take n list =
   let rec aux n acc = function
-  | [] -> None
-  | _ when n = 0 -> Some (List.rev acc)
-  | x::xs -> aux (n-1) (x :: acc) xs
-  in aux n [] list
+    | [] -> None
+    | _ when n = 0 -> Some (List.rev acc)
+    | x :: xs -> aux (n - 1) (x :: acc) xs
+  in
+  aux n [] list
+;;
 
 module EliminatePartialApp = struct
-  let rec unpack_type ty = 
+  let ( >> ) f g x = g (f x)
+
+  let rec substitute_binding bind_old bind_new aexpr =
+    let subst = substitute_binding bind_old bind_new in
+    match aexpr with
+    | AVar (binding, ty) when binding = bind_old -> AVar (bind_new, ty)
+    | APrim (op, e1, e2, ty) -> APrim (op, subst e1, subst e2, ty)
+    | ALam (args, body, ty) -> ALam (args, subst body, ty)
+    | AApp (func, args, ty) -> AApp (subst func, List.map subst args, ty)
+    | ALet (name, ty, rhs, body) when name <> bind_old ->
+      ALet (name, ty, subst rhs, subst body)
+    | ACstI _ | ALet _ | AVar _ -> aexpr
+  ;;
+
+  let rec unpack_type ty =
     match ty with
     | TInt -> []
     | TVar _ -> []
-    | TArrow (_t1, _t2) -> failwith "what to do"
+    | TArrow (t1, t2) -> t1 :: unpack_type t2
+  ;;
 
-  let rec eliminate_partial aexpr = 
+  let rec eliminate_partial aexpr =
     match aexpr with
     | ACstI _ -> aexpr
-    | AVar (_name, TArrow(_t1, _t2)) -> aexpr
+    | AVar (_name, TArrow (_t1, _t2)) -> aexpr
     | AVar _ -> aexpr
     | APrim (op, e1, e2, ty) -> APrim (op, eliminate_partial e1, eliminate_partial e2, ty)
     | ALam (args, body, ty) -> ALam (args, eliminate_partial body, ty)
-    | AApp (func, args, _ty) -> 
+    | AApp (func, args, _ty) ->
       let _transformed_func = eliminate_partial func in
       let _transformed_args = List.map eliminate_partial args in
       aexpr
-    | ALet (_name, _ty, AVar (_x, TArrow(t1, t2)), _cont) -> aexpr
-    | _ -> failwith "bananer i pyjamas"
-    
+    | ALet (bind_old, _ty, AVar (bind_new, _), body) ->
+      substitute_binding bind_old bind_new body
+    (* A let binding where the right hand side is a partial application *)
+    | ALet (_name, _ty, AApp (_lam, _args, (TArrow (_t1, _t2) as app_ty)), _body) ->
+      let eta_args = unpack_type app_ty in
+      List.map (show_typ >> print_endline) eta_args |> ignore;
+      failwith "Fail"
+    | ALet (name, ty, rhs, body) ->
+      ALet (name, ty, eliminate_partial rhs, eliminate_partial body)
+  ;;
+
   (*
-  let rec eliminate_partial aexpr =
-    match aexpr with
-    (* No partial app in int constants *)
-    | ACstI _ -> aexpr 
-    (* No partial app in vars *)
-    | AVar _ -> aexpr 
-    (* For arithmetic operations, just call recursively on expressions *)
-    | APrim (op, e1, e2, ty) -> APrim(op, eliminate_partial e1, eliminate_partial e2, ty)
-    (* For lambdas we need to call recursively in the body *)
-    | ALam (args, body, ty) -> 
-      let transformed_body = eliminate_partial body in
-      ALam (args, transformed_body, ty)
-    (* For function applications we need to call recursively in both body/function and args
-       We also need to check whether the list of args matches the expected args
-       of a lambda
-    *)
-    | AApp (func, args, _ty) -> 
-      let transformed_func = eliminate_partial func in
-      let transformed_args = List.map eliminate_partial args in
-      (match transformed_func with
+     let rec eliminate_partial aexpr =
+     match aexpr with
+     (* No partial app in int constants *)
+     | ACstI _ -> aexpr
+     (* No partial app in vars *)
+     | AVar _ -> aexpr
+     (* For arithmetic operations, just call recursively on expressions *)
+     | APrim (op, e1, e2, ty) -> APrim(op, eliminate_partial e1, eliminate_partial e2, ty)
+     (* For lambdas we need to call recursively in the body *)
+     | ALam (args, body, ty) ->
+     let transformed_body = eliminate_partial body in
+     ALam (args, transformed_body, ty)
+     (* For function applications we need to call recursively in both body/function and args
+     We also need to check whether the list of args matches the expected args
+     of a lambda
+     *)
+     | AApp (func, args, _ty) ->
+     let transformed_func = eliminate_partial func in
+     let transformed_args = List.map eliminate_partial args in
+     (match transformed_func with
 
-        (* The case where total application is possible. Just apply, right? *)
-        | ALam(lArgs, lBody, lTy) when List.length transformed_args == List.length lArgs ->
-          AApp(lBody, transformed_args, lTy)
+     (* The case where total application is possible. Just apply, right? *)
+     | ALam(lArgs, lBody, lTy) when List.length transformed_args == List.length lArgs ->
+     AApp(lBody, transformed_args, lTy)
 
-        (* The cases where total application is not possible. What to do? 
-          It must depend on the type of the lambda.
-          If we have more args than we want and the lambda is a TArrow,
-          then we should be able to apply the correct amount of args
-          and then recursively check and apply, right?
+     (* The cases where total application is not possible. What to do?
+     It must depend on the type of the lambda.
+     If we have more args than we want and the lambda is a TArrow,
+     then we should be able to apply the correct amount of args
+     and then recursively check and apply, right?
 
-          If we have more args than we want and the type is not TArrow,
-          then we have a problem.
+     If we have more args than we want and the type is not TArrow,
+     then we have a problem.
 
-           
-        *)
-        (* More args than expected and arrow type of lambda 
-          Should this actually do a recursive call again?
-          TODO: har jeg misforstået hvad vi bruger tarrow til? en lambda fra int til int er vel en tarrow(tint, tint), og jeg har gået og bildt mig ind at det blot er int..
-           
-        *)
-        | ALam (lArgs, lBody, TArrow (_t1, t2)) when List.length transformed_args > List.length lArgs ->
-          (match list_take (List.length lArgs) transformed_args with
-           | None -> failwith "not enough args"
-           | Some args' -> AApp(lBody, args', t2) (* Naive: use return type of TArrow *)
-          )
-        | ALam _ -> failwith "total app not possible"
+     *)
+     (* More args than expected and arrow type of lambda
+     Should this actually do a recursive call again?
+     TODO: har jeg misforstået hvad vi bruger tarrow til? en lambda fra int til int er vel en tarrow(tint, tint), og jeg har gået og bildt mig ind at det blot er int..
 
-        (* Not a lambda. Do we support this? 
-          If we do, then just AApp like nothing happened
-        *)
-        | _ -> failwith "what to do"
-      )
-    (* For let bindings, call recursively in both rhs and body *)
-    | ALet (x, ty, rhs, body) -> ALet (x, ty, eliminate_partial rhs, eliminate_partial body)
-    *)
+     *)
+     | ALam (lArgs, lBody, TArrow (_t1, t2)) when List.length transformed_args > List.length lArgs ->
+     (match list_take (List.length lArgs) transformed_args with
+     | None -> failwith "not enough args"
+     | Some args' -> AApp(lBody, args', t2) (* Naive: use return type of TArrow *)
+     )
+     | ALam _ -> failwith "total app not possible"
 
+     (* Not a lambda. Do we support this?
+     If we do, then just AApp like nothing happened
+     *)
+     | _ -> failwith "what to do"
+     )
+     (* For let bindings, call recursively in both rhs and body *)
+     | ALet (x, ty, rhs, body) -> ALet (x, ty, eliminate_partial rhs, eliminate_partial body)
+  *)
 end
 
 (* just for testing the partial app elimination outside of this module*)
