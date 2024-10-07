@@ -1,6 +1,6 @@
 open ComRaTTlib.Source
 open ComRaTTlib.Annotate
-open ComRaTTlib.Compile
+open ComRaTTlib.Preprocess
 
 let _let_example =
   ALet
@@ -43,7 +43,7 @@ let _newlet =
 let _var_example = AVar ("x", TInt)
 let _prim_example = APrim (Add, AVar ("x", TInt), ACstI (41, TInt), TInt)
 let _simple_let = ALet ("testfun", TInt, ACstI (42, TInt), ACstI (20, TInt))
-let () = print_endline (init_wat _reallet []) |> ignore
+(*let () = print_endline (init_wat _reallet []) |> ignore*)
 (*
    let _ =  print_endline (init_wat var_example) |> ignore in
    let _ = print_endline (comp prim_example) |> ignore in
@@ -57,3 +57,55 @@ let () = print_endline (init_wat _reallet []) |> ignore
    let add = APrim (Add, ACstI (42, TInt), ACstI (42, TInt), TInt) in
    print_endline (init_wat add) |> ignore
 *)
+let _correct_args = 
+   AApp (
+     ALam ([("x", TInt); ("y", TInt)], 
+           APrim (Add, AVar ("x", TInt), AVar ("y", TInt), TInt),
+           TArrow (TInt, TArrow (TInt, TInt))),
+     [ACstI (5, TInt); ACstI (3, TInt)],
+     TInt
+   )
+(*
+let () = 
+_correct_args 
+|> part_elim 
+|> show_annot_expr 
+|> print_endline
+*)
+
+let _add42 = ALam ([("x", TInt)], APrim(Add, AVar ("x", TInt), ACstI (42, TInt), TInt), TArrow (TInt, TInt))
+let _applied = AApp (_add42, [ACstI (42, TInt)], TInt)
+
+let _add42raw = Lam ("x", Prim(Add, Var "x", CstI 42))
+let _appraw = App (_add42raw, CstI 42)
+
+let _nested = Lam ("x", Lam ("y", Prim(Add, Var "x", Var "y")))
+
+(*
+let _ =
+   let (_lifted, _globals) = Lift.lambda_lift_expr [] _add42 in
+   (*print_endline (show_annot_expr _lifted)*)
+   let head = List.hd _globals in
+   let { body; _ } = head in
+   print_endline (show_annot_expr body)*)
+
+let _show_tup tup = 
+   let (int, typ) = tup in
+   print_endline (Printf.sprintf "%s %s" (string_of_int int) (show_typ typ))
+
+let _show_global global = 
+   let { body; _} = global in
+   print_endline ("> " ^ (show_annot_expr body))
+
+let () = 
+   (*let (_subst, _annot, _ty) = annotate [] [] _nested in
+   (*List.map show_tup _subst |> ignore*)
+   print_endline (show_annot_expr _annot)
+   *)
+   let (_subst, _annot, _ty) = annotate [] [] _nested in
+   let (_annot, _globals) = Lift.lambda_lift_expr [] _annot in
+   print_endline (show_annot_expr _annot);
+   print_endline "separator";
+   List.map _show_global _globals |> ignore
+
+
