@@ -114,6 +114,13 @@ let list_take n list =
 ;;
 
 module EliminatePartialApp = struct
+  let var_name_counter = ref 0
+
+  let unique_var_name x =
+    incr name_counter;
+    Printf.sprintf "#%s_%d" x !name_counter
+  ;;
+
   let ( >> ) f g x = g (f x)
 
   let rec substitute_binding bind_old bind_new aexpr =
@@ -135,6 +142,31 @@ module EliminatePartialApp = struct
     | TArrow (t1, t2) -> t1 :: unpack_type t2
   ;;
 
+  let rec final_type ty =
+    match ty with
+    | TInt -> ty
+    | TVar _ -> ty
+    | TArrow (_, t2) -> final_type t2
+  ;;
+
+  let generate_names types =
+    let rec aux types' acc =
+      match types' with
+      | [] -> acc
+      | x :: xs -> aux xs ((unique_var_name "part_elim_lam", x) :: acc)
+    in
+    aux types []
+  ;;
+
+  let generate_lambda_vars names =
+    let rec aux names' acc =
+      match names' with
+      | [] -> acc
+      | (name, typ) :: xs -> aux xs (AVar (name, typ) :: acc)
+    in
+    aux names []
+  ;;
+
   let rec eliminate_partial aexpr =
     match aexpr with
     | ACstI _ -> aexpr
@@ -151,8 +183,15 @@ module EliminatePartialApp = struct
     (* A let binding where the right hand side is a partial application *)
     | ALet (_name, _ty, AApp (_lam, _args, (TArrow (_t1, _t2) as app_ty)), _body) ->
       let eta_args = unpack_type app_ty in
-      List.map (show_typ >> print_endline) eta_args |> ignore;
-      failwith "Fail"
+      (* List.map (show_typ >> print_endline) eta_args |> ignore;*)
+      let lambda_args = generate_names eta_args in
+      let app_args = generate_lambda_vars lambda_args in
+      let _new_lam =
+        (*TODO do not append here, can we do something else that is more efficient? *)
+        ALam (lambda_args, AApp (_lam, List.append _args app_args, final_type app_ty), _ty)
+      in
+      ALet (_name, _ty, _new_lam, eliminate_partial _body)
+    (* the general structure of the AST is ok but the type annotations are wrong. also it should be tested on more examples as i am sure something is not handled correctly *)
     | ALet (name, ty, rhs, body) ->
       ALet (name, ty, eliminate_partial rhs, eliminate_partial body)
   ;;
