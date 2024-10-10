@@ -6,6 +6,7 @@ type global_def =
   ; body : annot_expr
   ; ret_type : typ
   }
+[@@deriving show]
 
 (* Internal definitions, invisible to importers *)
 open struct
@@ -167,6 +168,29 @@ module EliminatePartialApp = struct
     aux names []
   ;;
 
+  let generate_lambda_vars_and_app_vars eta_args =
+    let rec aux eta_args' lambda_vars app_vars =
+      match eta_args' with
+      | [] -> lambda_vars, app_vars
+      | typ :: types ->
+        let name = unique_var_name "part_elim_lam" in
+        let var = AVar (name, typ) in
+        aux types ((name, typ) :: lambda_vars) (var :: app_vars)
+    in
+    aux eta_args [] []
+  ;;
+
+  (* A variant that is not tail recursive to avoid reversing lists *)
+  let rec generate_lambda_vars_and_app_vars_no_tail eta_args =
+    match eta_args with
+    | [] -> [], []
+    | typ :: types ->
+      let name = unique_var_name "part_elim_lam" in
+      let var = AVar (name, typ) in
+      let lambda, app = generate_lambda_vars_and_app_vars_no_tail types in
+      (name, typ) :: lambda, var :: app
+  ;;
+
   let rec eliminate_partial aexpr =
     match aexpr with
     | ACstI _ -> aexpr
@@ -184,14 +208,16 @@ module EliminatePartialApp = struct
     | ALet (_name, _ty, AApp (_lam, _args, (TArrow (_t1, _t2) as app_ty)), _body) ->
       let eta_args = unpack_type app_ty in
       (* List.map (show_typ >> print_endline) eta_args |> ignore;*)
-      let lambda_args = generate_names eta_args in
-      let app_args = generate_lambda_vars lambda_args in
+      (*
+         let lambda_args = generate_names eta_args in
+         let app_args = generate_lambda_vars lambda_args in
+      *)
+      let lambda_args, app_args = generate_lambda_vars_and_app_vars_no_tail eta_args in
       let _new_lam =
         (*TODO do not append here, can we do something else that is more efficient? *)
         ALam (lambda_args, AApp (_lam, List.append _args app_args, final_type app_ty), _ty)
       in
       ALet (_name, _ty, _new_lam, eliminate_partial _body)
-    (* the general structure of the AST is ok but the type annotations are wrong. also it should be tested on more examples as i am sure something is not handled correctly *)
     | ALet (name, ty, rhs, body) ->
       ALet (name, ty, eliminate_partial rhs, eliminate_partial body)
   ;;
