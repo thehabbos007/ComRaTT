@@ -123,12 +123,18 @@ let _partialappok =
   ast_of_text "let add = fun x -> fun y -> x + y in let add1 = add 1 in add1 2 "
 ;;
 
+let _partialappthreesum =
+  ast_of_text
+    "let add_three = fun x -> fun y -> fun z -> x+y+z in let add1 = add_three 1 in let \
+     add2 = add1 2 in add2 3"
+;;
+
 let () =
   Result.map
     (fun annot ->
       print_endline (show_annot_expr annot);
       print_endline "SEP -------";
       print_endline (show_annot_expr (EliminatePartialApp.eliminate_partial annot)))
-    _partialappok
+    _partialappthreesum
   |> ignore
 ;;
