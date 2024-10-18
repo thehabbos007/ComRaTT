@@ -177,7 +177,8 @@ module EliminatePartialApp = struct
     | AVar _ -> aexpr
     | APrim (op, e1, e2, ty) -> APrim (op, eliminate_partial e1, eliminate_partial e2, ty)
     | ALam (args, body, ty) -> ALam (args, eliminate_partial body, ty)
-    | AApp (AApp (f', args', ty'), args, _ty) ->
+    (* An application where the "body" is itself an application *)
+    | AApp (AApp (f', args', ty'), args, _) ->
       let combined_args = args' @ args in
       let resulting_expr = AApp (f', combined_args, final_type ty') in
       eliminate_partial resulting_expr
@@ -202,5 +203,6 @@ end
 
 let optimize expr =
   let expr = ConstantFold.constant_fold_expr expr in
-  Lift.lambda_lift_expr [] expr
+  let eliminated = EliminatePartialApp.eliminate_partial expr in
+  Lift.lambda_lift_expr [] eliminated
 ;;
