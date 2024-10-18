@@ -177,6 +177,10 @@ module EliminatePartialApp = struct
     | AVar _ -> aexpr
     | APrim (op, e1, e2, ty) -> APrim (op, eliminate_partial e1, eliminate_partial e2, ty)
     | ALam (args, body, ty) -> ALam (args, eliminate_partial body, ty)
+    | AApp (AApp (f', args', ty'), args, _ty) ->
+      let combined_args = args' @ args in
+      let resulting_expr = AApp (f', combined_args, final_type ty') in
+      eliminate_partial resulting_expr
     | AApp (func, args, ty) ->
       let transformed_func = eliminate_partial func in
       let transformed_args = List.map eliminate_partial args in
