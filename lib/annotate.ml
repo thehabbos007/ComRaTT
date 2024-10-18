@@ -166,5 +166,5 @@ let rec string_of_annot_expr = function
 
 and unfold_app_args = function
   | [] -> ""
-  | x :: xs -> Printf.sprintf "%s" (string_of_annot_expr x) ^ unfold_app_args xs
+  | x :: xs -> Printf.sprintf "%s" (string_of_annot_expr x) ^ " " ^ unfold_app_args xs
 ;;
