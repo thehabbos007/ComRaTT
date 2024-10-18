@@ -133,16 +133,6 @@ let rec string_of_type = function
   | TArrow (t1, t2) -> "(" ^ string_of_type t1 ^ " -> " ^ string_of_type t2 ^ ")"
 ;;
 
-(*
-   type annot_expr =
-   | ACstI of int * typ
-   | AVar of sym * typ
-   | ALam of (sym * typ) list * annot_expr * typ
-   | AApp of annot_expr * annot_expr list * typ
-   | APrim of binop * annot_expr * annot_expr * typ
-   | ALet of sym * typ * annot_expr * annot_expr
-*)
-
 let rec unfold_lam_args = function
   | [] -> ""
   | (name, typ) :: tail ->
