@@ -129,12 +129,34 @@ let _partialappthreesum =
      add2 = add1 2 in add2 3"
 ;;
 
+let _partialappthreesum2 =
+  ast_of_text "let add_three = fun x -> fun y -> fun z -> x+y+z in add_three 3 4 5"
+;;
+
+let _simpleadd = ast_of_text "let add = fun x -> fun y -> x+y in add 41 1"
+
+(*
+   let () =
+   Result.map
+   (fun annot ->
+   print_endline (show_annot_expr annot);
+   print_endline "SEP -------";
+   print_endline (show_annot_expr (EliminatePartialApp.eliminate_partial annot)))
+   _partialappok
+   |> ignore
+   ;;
+*)
 let () =
   Result.map
     (fun annot ->
-      print_endline (show_annot_expr annot);
-      print_endline "SEP -------";
-      print_endline (show_annot_expr (EliminatePartialApp.eliminate_partial annot)))
-    _partialappthreesum
+      print_endline "---> Pretty print of raw expr";
+      print_endline (string_of_annot_expr annot);
+      print_endline "--> Pretty print of eliminated expr";
+      print_endline (string_of_annot_expr (EliminatePartialApp.eliminate_partial annot));
+      print_endline "--> AST of eliminated expr";
+      print_endline (show_annot_expr (EliminatePartialApp.eliminate_partial annot));
+      print_endline "---> AST of raw expr";
+      print_endline (show_annot_expr annot))
+    _partialappthreesum2
   |> ignore
 ;;
