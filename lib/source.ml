@@ -13,3 +13,11 @@ type expr =
   | Let of string * expr * expr
   | FunDef of string * string list * expr
 [@@deriving show, eq]
+
+(* Pretty printing *)
+
+let string_of_binop = function
+  | Add -> "+"
+  | Mul -> "*"
+  | Sub -> "-"
+;;

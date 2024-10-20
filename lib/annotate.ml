@@ -109,35 +109,57 @@ let rec annotate env subst expr =
   match expr with
   | Var x ->
     let subst', t = infer env subst expr in
-    subst', AVar (x, t), t
+    subst', AVar (x, t), (None, t)
   | FunDef _ -> failwith "not impl"
   | Lam (args, e) ->
     let arg_types = List.map (fun arg -> arg, fresh_type ()) args in
-    let subst', body_annot, body_type = annotate (arg_types @ env) subst e in
+    let subst', body_annot, (_, body_type) = annotate (arg_types @ env) subst e in
     let substituted_args =
       List.map (fun (arg, ty) -> arg, apply_subst subst' ty) arg_types
     in
     let expr_type = construct_arrow_typ body_type arg_types in
-    subst', ALam (substituted_args, body_annot, body_type), apply_subst subst' expr_type
+    ( subst'
+    , ALam (substituted_args, body_annot, body_type)
+    , (None, apply_subst subst' expr_type) )
   | App (e1, e2) ->
-    let subst1, annot1, t1 = annotate env subst e1 in
-    let subst2, annot2, t2 = annotate env subst1 e2 in
+    let subst1, annot1, (_, t1) = annotate env subst e1 in
+    let subst2, annot2, (_, t2) = annotate env subst1 e2 in
     let result_type = fresh_type () in
     let subst3 = unify subst2 t1 (TArrow (t2, result_type)) in
     ( subst3
     , AApp (annot1, [ annot2 ], apply_subst subst3 result_type)
-    , apply_subst subst3 result_type )
-  | CstI i -> subst, ACstI (i, TInt), TInt
+    , (None, apply_subst subst3 result_type) )
+  | CstI i -> subst, ACstI (i, TInt), (None, TInt)
   | Prim (op, e1, e2) ->
-    let subst1, annot1, t1 = annotate env subst e1 in
-    let subst2, annot2, t2 = annotate env subst1 e2 in
+    let subst1, annot1, (_, t1) = annotate env subst e1 in
+    let subst2, annot2, (_, t2) = annotate env subst1 e2 in
     let subst3 = unify subst2 t1 TInt in
     let subst4 = unify subst3 t2 TInt in
-    subst4, APrim (op, annot1, annot2, TInt), TInt
+    subst4, APrim (op, annot1, annot2, TInt), (None, TInt)
   | Let (x, e1, e2) ->
-    let subst1, annot1, t1 = annotate env subst e1 in
-    let subst2, annot2, t2 = annotate ((x, t1) :: env) subst1 e2 in
-    subst2, ALet (x, t1, annot1, annot2), t2
+    let subst1, annot1, (_, t1) = annotate env subst e1 in
+    let subst2, annot2, (_, t2) = annotate ((x, t1) :: env) subst1 e2 in
+    subst2, ALet (x, t1, annot1, annot2), (Some x, apply_subst subst2 t2)
+;;
+
+let prepend_opt_binding env = function
+  | None, _ -> env
+  | Some name, typ -> (name, typ) :: env
+;;
+
+(* type annotate_meta =
+  { subst : substitution
+  ; env : (sym * typ) list
+  ; annot_exprs : annot_expr list
+  }*)
+
+let annotate_all exprs =
+  List.fold_left
+    (fun (env, subst, annot_exprs) expr ->
+      let subst', annot_expr, binding = annotate env subst expr in
+      prepend_opt_binding env binding, subst', annot_expr :: annot_exprs)
+    ([], [], [])
+    exprs
 ;;
 
 (* Pretty printing *)
