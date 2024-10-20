@@ -110,10 +110,19 @@ let rec annotate env subst expr =
   | Var x ->
     let subst', t = infer env subst expr in
     subst', AVar (x, t), (None, t)
-  | FunDef _ -> failwith "not impl"
-  | Lam (args, e) ->
+  | FunDef (name, args, body) ->
     let arg_types = List.map (fun arg -> arg, fresh_type ()) args in
-    let subst', body_annot, (_, body_type) = annotate (arg_types @ env) subst e in
+    let subst', body_annot, (_, body_type) = annotate (arg_types @ env) subst body in
+    let substituted_args =
+      List.map (fun (arg, ty) -> arg, apply_subst subst' ty) arg_types
+    in
+    let expr_type = construct_arrow_typ body_type arg_types in
+    ( subst'
+    , ALam (substituted_args, body_annot, body_type)
+    , (Some name, apply_subst subst' expr_type) )
+  | Lam (args, body) ->
+    let arg_types = List.map (fun arg -> arg, fresh_type ()) args in
+    let subst', body_annot, (_, body_type) = annotate (arg_types @ env) subst body in
     let substituted_args =
       List.map (fun (arg, ty) -> arg, apply_subst subst' ty) arg_types
     in
