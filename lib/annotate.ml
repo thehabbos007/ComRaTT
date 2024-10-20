@@ -62,6 +62,11 @@ and occurs n = function
   | TInt -> false
 ;;
 
+let rec construct_arrow_typ ret_typ = function
+  | [] -> ret_typ
+  | (_, ty) :: rest -> TArrow (ty, construct_arrow_typ ret_typ rest)
+;;
+
 (* follows https://stanford-cs242.github.io/f19/lectures/02-2-type-systems partly*)
 let rec infer env subst = function
   | CstI _ -> subst, TInt
@@ -71,10 +76,16 @@ let rec infer env subst = function
        subst, apply_subst subst t
      with
      | Not_found -> failwith ("unbound variable: " ^ x))
-  | Lam (x, e) ->
-    let arg_type = fresh_type () in
-    let subst', result_type = infer ((x, arg_type) :: env) subst e in
-    subst', TArrow (apply_subst subst' arg_type, result_type)
+  | FunDef (_name, args, e) ->
+    let arg_types = List.map (fun arg -> arg, fresh_type ()) args in
+    let subst', result_type = infer (arg_types @ env) subst e in
+    let expr_type = construct_arrow_typ result_type arg_types in
+    subst', apply_subst subst' expr_type
+  | Lam (args, e) ->
+    let arg_types = List.map (fun arg -> arg, fresh_type ()) args in
+    let subst', result_type = infer (arg_types @ env) subst e in
+    let expr_type = construct_arrow_typ result_type arg_types in
+    subst', apply_subst subst' expr_type
   | App (e1, e2) ->
     let subst1, t1 = infer env subst e1 in
     let subst2, t2 = infer env subst1 e2 in
@@ -99,12 +110,15 @@ let rec annotate env subst expr =
   | Var x ->
     let subst', t = infer env subst expr in
     subst', AVar (x, t), t
-  | Lam (x, e) ->
-    let arg_type = fresh_type () in
-    let subst', body_annot, body_type = annotate ((x, arg_type) :: env) subst e in
-    ( subst'
-    , ALam ([ x, apply_subst subst' arg_type ], body_annot, body_type)
-    , TArrow (apply_subst subst' arg_type, body_type) )
+  | FunDef _ -> failwith "not impl"
+  | Lam (args, e) ->
+    let arg_types = List.map (fun arg -> arg, fresh_type ()) args in
+    let subst', body_annot, body_type = annotate (arg_types @ env) subst e in
+    let substituted_args =
+      List.map (fun (arg, ty) -> arg, apply_subst subst' ty) arg_types
+    in
+    let expr_type = construct_arrow_typ body_type arg_types in
+    subst', ALam (substituted_args, body_annot, body_type), apply_subst subst' expr_type
   | App (e1, e2) ->
     let subst1, annot1, t1 = annotate env subst e1 in
     let subst2, annot2, t2 = annotate env subst1 e2 in

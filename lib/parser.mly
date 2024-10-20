@@ -21,8 +21,9 @@ prog:
   | e = expr EOF { e }
 
 expr:
+  | LET x = IDENT args = IDENT* EQUALS e = expr { FunDef (x, args, e) }
   | LET x = IDENT EQUALS e1 = expr IN e2 = expr { Let (x, e1, e2) }
-  | LAMBDA x = IDENT SARROW e = expr { Lam (x, e) }
+  | LAMBDA x = IDENT* SARROW e = expr { Lam (x, e) }
   | app_expr { $1 }
 
 app_expr:

@@ -10,7 +10,7 @@ let ident = letter (letter | digit | '_')*
 
 rule token = parse
   | white    { token lexbuf }
-  | "fun" { LAMBDA }
+  | "fun"    { LAMBDA }
   | "let"    { LET }
   | "in"     { IN }
   | "+"      { PLUS }
