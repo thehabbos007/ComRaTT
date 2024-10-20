@@ -121,10 +121,8 @@ let rec annotate env subst expr =
     let substituted_args =
       List.map (fun (arg, ty) -> arg, apply_subst subst' ty) arg_types
     in
-    let expr_type = construct_arrow_typ body_type arg_types in
-    ( subst'
-    , AFunDef (name, substituted_args, body_annot, body_type)
-    , (Some name, apply_subst subst' expr_type) )
+    let def_type = construct_arrow_typ body_type arg_types |> apply_subst subst' in
+    subst', AFunDef (name, substituted_args, body_annot, def_type), (Some name, def_type)
   | Lam (args, body) ->
     let arg_types = List.map (fun arg -> arg, fresh_type ()) args in
     let subst', body_annot, (_, body_type) = annotate (arg_types @ env) subst body in
@@ -186,14 +184,14 @@ let rec string_of_type = function
 let rec unfold_lam_args = function
   | [] -> ""
   | (name, typ) :: tail ->
-    Printf.sprintf "(%s : %s)" name (string_of_type typ) ^ unfold_lam_args tail
+    Printf.sprintf "(%s : %s) " name (string_of_type typ) ^ unfold_lam_args tail
 ;;
 
 let rec string_of_annot_expr = function
   | ACstI (x, _) -> string_of_int x
   | AVar (name, typ) -> Printf.sprintf "%s : %s" name (string_of_type typ)
   | ALam (args, body, _) ->
-    Printf.sprintf "fun %s -> %s" (unfold_lam_args args) (string_of_annot_expr body)
+    Printf.sprintf "fun %s-> %s" (unfold_lam_args args) (string_of_annot_expr body)
   | AApp (func, args, typ) ->
     Printf.sprintf
       "%s %s) : %s"
@@ -208,7 +206,7 @@ let rec string_of_annot_expr = function
       (string_of_annot_expr e2)
   | AFunDef (name, args, body, typ) ->
     Printf.sprintf
-      "def %s %s : %s = %s;"
+      "def %s %s: %s = %s;"
       name
       (unfold_lam_args args)
       (string_of_type typ)

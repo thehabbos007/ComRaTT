@@ -136,6 +136,11 @@ let _partialappthreesum2 =
 let _simpleadd = ast_of_text "let add = fun x -> fun y -> x+y in add 41 1"
 let _toplevel = ast_of_text "def add x y = x + y;"
 
+let _toplevel_eta =
+  ast_of_text
+    "def add1 y = let add = fun x -> fun y -> x + y in let add1 = add 1 in add1 y;"
+;;
+
 (*
    let () =
    Result.map
@@ -164,7 +169,16 @@ let () =
           print_endline (show_annot_expr (EliminatePartialApp.eliminate_partial annot)))
         annot_exprs;
       print_endline "---> AST of raw expr";
-      List.iter (fun annot -> print_endline (show_annot_expr annot)) annot_exprs)
-    _toplevel
+      List.iter (fun annot -> print_endline (show_annot_expr annot)) annot_exprs;
+      print_endline "---> Lambda lifted exprs";
+      List.iter
+        (fun annot ->
+          let lifted, globals = Lift.lambda_lift_expr [] annot in
+          print_endline "-----> Lifted AST for entry";
+          print_endline (show_annot_expr lifted);
+          print_endline "-----> Globals for above entry";
+          List.iter (fun global -> print_endline (show_global_def global)) globals)
+        annot_exprs)
+    _toplevel_eta
   |> ignore
 ;;

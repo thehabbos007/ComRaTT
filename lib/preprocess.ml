@@ -78,7 +78,9 @@ open struct
       | AApp (e1, e2, t) -> AApp (lift e1, List.map lift e2, t)
       | APrim (op, e1, e2, t) -> APrim (op, lift e1, lift e2, t)
       | ALet (x, t, e1, e2) -> ALet (x, t, lift e1, lift e2)
-      | e -> e
+      | AFunDef (name, params, body, ret_type) ->
+        AFunDef (name, params, lift body, ret_type)
+      | ACstI _ | AVar _ -> expr
     in
     let lifted_expr = lift expr in
     lifted_expr, !definitions
