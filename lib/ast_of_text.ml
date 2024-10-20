@@ -34,11 +34,8 @@ let print_global ({ name; body; _ } : Preprocess.global_def) =
 
 let ast_of_text text =
   (let lexbuf = Lexing.from_string text in
-   let* processed =
-     lexbuf.lex_curr_p <- { lexbuf.lex_curr_p with pos_fname = "stdin" };
-     parse_and_print lexbuf
-   in
-   let _, annotated, _ = Annotate.annotate [] [] processed in
+   let* processed = parse_and_print lexbuf in
+   let _, _, annotated = Annotate.annotate_all processed in
    (* let lifted, globals = Preprocess.optimize annotated in*)
    Result.ok annotated)
   |> Result.map_error (fun x ->

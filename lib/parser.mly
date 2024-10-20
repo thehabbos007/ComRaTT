@@ -10,7 +10,7 @@ open Source
 %token EQUALS
 %token EOF
 
-%start <expr> prog
+%start <expr list> prog
 
 %left PLUS MINUS
 %left TIMES
@@ -18,7 +18,7 @@ open Source
 %%
 
 prog:
-  | e = expr EOF { e }
+  | e = expr+ EOF { e }
 
 expr:
   | LET x = IDENT args = IDENT* EQUALS e = expr { FunDef (x, args, e) }
