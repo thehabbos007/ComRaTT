@@ -19,6 +19,10 @@ type typ =
 type annot_expr =
   | ACstI of int * typ
   | AVar of sym * typ
+  (* TODO: Consider top-level let bindings (top-level constants that are evaluated at the start of the program)
+     One thing we have to consider is if we should handle functions that refer to top-level let bindings.
+     When we introduce delay/adv, the top level bindings may need to be allocated in the heap at the start of the program.
+  *)
   | ALam of (sym * typ) list * annot_expr * typ
   | AApp of annot_expr * annot_expr list * typ
   | APrim of binop * annot_expr * annot_expr * typ

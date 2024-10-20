@@ -15,8 +15,15 @@ let parse_and_print lexbuf =
      Printf.sprintf "Lexing error at %s: %s\n" (pos_string pos) msg)
     |> Result.error
   | Parser.Error ->
-    (let pos = lexbuf.lex_curr_p in
-     Printf.sprintf "Parsing error at %s\n" (pos_string pos))
+    let token = Lexing.lexeme lexbuf in
+    let position = lexbuf.lex_curr_p in
+    let line = position.pos_lnum in
+    (let column = position.pos_cnum - position.pos_bol + 1 in
+     Printf.sprintf
+       "Syntax error at line %d, column %d: Unexpected token '%s'\n"
+       line
+       column
+       token)
     |> Result.error
 ;;
 

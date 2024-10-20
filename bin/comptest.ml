@@ -134,7 +134,7 @@ let _partialappthreesum2 =
 ;;
 
 let _simpleadd = ast_of_text "let add = fun x -> fun y -> x+y in add 41 1"
-let _toplevel = ast_of_text "let add x y = x + y"
+let _toplevel = ast_of_text "def add x y = x + y;"
 
 (*
    let () =
