@@ -85,9 +85,9 @@ let _add42 =
 ;;
 
 let _applied = AApp (_add42, [ ACstI (42, TInt) ], TInt)
-let _add42raw = Lam ("x", Prim (Add, Var "x", CstI 42))
+let _add42raw = Lam (["x"], Prim (Add, Var "x", CstI 42))
 let _appraw = App (_add42raw, CstI 42)
-let _nested = Lam ("x", Lam ("y", Prim (Add, Var "x", Var "y")))
+let _nested = Lam (["x"], Lam (["y"], Prim (Add, Var "x", Var "y")))
 
 (*
    let _ =

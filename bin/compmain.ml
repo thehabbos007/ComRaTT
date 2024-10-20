@@ -68,7 +68,7 @@ let _justApp = AApp (AVar ("add", TInt), [], TInt)
 let _let_example =
   Let
     ( "inc"
-    , Lam ("x", Prim (Add, Var "x", CstI 1))
+    , Lam (["x"], Prim (Add, Var "x", CstI 1))
     , Let ("x", CstI 5, App (Var "inc", Var "x")) )
 ;;
 
