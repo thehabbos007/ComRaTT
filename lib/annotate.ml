@@ -24,6 +24,7 @@ type annot_expr =
      When we introduce delay/adv, the top level bindings may need to be allocated in the heap at the start of the program.
   *)
   | ALam of (sym * typ) list * annot_expr * typ
+  | AFunDef of sym * (sym * typ) list * annot_expr * typ
   | AApp of annot_expr * annot_expr list * typ
   | APrim of binop * annot_expr * annot_expr * typ
   | ALet of sym * typ * annot_expr * annot_expr
@@ -122,7 +123,7 @@ let rec annotate env subst expr =
     in
     let expr_type = construct_arrow_typ body_type arg_types in
     ( subst'
-    , ALam (substituted_args, body_annot, body_type)
+    , AFunDef (name, substituted_args, body_annot, body_type)
     , (Some name, apply_subst subst' expr_type) )
   | Lam (args, body) ->
     let arg_types = List.map (fun arg -> arg, fresh_type ()) args in
@@ -205,6 +206,13 @@ let rec string_of_annot_expr = function
       (string_of_annot_expr e1)
       (string_of_binop op)
       (string_of_annot_expr e2)
+  | AFunDef (name, args, body, typ) ->
+    Printf.sprintf
+      "def %s %s : %s = %s;"
+      name
+      (unfold_lam_args args)
+      (string_of_type typ)
+      (string_of_annot_expr body)
   | ALet (name, typ, rhs, body) ->
     Printf.sprintf
       "let (%s : %s) = %s in %s"
