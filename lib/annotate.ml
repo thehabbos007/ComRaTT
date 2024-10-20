@@ -146,3 +146,39 @@ let rec string_of_type = function
   | TVar n -> "t" ^ string_of_int n
   | TArrow (t1, t2) -> "(" ^ string_of_type t1 ^ " -> " ^ string_of_type t2 ^ ")"
 ;;
+
+let rec unfold_lam_args = function
+  | [] -> ""
+  | (name, typ) :: tail ->
+    Printf.sprintf "(%s : %s)" name (string_of_type typ) ^ unfold_lam_args tail
+;;
+
+let rec string_of_annot_expr = function
+  | ACstI (x, _) -> string_of_int x
+  | AVar (name, typ) -> Printf.sprintf "%s : %s" name (string_of_type typ)
+  | ALam (args, body, _) ->
+    Printf.sprintf "fun %s -> %s" (unfold_lam_args args) (string_of_annot_expr body)
+  | AApp (func, args, typ) ->
+    Printf.sprintf
+      "%s %s) : %s"
+      (string_of_annot_expr func)
+      (unfold_app_args args)
+      (string_of_type typ)
+  | APrim (op, e1, e2, _typ) ->
+    Printf.sprintf
+      "%s %s %s"
+      (string_of_annot_expr e1)
+      (string_of_binop op)
+      (string_of_annot_expr e2)
+  | ALet (name, typ, rhs, body) ->
+    Printf.sprintf
+      "let (%s : %s) = %s in %s"
+      name
+      (string_of_type typ)
+      (string_of_annot_expr rhs)
+      (string_of_annot_expr body)
+
+and unfold_app_args = function
+  | [] -> ""
+  | x :: xs -> Printf.sprintf "%s" (string_of_annot_expr x) ^ " " ^ unfold_app_args xs
+;;

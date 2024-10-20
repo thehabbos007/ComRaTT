@@ -159,27 +159,6 @@ module EliminatePartialApp = struct
     aux types []
   ;;
 
-  let generate_lambda_vars names =
-    let rec aux names' acc =
-      match names' with
-      | [] -> acc
-      | (name, typ) :: xs -> aux xs (AVar (name, typ) :: acc)
-    in
-    aux names []
-  ;;
-
-  let generate_lambda_vars_and_app_vars eta_args =
-    let rec aux eta_args' lambda_vars app_vars =
-      match eta_args' with
-      | [] -> lambda_vars, app_vars
-      | typ :: types ->
-        let name = unique_var_name "part_elim_lam" in
-        let var = AVar (name, typ) in
-        aux types ((name, typ) :: lambda_vars) (var :: app_vars)
-    in
-    aux eta_args [] []
-  ;;
-
   (* A variant that is not tail recursive to avoid reversing lists *)
   let rec generate_lambda_vars_and_app_vars_no_tail eta_args =
     match eta_args with
@@ -198,26 +177,25 @@ module EliminatePartialApp = struct
     | AVar _ -> aexpr
     | APrim (op, e1, e2, ty) -> APrim (op, eliminate_partial e1, eliminate_partial e2, ty)
     | ALam (args, body, ty) -> ALam (args, eliminate_partial body, ty)
-    | AApp (func, args, _ty) ->
-      let _transformed_func = eliminate_partial func in
-      let _transformed_args = List.map eliminate_partial args in
-      aexpr
+    (* An application where the "body" is itself an application *)
+    | AApp (AApp (f', args', ty'), args, _) ->
+      let combined_args = args' @ args in
+      let resulting_expr = AApp (f', combined_args, final_type ty') in
+      eliminate_partial resulting_expr
+    | AApp (func, args, ty) ->
+      let transformed_func = eliminate_partial func in
+      let transformed_args = List.map eliminate_partial args in
+      AApp (transformed_func, transformed_args, ty)
     | ALet (bind_old, _ty, AVar (bind_new, _), body) ->
       substitute_binding bind_old bind_new body
     (* A let binding where the right hand side is a partial application *)
-    | ALet (_name, _ty, AApp (_lam, _args, (TArrow (_t1, _t2) as app_ty)), _body) ->
+    | ALet (name, ty, AApp (lam, args, (TArrow (_t1, _t2) as app_ty)), body) ->
       let eta_args = unpack_type app_ty in
-      (* List.map (show_typ >> print_endline) eta_args |> ignore;*)
-      (*
-         let lambda_args = generate_names eta_args in
-         let app_args = generate_lambda_vars lambda_args in
-      *)
       let lambda_args, app_args = generate_lambda_vars_and_app_vars_no_tail eta_args in
-      let _new_lam =
-        (*TODO do not append here, can we do something else that is more efficient? *)
-        ALam (lambda_args, AApp (_lam, List.append _args app_args, final_type app_ty), _ty)
+      let new_lam =
+        ALam (lambda_args, AApp (lam, List.append args app_args, final_type app_ty), ty)
       in
-      ALet (_name, _ty, _new_lam, eliminate_partial _body)
+      ALet (name, ty, new_lam, eliminate_partial body)
     | ALet (name, ty, rhs, body) ->
       ALet (name, ty, eliminate_partial rhs, eliminate_partial body)
   ;;
@@ -225,5 +203,6 @@ end
 
 let optimize expr =
   let expr = ConstantFold.constant_fold_expr expr in
-  Lift.lambda_lift_expr [] expr
+  let eliminated = EliminatePartialApp.eliminate_partial expr in
+  Lift.lambda_lift_expr [] eliminated
 ;;
