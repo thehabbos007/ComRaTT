@@ -165,13 +165,43 @@ let prepend_opt_binding env = function
   ; annot_exprs : annot_expr list
   }*)
 
+let rec expr_apply_subst subst expr =
+  match expr with
+  | ACstI _ -> expr
+  | AVar (x, t) -> AVar (x, apply_subst subst t)
+  | AFunDef (name, args, body, t) ->
+    AFunDef
+      ( name
+      , List.map (fun (arg, ty) -> arg, apply_subst subst ty) args
+      , expr_apply_subst subst body
+      , apply_subst subst t )
+  | ALam (args, body, t) ->
+    ALam
+      ( List.map (fun (arg, ty) -> arg, apply_subst subst ty) args
+      , expr_apply_subst subst body
+      , apply_subst subst t )
+  | AApp (e1, e2s, t) ->
+    AApp
+      ( expr_apply_subst subst e1
+      , List.map (expr_apply_subst subst) e2s
+      , apply_subst subst t )
+  | APrim (op, e1, e2, t) ->
+    APrim (op, expr_apply_subst subst e1, expr_apply_subst subst e2, apply_subst subst t)
+  | ALet (x, ty, e1, e2) ->
+    ALet (x, apply_subst subst ty, expr_apply_subst subst e1, expr_apply_subst subst e2)
+;;
+
 let annotate_all exprs =
-  List.fold_left
-    (fun (env, subst, annot_exprs) expr ->
-      let subst', annot_expr, binding = annotate env subst expr in
-      prepend_opt_binding env binding, subst', annot_expr :: annot_exprs)
-    ([], [], [])
-    exprs
+  let env, subst, exprs =
+    List.fold_left
+      (fun (env, subst, annot_exprs) expr ->
+        let subst', annot_expr, binding = annotate env subst expr in
+        prepend_opt_binding env binding, subst', annot_expr :: annot_exprs)
+      ([], [], [])
+      exprs
+  in
+  let exprs' = List.map (expr_apply_subst subst) exprs in
+  env, subst, exprs'
 ;;
 
 (* Pretty printing *)

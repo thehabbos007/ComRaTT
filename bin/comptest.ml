@@ -103,8 +103,8 @@ let _show_tup tup =
 ;;
 
 let _show_global global =
-  let { body; _ } = global in
-  print_endline ("> " ^ show_annot_expr body)
+  let { fundef; _ } = global in
+  print_endline ("> " ^ show_annot_expr fundef)
 ;;
 
 let _a _a =
@@ -173,11 +173,13 @@ let () =
       print_endline "---> Lambda lifted exprs";
       List.iter
         (fun annot ->
-          let lifted, globals = Lift.lambda_lift_expr [] annot in
-          print_endline "-----> Lifted AST for entry";
-          print_endline (show_annot_expr lifted);
+          let _lifted, globals = Lift.lambda_lift_expr [] annot in
+          (* print_endline "-----> Lifted AST for entry";
+             print_endline (show_annot_expr lifted);*)
           print_endline "-----> Globals for above entry";
-          List.iter (fun global -> print_endline (show_global_def global)) globals)
+          List.iter
+            (fun global -> print_endline (string_of_annot_expr global.fundef))
+            globals)
         annot_exprs)
     _toplevel_eta
   |> ignore

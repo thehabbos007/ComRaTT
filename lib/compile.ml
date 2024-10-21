@@ -115,8 +115,8 @@ and comp_rhs rhs _lhs = Printf.sprintf "(%s)" (comp rhs)
 
 let comp_global_defs (globals : Preprocess.global_def list) =
   List.fold_left
-    (fun acc ({ name; body; ret_type; _ } : Preprocess.global_def) ->
-      acc ^ comp (ALet (name, ret_type, body, ACstI (0, TInt))) ^ "\n")
+    (fun acc ({ name; fundef; ret_type; _ } : Preprocess.global_def) ->
+      acc ^ comp (ALet (name, ret_type, fundef, ACstI (0, TInt))) ^ "\n")
     ""
     globals
 ;;

@@ -1,9 +1,8 @@
 open Annotate
 
 type global_def =
-  { name : sym
-  ; args : (sym * typ) list
-  ; body : annot_expr
+  { fundef : annot_expr
+  ; name : sym
   ; ret_type : typ
   }
 [@@deriving show]
@@ -73,7 +72,8 @@ open struct
         let lifted_body = lift body in
         let name = unique_name "global_lam" in
         definitions
-        := { name; args = params; body = lifted_body; ret_type } :: !definitions;
+        := { name; fundef = AFunDef (name, params, lifted_body, ret_type); ret_type }
+           :: !definitions;
         AVar (name, ret_type)
       | AApp (e1, e2, t) -> AApp (lift e1, List.map lift e2, t)
       | APrim (op, e1, e2, t) -> APrim (op, lift e1, lift e2, t)
