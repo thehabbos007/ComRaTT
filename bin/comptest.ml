@@ -113,7 +113,7 @@ let _a _a =
     print_endline (show_annot_expr _annot)
   *)
   let _subst, _annot, _ty = annotate [] [] _nested in
-  let _annot, _globals = Lift.lambda_lift_expr [] _annot in
+  let _annot, _globals = Lift.lambda_lift_expr _annot in
   print_endline (show_annot_expr _annot);
   print_endline "separator";
   List.map _show_global _globals |> ignore
@@ -158,28 +158,28 @@ let () =
       print_endline "---> Pretty print of raw expr";
       List.iter (fun annot -> print_endline (string_of_annot_expr annot)) annot_exprs;
       print_endline "--> Pretty print of eliminated expr";
-      List.iter
-        (fun annot ->
-          print_endline
-            (string_of_annot_expr (EliminatePartialApp.eliminate_partial annot)))
-        annot_exprs;
-      print_endline "--> AST of eliminated expr";
-      List.iter
-        (fun annot ->
-          print_endline (show_annot_expr (EliminatePartialApp.eliminate_partial annot)))
-        annot_exprs;
-      print_endline "---> AST of raw expr";
-      List.iter (fun annot -> print_endline (show_annot_expr annot)) annot_exprs;
+      (* List.iter
+         (fun annot ->
+         print_endline
+         (string_of_annot_expr (EliminatePartialApp.eliminate_partial annot)))
+         annot_exprs;*)
+      (* print_endline "--> AST of eliminated expr";
+         List.iter
+         (fun annot ->
+         print_endline (show_annot_expr (EliminatePartialApp.eliminate_partial annot)))
+         annot_exprs;*)
+      (* print_endline "---> AST of raw expr";
+         List.iter (fun annot -> print_endline (show_annot_expr annot)) annot_exprs;*)
       print_endline "---> Lambda lifted exprs";
       List.iter
         (fun annot ->
-          let _lifted, globals = Lift.lambda_lift_expr [] annot in
-          (* print_endline "-----> Lifted AST for entry";
-             print_endline (show_annot_expr lifted);*)
+          let _lifted, _globals = optimize annot in
+          print_endline "-----> Lifted entry";
+          print_endline (string_of_annot_expr _lifted);
           print_endline "-----> Globals for above entry";
           List.iter
             (fun global -> print_endline (string_of_annot_expr global.fundef))
-            globals)
+            _globals)
         annot_exprs)
     _toplevel_eta
   |> ignore
