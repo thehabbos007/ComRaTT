@@ -10,8 +10,9 @@ let ident = letter (letter | digit | '_')*
 
 rule token = parse
   | white    { token lexbuf }
-  | "fun" { LAMBDA }
+  | "fun"    { LAMBDA }
   | "let"    { LET }
+  | "def"    { DEF }
   | "in"     { IN }
   | "+"      { PLUS }
   | "*"      { TIMES }
@@ -20,6 +21,7 @@ rule token = parse
   | ")"      { RPAREN }
   | "="      { EQUALS }
   | "->"     { SARROW }
+  | ";"      { SEMI }
   | ident as id { IDENT id }
   | digit+ as d { INT (int_of_string d) }
   | eof      { EOF }

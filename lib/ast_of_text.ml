@@ -15,8 +15,15 @@ let parse_and_print lexbuf =
      Printf.sprintf "Lexing error at %s: %s\n" (pos_string pos) msg)
     |> Result.error
   | Parser.Error ->
-    (let pos = lexbuf.lex_curr_p in
-     Printf.sprintf "Parsing error at %s\n" (pos_string pos))
+    let token = Lexing.lexeme lexbuf in
+    let position = lexbuf.lex_curr_p in
+    let line = position.pos_lnum in
+    (let column = position.pos_cnum - position.pos_bol + 1 in
+     Printf.sprintf
+       "Syntax error at line %d, column %d: Unexpected token '%s'\n"
+       line
+       column
+       token)
     |> Result.error
 ;;
 
@@ -28,17 +35,14 @@ let process_stdin () =
 
 let ( let* ) = Result.bind
 
-let print_global ({ name; body; _ } : Preprocess.global_def) =
-  Printf.fprintf stdout "%s = %s\n" name (Annotate.show_annot_expr body) |> ignore
+let print_global ({ name; fundef; _ } : Preprocess.global_def) =
+  Printf.fprintf stdout "%s = %s\n" name (Annotate.show_annot_expr fundef) |> ignore
 ;;
 
 let ast_of_text text =
   (let lexbuf = Lexing.from_string text in
-   let* processed =
-     lexbuf.lex_curr_p <- { lexbuf.lex_curr_p with pos_fname = "stdin" };
-     parse_and_print lexbuf
-   in
-   let _, annotated, _ = Annotate.annotate [] [] processed in
+   let* processed = parse_and_print lexbuf in
+   let _, _, annotated = Annotate.annotate_all processed in
    (* let lifted, globals = Preprocess.optimize annotated in*)
    Result.ok annotated)
   |> Result.map_error (fun x ->

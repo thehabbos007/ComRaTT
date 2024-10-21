@@ -85,9 +85,9 @@ let _add42 =
 ;;
 
 let _applied = AApp (_add42, [ ACstI (42, TInt) ], TInt)
-let _add42raw = Lam ("x", Prim (Add, Var "x", CstI 42))
+let _add42raw = Lam ([ "x" ], Prim (Add, Var "x", CstI 42))
 let _appraw = App (_add42raw, CstI 42)
-let _nested = Lam ("x", Lam ("y", Prim (Add, Var "x", Var "y")))
+let _nested = Lam ([ "x" ], Lam ([ "y" ], Prim (Add, Var "x", Var "y")))
 
 (*
    let _ =
@@ -103,8 +103,8 @@ let _show_tup tup =
 ;;
 
 let _show_global global =
-  let { body; _ } = global in
-  print_endline ("> " ^ show_annot_expr body)
+  let { fundef; _ } = global in
+  print_endline ("> " ^ show_annot_expr fundef)
 ;;
 
 let _a _a =
@@ -134,6 +134,12 @@ let _partialappthreesum2 =
 ;;
 
 let _simpleadd = ast_of_text "let add = fun x -> fun y -> x+y in add 41 1"
+let _toplevel = ast_of_text "def add x y = x + y;"
+
+let _toplevel_eta =
+  ast_of_text
+    "def add1 y = let add = fun x -> fun y -> x + y in let add1 = add 1 in add1 y;"
+;;
 
 (*
    let () =
@@ -148,15 +154,33 @@ let _simpleadd = ast_of_text "let add = fun x -> fun y -> x+y in add 41 1"
 *)
 let () =
   Result.map
-    (fun annot ->
+    (fun annot_exprs ->
       print_endline "---> Pretty print of raw expr";
-      print_endline (string_of_annot_expr annot);
+      List.iter (fun annot -> print_endline (string_of_annot_expr annot)) annot_exprs;
       print_endline "--> Pretty print of eliminated expr";
-      print_endline (string_of_annot_expr (EliminatePartialApp.eliminate_partial annot));
+      List.iter
+        (fun annot ->
+          print_endline
+            (string_of_annot_expr (EliminatePartialApp.eliminate_partial annot)))
+        annot_exprs;
       print_endline "--> AST of eliminated expr";
-      print_endline (show_annot_expr (EliminatePartialApp.eliminate_partial annot));
+      List.iter
+        (fun annot ->
+          print_endline (show_annot_expr (EliminatePartialApp.eliminate_partial annot)))
+        annot_exprs;
       print_endline "---> AST of raw expr";
-      print_endline (show_annot_expr annot))
-    _partialappthreesum2
+      List.iter (fun annot -> print_endline (show_annot_expr annot)) annot_exprs;
+      print_endline "---> Lambda lifted exprs";
+      List.iter
+        (fun annot ->
+          let _lifted, globals = Lift.lambda_lift_expr [] annot in
+          (* print_endline "-----> Lifted AST for entry";
+             print_endline (show_annot_expr lifted);*)
+          print_endline "-----> Globals for above entry";
+          List.iter
+            (fun global -> print_endline (string_of_annot_expr global.fundef))
+            globals)
+        annot_exprs)
+    _toplevel_eta
   |> ignore
 ;;

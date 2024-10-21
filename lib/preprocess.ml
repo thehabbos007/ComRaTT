@@ -1,9 +1,8 @@
 open Annotate
 
 type global_def =
-  { name : sym
-  ; args : (sym * typ) list
-  ; body : annot_expr
+  { fundef : annot_expr
+  ; name : sym
   ; ret_type : typ
   }
 [@@deriving show]
@@ -20,6 +19,9 @@ open struct
   let rec free_vars = function
     | ACstI _ -> []
     | AVar (x, t) -> [ x, t ]
+    | AFunDef (name, params, body, _) ->
+      let param_names = name :: List.map fst params in
+      List.filter (fun (x, _) -> not (List.mem x param_names)) (free_vars body)
     | ALam (params, body, _) ->
       let param_names = List.map fst params in
       List.filter (fun (x, _) -> not (List.mem x param_names)) (free_vars body)
@@ -70,12 +72,15 @@ open struct
         let lifted_body = lift body in
         let name = unique_name "global_lam" in
         definitions
-        := { name; args = params; body = lifted_body; ret_type } :: !definitions;
+        := { name; fundef = AFunDef (name, params, lifted_body, ret_type); ret_type }
+           :: !definitions;
         AVar (name, ret_type)
       | AApp (e1, e2, t) -> AApp (lift e1, List.map lift e2, t)
       | APrim (op, e1, e2, t) -> APrim (op, lift e1, lift e2, t)
       | ALet (x, t, e1, e2) -> ALet (x, t, lift e1, lift e2)
-      | e -> e
+      | AFunDef (name, params, body, ret_type) ->
+        AFunDef (name, params, lift body, ret_type)
+      | ACstI _ | AVar _ -> expr
     in
     let lifted_expr = lift expr in
     lifted_expr, !definitions
@@ -101,6 +106,7 @@ module ConstantFold = struct
     | APrim (op, e1, e2, t) -> APrim (op, constant_fold_expr e1, constant_fold_expr e2, t)
     | ALet (x, t, e1, e2) -> ALet (x, t, constant_fold_expr e1, constant_fold_expr e2)
     | AApp (e1, e2, t) -> AApp (constant_fold_expr e1, List.map constant_fold_expr e2, t)
+    | AFunDef (name, args, body, t) -> AFunDef (name, args, constant_fold_expr body, t)
     | ALam (params, body, t) -> ALam (params, constant_fold_expr body, t)
   ;;
 end
@@ -133,7 +139,7 @@ module EliminatePartialApp = struct
     | AApp (func, args, ty) -> AApp (subst func, List.map subst args, ty)
     | ALet (name, ty, rhs, body) when name <> bind_old ->
       ALet (name, ty, subst rhs, subst body)
-    | ACstI _ | ALet _ | AVar _ -> aexpr
+    | ACstI _ | ALet _ | AVar _ | AFunDef _ -> aexpr
   ;;
 
   let rec unpack_type ty =
@@ -176,6 +182,7 @@ module EliminatePartialApp = struct
     | AVar (_name, TArrow (_t1, _t2)) -> aexpr
     | AVar _ -> aexpr
     | APrim (op, e1, e2, ty) -> APrim (op, eliminate_partial e1, eliminate_partial e2, ty)
+    | AFunDef (name, args, body, ty) -> AFunDef (name, args, eliminate_partial body, ty)
     | ALam (args, body, ty) -> ALam (args, eliminate_partial body, ty)
     (* An application where the "body" is itself an application *)
     | AApp (AApp (f', args', ty'), args, _) ->
