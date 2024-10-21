@@ -6,6 +6,7 @@ type global_def =
   ; body : annot_expr
   ; ret_type : typ
   }
+[@@deriving show]
 
 (* Internal definitions, invisible to importers *)
 open struct
@@ -104,7 +105,104 @@ module ConstantFold = struct
   ;;
 end
 
+let list_take n list =
+  let rec aux n acc = function
+    | [] -> None
+    | _ when n = 0 -> Some (List.rev acc)
+    | x :: xs -> aux (n - 1) (x :: acc) xs
+  in
+  aux n [] list
+;;
+
+module EliminatePartialApp = struct
+  let var_name_counter = ref 0
+
+  let unique_var_name x =
+    incr name_counter;
+    Printf.sprintf "#%s_%d" x !name_counter
+  ;;
+
+  let ( >> ) f g x = g (f x)
+
+  let rec substitute_binding bind_old bind_new aexpr =
+    let subst = substitute_binding bind_old bind_new in
+    match aexpr with
+    | AVar (binding, ty) when binding = bind_old -> AVar (bind_new, ty)
+    | APrim (op, e1, e2, ty) -> APrim (op, subst e1, subst e2, ty)
+    | ALam (args, body, ty) -> ALam (args, subst body, ty)
+    | AApp (func, args, ty) -> AApp (subst func, List.map subst args, ty)
+    | ALet (name, ty, rhs, body) when name <> bind_old ->
+      ALet (name, ty, subst rhs, subst body)
+    | ACstI _ | ALet _ | AVar _ -> aexpr
+  ;;
+
+  let rec unpack_type ty =
+    match ty with
+    | TInt -> []
+    | TVar _ -> []
+    | TArrow (t1, t2) -> t1 :: unpack_type t2
+  ;;
+
+  let rec final_type ty =
+    match ty with
+    | TInt -> ty
+    | TVar _ -> ty
+    | TArrow (_, t2) -> final_type t2
+  ;;
+
+  let generate_names types =
+    let rec aux types' acc =
+      match types' with
+      | [] -> acc
+      | x :: xs -> aux xs ((unique_var_name "part_elim_lam", x) :: acc)
+    in
+    aux types []
+  ;;
+
+  (* A variant that is not tail recursive to avoid reversing lists *)
+  let rec generate_lambda_vars_and_app_vars_no_tail eta_args =
+    match eta_args with
+    | [] -> [], []
+    | typ :: types ->
+      let name = unique_var_name "part_elim_lam" in
+      let var = AVar (name, typ) in
+      let lambda, app = generate_lambda_vars_and_app_vars_no_tail types in
+      (name, typ) :: lambda, var :: app
+  ;;
+
+  let rec eliminate_partial aexpr =
+    match aexpr with
+    | ACstI _ -> aexpr
+    | AVar (_name, TArrow (_t1, _t2)) -> aexpr
+    | AVar _ -> aexpr
+    | APrim (op, e1, e2, ty) -> APrim (op, eliminate_partial e1, eliminate_partial e2, ty)
+    | ALam (args, body, ty) -> ALam (args, eliminate_partial body, ty)
+    (* An application where the "body" is itself an application *)
+    | AApp (AApp (f', args', ty'), args, _) ->
+      let combined_args = args' @ args in
+      let resulting_expr = AApp (f', combined_args, final_type ty') in
+      eliminate_partial resulting_expr
+    | AApp (func, args, ty) ->
+      let transformed_func = eliminate_partial func in
+      let transformed_args = List.map eliminate_partial args in
+      AApp (transformed_func, transformed_args, ty)
+    | ALet (bind_old, _ty, AVar (bind_new, _), body) ->
+      substitute_binding bind_old bind_new body
+    (* A let binding where the right hand side is a partial application *)
+    | ALet (name, ty, AApp (lam, args, (TArrow (_t1, _t2) as app_ty)), body) ->
+      let eta_args = unpack_type app_ty in
+      let lambda_args, app_args = generate_lambda_vars_and_app_vars_no_tail eta_args in
+      let new_lam =
+        ALam (lambda_args, AApp (lam, List.append args app_args, final_type app_ty), ty)
+      in
+      ALet (name, ty, new_lam, eliminate_partial body)
+    | ALet (name, ty, rhs, body) ->
+      ALet (name, ty, eliminate_partial rhs, eliminate_partial body)
+  ;;
+end
+
 let optimize expr =
   let expr = ConstantFold.constant_fold_expr expr in
-  Lift.lambda_lift_expr [] expr
+  let eliminated = EliminatePartialApp.eliminate_partial expr in
+  Lift.lambda_lift_expr [] eliminated
 ;;

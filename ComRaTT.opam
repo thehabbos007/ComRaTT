@@ -15,6 +15,7 @@ depends: [
   "ppx_deriving"
   "ounit2"
   "menhir"
+  "monads"
   "odoc" {with-doc}
 ]
 build: [

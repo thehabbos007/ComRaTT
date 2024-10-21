@@ -7,4 +7,4 @@
  (name ComRaTTlib)
  (preprocess
   (pps ppx_deriving.show ppx_deriving.eq ppx_deriving.ord))
- (modules source annotate interpret preprocess compile parser lexer))
+ (modules source annotate interpret preprocess compile parser lexer ast_of_text))

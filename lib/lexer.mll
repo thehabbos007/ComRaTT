@@ -19,6 +19,7 @@ rule token = parse
   | "("      { LPAREN }
   | ")"      { RPAREN }
   | "="      { EQUALS }
+  | "->"     { SARROW }
   | ident as id { IDENT id }
   | digit+ as d { INT (int_of_string d) }
   | eof      { EOF }
