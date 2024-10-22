@@ -22,7 +22,7 @@ let optarg(x) :=
   | x=x ; { [x] }
 
 prog:
-  | fs = fundefs* e = optarg(expr) EOF { fs @ e }
+  | fs = fundefs* EOF { fs }
 
 fundefs:
   | DEF x = IDENT args = IDENT+ EQUALS e = expr SEMI { FunDef (x, args, e) }
