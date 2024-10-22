@@ -124,3 +124,55 @@ let comp_global_defs (globals : Preprocess.global_def list) =
 let init_wat (main_expr : annot_expr) (globals : Preprocess.global_def list) =
   Printf.sprintf "(module \n%s\n%s)" (comp_global_defs globals) (comp main_expr)
 ;;
+
+(* duplicated from preprocess *)
+let rec final_type ty =
+  match ty with
+  | TInt -> ty
+  | TVar _ -> ty
+  | TArrow (_, t2) -> final_type t2
+;;
+
+let rec comp_new expr =
+  match expr with
+  | AVar (name, _) -> var_str name
+  (* type of ACstI is always int, discard for now *)
+  | ACstI (num, _) -> "i64.const " ^ string_of_int num
+  | APrim (op, e1, e2, ty) ->
+    let e1_comp = comp e1 in
+    let e2_comp = comp e2 in
+    e1_comp ^ "\n" ^ e2_comp ^ "\n" ^ binop_to_wasm op ty
+  | AFunDef (name, args, body, ret_ty) ->
+    Printf.sprintf
+      "(func $%s %s (result %s)\n %s \n)"
+      name
+      (args_to_str args)
+      (wasm_type_of_type (final_type ret_ty))
+      (comp_new body)
+  | ALam _ -> failwith "lambda should have been lifted :("
+  (* This is very much WIP. WASM is stack-based, so let-bindings are wierd *)
+  | ALet (_name, ty, _rhs, _body) ->
+    Printf.sprintf
+      "(local %s) \n %s \n (local.set %s)"
+      (wasm_type_of_type ty)
+      "banan"
+      "banan"
+  | AApp (func, args, _ty) ->
+    Printf.sprintf
+      "call $%s %s"
+      (comp_new func)
+      (List.fold_left (fun acc arg -> acc ^ comp_new arg ^ " ") "" args)
+;;
+
+let rec comp_and_unfold_defs defs =
+  match defs with
+  | [] -> ""
+  | def :: defs -> comp_new def ^ comp_and_unfold_defs defs
+;;
+
+let wasm (annot_exprs : annot_expr list) (globals : Preprocess.global_def list) =
+  Printf.sprintf
+    "(module \n %s\n %s\n (export \"main\" (func $main)))"
+    (comp_global_defs globals)
+    (comp_and_unfold_defs annot_exprs)
+;;

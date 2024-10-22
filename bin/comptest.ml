@@ -2,6 +2,7 @@ open ComRaTTlib.Source
 open ComRaTTlib.Annotate
 open ComRaTTlib.Preprocess
 open ComRaTTlib.Ast_of_text
+open ComRaTTlib.Compile
 
 let _let_example =
   ALet
@@ -152,35 +153,68 @@ let _toplevel_eta =
    |> ignore
    ;;
 *)
+(*
+   let () =
+   Result.map
+   (fun annot_exprs ->
+   print_endline "---> Pretty print of raw expr";
+   List.iter (fun annot -> print_endline (string_of_annot_expr annot)) annot_exprs;
+   print_endline "--> Pretty print of eliminated expr";
+   (* List.iter
+   (fun annot ->
+   print_endline
+   (string_of_annot_expr (EliminatePartialApp.eliminate_partial annot)))
+   annot_exprs;*)
+   (* print_endline "--> AST of eliminated expr";
+   List.iter
+   (fun annot ->
+   print_endline (show_annot_expr (EliminatePartialApp.eliminate_partial annot)))
+   annot_exprs;*)
+   (* print_endline "---> AST of raw expr";
+   List.iter (fun annot -> print_endline (show_annot_expr annot)) annot_exprs;*)
+   print_endline "---> Lambda lifted exprs";
+   List.iter
+   (fun annot ->
+   let _lifted, _globals = optimize annot in
+   print_endline "-----> Lifted entry";
+   print_endline (string_of_annot_expr _lifted);
+   print_endline "-----> Globals for above entry";
+   List.iter
+   (fun global -> print_endline (string_of_annot_expr global.fundef))
+   _globals)
+   annot_exprs)
+   _toplevel_eta
+   |> ignore
+   ;;
+*)
+
+(* arg "t" to main is there because we don't support zero arg functions yet *)
+let _main_example =
+  ast_of_text "def add x y = x+y; def main unused = let x = 41 in let y = 1 in add x y;"
+;;
+
+let _simple_main = ast_of_text "def main x y = x+y;"
+
 let () =
   Result.map
     (fun annot_exprs ->
-      print_endline "---> Pretty print of raw expr";
-      List.iter (fun annot -> print_endline (string_of_annot_expr annot)) annot_exprs;
-      print_endline "--> Pretty print of eliminated expr";
-      (* List.iter
-         (fun annot ->
-         print_endline
-         (string_of_annot_expr (EliminatePartialApp.eliminate_partial annot)))
-         annot_exprs;*)
-      (* print_endline "--> AST of eliminated expr";
+      let mapped =
+        List.map
+          (fun annot ->
+            let lifted, _ = optimize annot in
+            lifted)
+          annot_exprs
+      in
+      let compiled = wasm mapped [] in
+      print_endline compiled)
+      (*
          List.iter
          (fun annot ->
-         print_endline (show_annot_expr (EliminatePartialApp.eliminate_partial annot)))
-         annot_exprs;*)
-      (* print_endline "---> AST of raw expr";
-         List.iter (fun annot -> print_endline (show_annot_expr annot)) annot_exprs;*)
-      print_endline "---> Lambda lifted exprs";
-      List.iter
-        (fun annot ->
-          let _lifted, _globals = optimize annot in
-          print_endline "-----> Lifted entry";
-          print_endline (string_of_annot_expr _lifted);
-          print_endline "-----> Globals for above entry";
-          List.iter
-            (fun global -> print_endline (string_of_annot_expr global.fundef))
-            _globals)
-        annot_exprs)
-    _toplevel_eta
+         let _lifted, _ = optimize annot in
+         (* no globals in this example *)
+         print_endline (string_of_annot_expr _lifted))
+         annot_exprs)
+      *)
+    _simple_main
   |> ignore
 ;;
