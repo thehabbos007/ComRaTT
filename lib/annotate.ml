@@ -11,13 +11,15 @@ module Environment = Map.Make (struct
 
 type typ =
   | TInt
+  | TBool
+  | TUnit
   | TVar of int
   | TArrow of typ * typ
 [@@deriving show, eq]
 
 (** Annotated expression (Types) *)
 type annot_expr =
-  | ACstI of int * typ
+  | AConst of const * typ
   | AVar of sym * typ
   (* TODO: Consider top-level let bindings (top-level constants that are evaluated at the start of the program)
      One thing we have to consider is if we should handle functions that refer to top-level let bindings.
@@ -40,8 +42,9 @@ let fresh_type () =
 
 type substitution = (int * typ) list
 
-let rec apply_subst subst = function
-  | TInt -> TInt
+let rec apply_subst subst typ =
+  match typ with
+  | TBool | TInt | TUnit -> typ
   | TVar n ->
     (try List.assoc n subst with
      | Not_found -> TVar n)
@@ -64,7 +67,7 @@ let rec unify subst t1 t2 =
 and occurs n = function
   | TVar m -> n = m
   | TArrow (a, r) -> occurs n a || occurs n r
-  | TInt -> false
+  | TInt | TBool | TUnit -> false
 ;;
 
 let rec construct_arrow_typ ret_typ = function
@@ -74,7 +77,9 @@ let rec construct_arrow_typ ret_typ = function
 
 (* follows https://stanford-cs242.github.io/f19/lectures/02-2-type-systems partly*)
 let rec infer env subst = function
-  | CstI _ -> subst, TInt
+  | Const (CInt _) -> subst, TInt
+  | Const (CBool _) -> subst, TBool
+  | Const CUnit -> subst, TUnit
   | Var x ->
     (try
        let t = List.assoc x env in
@@ -112,6 +117,9 @@ let rec infer env subst = function
 (* Annotation *)
 let rec annotate env subst expr =
   match expr with
+  | Const (CInt i) -> subst, AConst (CInt i, TInt), (None, TInt)
+  | Const (CBool b) -> subst, AConst (CBool b, TBool), (None, TBool)
+  | Const CUnit -> subst, AConst (CUnit, TUnit), (None, TUnit)
   | Var x ->
     let subst', t = infer env subst expr in
     subst', AVar (x, t), (None, t)
@@ -141,7 +149,6 @@ let rec annotate env subst expr =
     ( subst3
     , AApp (annot1, [ annot2 ], apply_subst subst3 result_type)
     , (None, apply_subst subst3 result_type) )
-  | CstI i -> subst, ACstI (i, TInt), (None, TInt)
   | Prim (op, e1, e2) ->
     let subst1, annot1, (_, t1) = annotate env subst e1 in
     let subst2, annot2, (_, t2) = annotate env subst1 e2 in
@@ -167,7 +174,7 @@ let prepend_opt_binding env = function
 
 let rec expr_apply_subst subst expr =
   match expr with
-  | ACstI _ -> expr
+  | AConst _ -> expr
   | AVar (x, t) -> AVar (x, apply_subst subst t)
   | AFunDef (name, args, body, t) ->
     AFunDef
@@ -207,6 +214,8 @@ let annotate_all exprs =
 (* Pretty printing *)
 let rec string_of_type = function
   | TInt -> "int"
+  | TBool -> "bool"
+  | TUnit -> "()"
   | TVar n -> "t" ^ string_of_int n
   | TArrow (t1, t2) -> "(" ^ string_of_type t1 ^ " -> " ^ string_of_type t2 ^ ")"
 ;;
@@ -218,7 +227,9 @@ let rec unfold_lam_args = function
 ;;
 
 let rec string_of_annot_expr = function
-  | ACstI (x, _) -> string_of_int x
+  | AConst (CInt i, _) -> string_of_int i
+  | AConst (CBool b, _) -> string_of_bool b
+  | AConst (CUnit, _) -> "()"
   | AVar (name, typ) -> Printf.sprintf "%s : %s" name (string_of_type typ)
   | ALam (args, body, _) ->
     Printf.sprintf "fun %s-> %s" (unfold_lam_args args) (string_of_annot_expr body)

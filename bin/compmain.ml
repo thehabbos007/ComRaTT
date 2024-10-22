@@ -16,8 +16,9 @@ let _example =
   ALet
     ( "x"
     , TInt
-    , ALam ([ "y", TInt ], APrim (Add, AVar ("y", TInt), ACstI (1, TInt), TInt), TInt)
-    , AApp (AVar ("x", TInt), [ ACstI (42, TInt) ], TInt) )
+    , ALam
+        ([ "y", TInt ], APrim (Add, AVar ("y", TInt), AConst (CInt 1, TInt), TInt), TInt)
+    , AApp (AVar ("x", TInt), [ AConst (CInt 42, TInt) ], TInt) )
 ;;
 
 (* woops, we cannot apply with multiple arguments..
@@ -34,7 +35,7 @@ let _example2 =
         ( [ "y", TInt; "z", TInt ]
         , APrim (Add, AVar ("y", TInt), AVar ("z", TInt), TInt)
         , TInt )
-    , AApp (AVar ("x", TInt), [ ACstI (42, TInt) ], TInt) )
+    , AApp (AVar ("x", TInt), [ AConst (CInt 42, TInt) ], TInt) )
 ;;
 
 (*
@@ -60,7 +61,8 @@ let _multiargCsti =
         ( [ "x", TInt; "y", TInt ]
         , APrim (Add, AVar ("x", TInt), AVar ("y", TInt), TInt)
         , TInt )
-    , AApp (AVar ("add", TInt), [ ACstI (41, TInt); ACstI (1, TInt) ], TInt) )
+    , AApp (AVar ("add", TInt), [ AConst (CInt 41, TInt); AConst (CInt 1, TInt) ], TInt)
+    )
 ;;
 
 let _justApp = AApp (AVar ("add", TInt), [], TInt)
@@ -68,8 +70,8 @@ let _justApp = AApp (AVar ("add", TInt), [], TInt)
 let _let_example =
   Let
     ( "inc"
-    , Lam (["x"], Prim (Add, Var "x", CstI 1))
-    , Let ("x", CstI 5, App (Var "inc", Var "x")) )
+    , Lam ([ "x" ], Prim (Add, Var "x", Const (CInt 1)))
+    , Let ("x", Const (CInt 5), App (Var "inc", Var "x")) )
 ;;
 
 (*let _let_example_annotated = run_example _let_example ~env:Environment.empty;;*)

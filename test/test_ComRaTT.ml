@@ -16,7 +16,7 @@ let make_test name input expected =
 let tests =
   "lambda_lifting"
   >::: [ (* Test 1: Simple constant - should remain unchanged *)
-         make_test "constant" (ACstI (42, TInt)) (ACstI (42, TInt))
+         make_test "constant" (AConst (CInt 42, TInt)) (AConst (CInt 42, TInt))
        ; (* Test 2: Simple variable - should remain unchanged *)
          make_test "variable" (AVar ("x", TInt)) (AVar ("x", TInt))
        ; (* Test 3: Lambda with no free variables - should remain unchanged *)
@@ -26,19 +26,19 @@ let tests =
               ( "y"
               , TInt
               , ALam ([ "x", TInt ], AVar ("x", TInt), TInt)
-              , AApp (AVar ("x", TInt), [ ACstI (5, TInt) ], TInt) ))
+              , AApp (AVar ("x", TInt), [ AConst (CInt 5, TInt) ], TInt) ))
            (ALet
               ( "y"
               , TInt
               , ALam ([ "x", TInt ], AVar ("x", TInt), TInt)
-              , AApp (AVar ("x", TInt), [ ACstI (5, TInt) ], TInt) ))
+              , AApp (AVar ("x", TInt), [ AConst (CInt 5, TInt) ], TInt) ))
        ; (* Test 4: Lambda with a free variable *)
          make_test
            "lambda_with_free_var"
            (ALet
               ( "y"
               , TInt
-              , ACstI (5, TInt)
+              , AConst (CInt 5, TInt)
               , ALam
                   ( [ "x", TInt ]
                   , APrim (Add, AVar ("x", TInt), AVar ("y", TInt), TInt)
@@ -46,7 +46,7 @@ let tests =
            (ALet
               ( "y"
               , TInt
-              , ACstI (5, TInt)
+              , AConst (CInt 5, TInt)
               , AApp
                   (AVar ("#global_lam_1", TInt), [ AVar ("y", TInt) ], TArrow (TInt, TInt))
               ))
@@ -63,7 +63,7 @@ let tests =
                       , APrim (Add, AVar ("x", TInt), AVar ("y", TInt), TInt)
                       , TInt )
                   , TInt )
-              , AApp (AVar ("nested", TInt), [ ACstI (1, TInt) ], TInt) ))
+              , AApp (AVar ("nested", TInt), [ AConst (CInt 1, TInt) ], TInt) ))
            (ALet
               ( "nested"
               , TInt
@@ -74,18 +74,18 @@ let tests =
                       , [ AVar ("x", TInt) ]
                       , TArrow (TInt, TInt) )
                   , TInt )
-              , AApp (AVar ("nested", TInt), [ ACstI (1, TInt) ], TInt) ))
+              , AApp (AVar ("nested", TInt), [ AConst (CInt 1, TInt) ], TInt) ))
        ; (* Test 6: Multiple free variables *)
          make_test
            "multiple_free_vars"
            (ALet
               ( "a"
               , TInt
-              , ACstI (1, TInt)
+              , AConst (CInt 1, TInt)
               , ALet
                   ( "b"
                   , TInt
-                  , ACstI (2, TInt)
+                  , AConst (CInt 2, TInt)
                   , ALam
                       ( [ "x", TInt ]
                       , APrim
@@ -97,11 +97,11 @@ let tests =
            (ALet
               ( "a"
               , TInt
-              , ACstI (1, TInt)
+              , AConst (CInt 1, TInt)
               , ALet
                   ( "b"
                   , TInt
-                  , ACstI (2, TInt)
+                  , AConst (CInt 2, TInt)
                   , AApp
                       ( AVar ("#global_lam_1", TInt)
                       , [ AVar ("a", TInt); AVar ("b", TInt) ]
@@ -109,10 +109,13 @@ let tests =
        ; (* Test 7: Function application *)
          make_test
            "function_application"
-           (AApp (ALam ([ "x", TInt ], AVar ("x", TInt), TInt), [ ACstI (42, TInt) ], TInt))
+           (AApp
+              ( ALam ([ "x", TInt ], AVar ("x", TInt), TInt)
+              , [ AConst (CInt 42, TInt) ]
+              , TInt ))
            (AApp
               ( AApp (AVar ("#global_lam_1", TInt), [], TArrow (TInt, TInt))
-              , [ ACstI (42, TInt) ]
+              , [ AConst (CInt 42, TInt) ]
               , TInt ))
          (* This test is a little funky, we should technically not allow this? *)
          (* ; (* Test 8: Let binding with lambda in body *)

@@ -12,6 +12,8 @@ let binop_to_wasm op ty =
 let wasm_type_of_type ty =
   match ty with
   | TInt -> "i64"
+  | TBool -> "i32"
+  | TUnit -> "i32"
   | TVar x -> string_of_int x
   | TArrow (_t1, _t2) -> "arrow"
 ;;
@@ -48,16 +50,16 @@ let lambda_let_str name ret_ty body args =
 
 let apply_str name arg = Printf.sprintf "(call $%s (%s))" name arg
 
-let acsti_to_str annot_expr =
+let aconst_int_to_str annot_expr =
   match annot_expr with
-  | ACstI (number, _) -> string_of_int number
+  | AConst (CInt number, _) -> string_of_int number
   | _ -> failwith "hanzo"
 ;;
 
 let rec push_args args =
   match args with
   | [] -> ""
-  | head :: tail -> "i64.const " ^ acsti_to_str head ^ "\n" ^ push_args tail
+  | head :: tail -> "i64.const " ^ aconst_int_to_str head ^ "\n" ^ push_args tail
 ;;
 
 let create_outer ret_ty to_be_called name args =
@@ -81,7 +83,7 @@ let rec comp (expr : annot_expr) : string =
   match expr with
   | AVar (name, _) -> var_str name
   (* type of ACstI is always int, discard for now *)
-  | ACstI (num, _) -> "i64.const " ^ string_of_int num
+  | AConst (CInt num, _) -> "i64.const " ^ string_of_int num
   | APrim (op, e1, e2, ty) ->
     let e1_comp = comp e1 in
     let e2_comp = comp e2 in
@@ -116,7 +118,7 @@ and comp_rhs rhs _lhs = Printf.sprintf "(%s)" (comp rhs)
 let comp_global_defs (globals : Preprocess.global_def list) =
   List.fold_left
     (fun acc ({ name; fundef; ret_type; _ } : Preprocess.global_def) ->
-      acc ^ comp (ALet (name, ret_type, fundef, ACstI (0, TInt))) ^ "\n")
+      acc ^ comp (ALet (name, ret_type, fundef, AConst (CInt 0, TInt))) ^ "\n")
     ""
     globals
 ;;

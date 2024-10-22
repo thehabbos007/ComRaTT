@@ -5,7 +5,7 @@ open Source
 %token <int> INT
 %token <string> IDENT
 %token LAMBDA IN LET DEF SARROW SEMI
-%token PLUS TIMES MINUS
+%token PLUS TIMES MINUS TRUE FALSE UNIT
 %token LPAREN RPAREN
 %token EQUALS
 %token EOF
@@ -41,9 +41,15 @@ arith_expr:
   | simple_expr { $1 }
 
 simple_expr:
-  | i = INT { CstI i }
   | x = IDENT { Var x }
+  | i = INT { Const (CInt i) }
+  | b = bool { Const (b) }
+  | UNIT { Const CUnit }
   | LPAREN e = expr RPAREN { e }
+
+bool:
+  | TRUE { CBool true }
+  | FALSE { CBool false }
 
 %inline binop:
   | PLUS { Add }
