@@ -199,9 +199,10 @@ module EliminatePartialApp = struct
   ;;
 end
 
+open Lambda_lift
+
 let optimize expr =
   let expr = ConstantFold.constant_fold_expr expr in
   let eliminated = EliminatePartialApp.eliminate_partial expr in
-  (* Lift.lambda_lift_expr eliminated*)
-  eliminated, []
+  lift_lambdas [] eliminated
 ;;
