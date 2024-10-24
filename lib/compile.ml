@@ -1,5 +1,6 @@
 open Source
 open Annotate
+open Preprocess
 
 let binop_to_wasm op ty =
   match op, ty with
@@ -54,14 +55,6 @@ let acsti_to_str annot_expr =
   | _ -> failwith "hanzo"
 ;;
 
-(* duplicated from preprocess *)
-let rec final_type ty =
-  match ty with
-  | TInt -> ty
-  | TVar _ -> ty
-  | TArrow (_, t2) -> final_type t2
-;;
-
 let rec lookup (names : (sym * typ * string) list) name =
   match names with
   | [] -> failwith "name not found"
@@ -112,7 +105,7 @@ let rec comp_new expr =
       "(func $%s %s (result %s)\n %s \n %s \n)"
       name
       (args_to_str args)
-      (wasm_type_of_type (final_type ret_ty))
+      (wasm_type_of_type (EliminatePartialApp.final_type ret_ty))
       forward_dec
       (comp_new body)
   | ALam _ -> failwith "lambda should have been lifted :("
