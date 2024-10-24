@@ -13,6 +13,8 @@ let binop_to_wasm op ty =
 let wasm_type_of_type ty =
   match ty with
   | TInt -> "i64"
+  | TBool -> "i32"
+  | TUnit -> "i32"
   | TVar index -> failwith ("error: TVar found with index " ^ string_of_int index)
   | TArrow (_t1, _t2) -> "arrow"
 ;;
@@ -42,7 +44,7 @@ let rec get_names_for_forward_declaration expr map =
     get_names_for_forward_declaration body (Environment.add name ty map)
   | ALam _ -> failwith "no lambdas allowed"
   | AFunDef _ -> failwith "no fundefs allowed"
-  | ACstI _ | AVar _ | APrim _ | AApp _ -> map
+  | AConst _ | AVar _ | APrim _ | AApp _ -> map
 ;;
 
 let unfold_forward_decs decs =
@@ -57,7 +59,9 @@ let rec comp expr =
   match expr with
   | AVar (name, _) -> var_str name
   (* type of ACstI is always int, discard for now *)
-  | ACstI (num, _) -> "i64.const " ^ string_of_int num
+  | AConst (CInt num, _) -> "i64.const " ^ string_of_int num
+  | AConst (CBool b, _) -> "i32.const " ^ if b then "1" else "0"
+  | AConst (CUnit, _) -> "i32.const " ^ "-1"
   | APrim (op, e1, e2, ty) ->
     let e1_comp = comp e1 in
     let e2_comp = comp e2 in
@@ -96,7 +100,7 @@ let rec comp expr =
 let comp_global_defs (globals : Preprocess.global_def list) =
   List.fold_left
     (fun acc ({ name; fundef; ret_type; _ } : Preprocess.global_def) ->
-      acc ^ comp (ALet (name, ret_type, fundef, ACstI (0, TInt))) ^ "\n")
+      acc ^ comp (ALet (name, ret_type, fundef, AConst (CInt 0, TInt))) ^ "\n")
     ""
     globals
 ;;

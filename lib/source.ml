@@ -4,8 +4,14 @@ type binop =
   | Sub
 [@@deriving show, eq]
 
+type const =
+  | CInt of int
+  | CBool of bool
+  | CUnit
+[@@deriving show, eq]
+
 type expr =
-  | CstI of int
+  | Const of const
   | Var of string
   | Lam of string list * expr
   | App of expr * expr

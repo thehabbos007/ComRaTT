@@ -17,7 +17,7 @@ open struct
   ;;
 
   let rec free_vars = function
-    | ACstI _ -> []
+    | AConst _ -> []
     | AVar (x, t) -> [ x, t ]
     | AFunDef (name, params, body, _) ->
       let param_names = name :: List.map fst params in
@@ -51,7 +51,7 @@ open struct
     | AApp (e1, e2, t) -> AApp (closure_convert e1, List.map closure_convert e2, t)
     | APrim (op, e1, e2, t) -> APrim (op, closure_convert e1, closure_convert e2, t)
     | ALet (x, t, e1, e2) -> ALet (x, t, closure_convert e1, closure_convert e2)
-    | ACstI _ | AVar _ -> expr
+    | AConst _ | AVar _ -> expr
   ;;
 
   let lift_lambdas expr =
@@ -69,7 +69,7 @@ open struct
       | AApp (e1, e2, t) -> AApp (lift e1, List.map lift e2, t)
       | APrim (op, e1, e2, t) -> APrim (op, lift e1, lift e2, t)
       | ALet (x, t, e1, e2) -> ALet (x, t, lift e1, lift e2)
-      | ACstI _ | AVar _ -> expr
+      | AConst _ | AVar _ -> expr
     in
     let lifted_expr = lift expr in
     lifted_expr, !definitions
@@ -87,11 +87,14 @@ module ConstantFold = struct
   (* Fold constants into expression that can be eliminated *)
   let rec constant_fold_expr expr =
     match expr with
-    | ACstI _ -> expr
+    | AConst _ -> expr
     | AVar _ -> expr
-    | APrim (Add, ACstI (n1, TInt), ACstI (n2, TInt), TInt) -> ACstI (n1 + n2, TInt)
-    | APrim (Sub, ACstI (n1, TInt), ACstI (n2, TInt), TInt) -> ACstI (n1 - n2, TInt)
-    | APrim (Mul, ACstI (n1, TInt), ACstI (n2, TInt), TInt) -> ACstI (n1 * n2, TInt)
+    | APrim (Add, AConst (CInt n1, TInt), AConst (CInt n2, TInt), TInt) ->
+      AConst (CInt (n1 + n2), TInt)
+    | APrim (Sub, AConst (CInt n1, TInt), AConst (CInt n2, TInt), TInt) ->
+      AConst (CInt (n1 - n2), TInt)
+    | APrim (Mul, AConst (CInt n1, TInt), AConst (CInt n2, TInt), TInt) ->
+      AConst (CInt (n1 * n2), TInt)
     | APrim (op, e1, e2, t) -> APrim (op, constant_fold_expr e1, constant_fold_expr e2, t)
     | ALet (x, t, e1, e2) -> ALet (x, t, constant_fold_expr e1, constant_fold_expr e2)
     | AApp (e1, e2, t) -> AApp (constant_fold_expr e1, List.map constant_fold_expr e2, t)
@@ -128,20 +131,19 @@ module EliminatePartialApp = struct
     | AApp (func, args, ty) -> AApp (subst func, List.map subst args, ty)
     | ALet (name, ty, rhs, body) when name <> bind_old ->
       ALet (name, ty, subst rhs, subst body)
-    | ACstI _ | ALet _ | AVar _ | AFunDef _ -> aexpr
+    | AConst _ | ALet _ | AVar _ | AFunDef _ -> aexpr
   ;;
 
   let rec unpack_type ty =
     match ty with
-    | TInt -> []
+    | TInt | TBool | TUnit -> []
     | TVar _ -> []
     | TArrow (t1, t2) -> t1 :: unpack_type t2
   ;;
 
   let rec final_type ty =
     match ty with
-    | TInt -> ty
-    | TVar _ -> ty
+    | TInt | TBool | TUnit | TVar _ -> ty
     | TArrow (_, t2) -> final_type t2
   ;;
 
@@ -167,7 +169,7 @@ module EliminatePartialApp = struct
 
   let rec eliminate_partial aexpr =
     match aexpr with
-    | ACstI _ -> aexpr
+    | AConst _ -> aexpr
     | AVar (_name, TArrow (_t1, _t2)) -> aexpr
     | AVar _ -> aexpr
     | APrim (op, e1, e2, ty) -> APrim (op, eliminate_partial e1, eliminate_partial e2, ty)

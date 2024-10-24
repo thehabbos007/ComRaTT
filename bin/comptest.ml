@@ -8,8 +8,9 @@ let _let_example =
   ALet
     ( "inc"
     , TInt
-    , ALam ([ "x", TInt ], APrim (Add, AVar ("x", TInt), ACstI (1, TInt), TInt), TInt)
-    , AApp (AVar ("inc", TInt), [ ACstI (41, TInt) ], TInt) )
+    , ALam
+        ([ "x", TInt ], APrim (Add, AVar ("x", TInt), AConst (CInt 1, TInt), TInt), TInt)
+    , AApp (AVar ("inc", TInt), [ AConst (CInt 41, TInt) ], TInt) )
 ;;
 
 (*
@@ -30,21 +31,24 @@ let _reallet =
   ALet
     ( "x"
     , TInt
-    , ALam ([ "y", TInt ], APrim (Add, AVar ("y", TInt), ACstI (1, TInt), TInt), TInt)
-    , AApp (AVar ("x", TInt), [ ACstI (42, TInt) ], TInt) )
+    , ALam
+        ([ "y", TInt ], APrim (Add, AVar ("y", TInt), AConst (CInt 1, TInt), TInt), TInt)
+    , AApp (AVar ("x", TInt), [ AConst (CInt 42, TInt) ], TInt) )
 ;;
 
 let _newlet =
   ALet
     ( "x"
     , TInt
-    , ACstI (42, TInt)
-    , ALam ([ "x", TInt ], APrim (Add, AVar ("x", TInt), ACstI (1, TInt), TInt), TInt) )
+    , AConst (CInt 42, TInt)
+    , ALam
+        ([ "x", TInt ], APrim (Add, AVar ("x", TInt), AConst (CInt 1, TInt), TInt), TInt)
+    )
 ;;
 
 let _var_example = AVar ("x", TInt)
-let _prim_example = APrim (Add, AVar ("x", TInt), ACstI (41, TInt), TInt)
-let _simple_let = ALet ("testfun", TInt, ACstI (42, TInt), ACstI (20, TInt))
+let _prim_example = APrim (Add, AVar ("x", TInt), AConst (CInt 41, TInt), TInt)
+let _simple_let = ALet ("testfun", TInt, AConst (CInt 42, TInt), AConst (CInt 20, TInt))
 
 (*let () = print_endline (init_wat _reallet []) |> ignore*)
 (*
@@ -66,7 +70,7 @@ let _correct_args =
         ( [ "x", TInt; "y", TInt ]
         , APrim (Add, AVar ("x", TInt), AVar ("y", TInt), TInt)
         , TArrow (TInt, TArrow (TInt, TInt)) )
-    , [ ACstI (5, TInt); ACstI (3, TInt) ]
+    , [ AConst (CInt 5, TInt); AConst (CInt 3, TInt) ]
     , TInt )
 ;;
 
@@ -81,13 +85,13 @@ let _correct_args =
 let _add42 =
   ALam
     ( [ "x", TInt ]
-    , APrim (Add, AVar ("x", TInt), ACstI (42, TInt), TInt)
+    , APrim (Add, AVar ("x", TInt), AConst (CInt 42, TInt), TInt)
     , TArrow (TInt, TInt) )
 ;;
 
-let _applied = AApp (_add42, [ ACstI (42, TInt) ], TInt)
-let _add42raw = Lam ([ "x" ], Prim (Add, Var "x", CstI 42))
-let _appraw = App (_add42raw, CstI 42)
+let _applied = AApp (_add42, [ AConst (CInt 42, TInt) ], TInt)
+let _add42raw = Lam ([ "x" ], Prim (Add, Var "x", Const (CInt 42)))
+let _appraw = App (_add42raw, Const (CInt 42))
 let _nested = Lam ([ "x" ], Lam ([ "y" ], Prim (Add, Var "x", Var "y")))
 
 (*

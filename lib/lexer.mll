@@ -14,6 +14,9 @@ rule token = parse
   | "let"    { LET }
   | "def"    { DEF }
   | "in"     { IN }
+  | "true"   { TRUE }
+  | "false"  { FALSE }
+  | "()"     { UNIT }
   | "+"      { PLUS }
   | "*"      { TIMES }
   | "-"      { MINUS }
