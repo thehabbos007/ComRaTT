@@ -148,6 +148,7 @@ let rec generate_local_vars vars =
     ^ generate_local_vars vars
 ;;
 
+(* TODO: this is not entirely complete as the "_twofunctions" example that binds x, uses it and then rebinds it for new use, does not compile correctly *)
 let rec get_names_for_forward_declaration expr map =
   match expr with
   | ALet (name, ty, _, body) ->

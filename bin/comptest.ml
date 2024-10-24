@@ -202,6 +202,7 @@ let _add1 = ast_of_text "def main = let y = 41 in y+1;"
 let _advanced = ast_of_text "def main = let x = 1 in let y = 42 in x+y;"
 let _shadow = ast_of_text "def main = let x = 1 in let x = 42 in x;"
 
+(* TODO: this is not handled properly *)
 let _twofunctions =
   ast_of_text "def main = let x = 1 in let y = x+1 in let x = 40 in x+y;"
 ;;
@@ -236,6 +237,6 @@ let () =
          print_endline (string_of_annot_expr _lifted))
          annot_exprs)
       *)
-    _shadow
+    _twofunctions
   |> ignore
 ;;
