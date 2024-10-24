@@ -172,8 +172,7 @@ let rec get_names_for_forward_declaration expr =
      Nope, not the rhs. Let bindings in there are only
      temporary and used for giving a value to name.
 
-     TODO: how is shadowing handled here? i guess the first value
-     will be hit during a lookup, which is bad. Handle appropriately.
+     TODO: how is shadowing handled here? i guess the first value will be hit during a lookup, which is bad. Handle appropriately.
   *)
   | ALet (name, ty, _, body) ->
     Printf.sprintf "(local $%s %s)\n" name (wasm_type_of_type ty)
@@ -211,24 +210,6 @@ let rec comp_new expr =
     let set_name_to_rhs = Printf.sprintf "(local.set $%s (%s))" name comp_rhs in
     let comp_body = comp_new body in
     Printf.sprintf "%s\n %s" set_name_to_rhs comp_body
-    (*
-       let comp_rhs = comp_new rhs types in
-       let set_name_to_rhs = Printf.sprintf "(local.set $%s (%s))" name comp_rhs in
-       let names = [ name, ty, comp_rhs ] in
-       let compiled_let = comp_let body names types in
-       (* let _ = print_endline ("compiled body: " ^ compiled_let ^ "\ncompiled body stop") in*)
-       (* let _ = print_endline ("compiled rhs: " ^ comp_rhs ^ "\ncompiled rhs stop") in*)
-       Printf.sprintf
-       "%s\n %s\n %s"
-       (generate_local_vars names types)
-       set_name_to_rhs
-       compiled_let*)
-    (*
-       Printf.sprintf
-       "(local %s) \n %s \n (local.set %s)"
-       (wasm_type_of_type ty)
-       "banan"
-       "banan"*)
   | AApp (func, args, _ty) ->
     (* Assume that calling a function is done with a valid function name *)
     (match func with
@@ -237,27 +218,7 @@ let rec comp_new expr =
          "%s\ncall $%s"
          (List.fold_left (fun acc arg -> acc ^ comp_new arg ^ "\n") "" args)
          name
-     | _ -> failwith "attempted calling a function")
-(*
-   Printf.sprintf
-   "call $%s %s"
-   (comp_new func types)
-   (List.fold_left (fun acc arg -> acc ^ comp_new arg types ^ " ") "" args)
-*)
-
-(* Jeg har brug for at returnere en tuple her vel, så jeg kan bobble alle
-   navne tilbage til toppen, så de kan defineres i starten af funktionen.
-*)
-and comp_let let_body names =
-  match let_body with
-  (* Hvis en let-bindings krop bare er en variabel, som i: let x = 42 in x
-     skal vi skubbe 42 på stakken og så bruge local.tee $x
-     Husk at x skal være defineret på forhånd, men det klares jo af den anden funktion.
-  *)
-  | AVar (name, _ty) ->
-    let value = lookup names name in
-    Printf.sprintf "%s  \n local.tee $%s" value name
-  | others -> comp_new others
+     | _ -> failwith "attempted calling a function that was not a valid AVar")
 ;;
 
 let rec comp_and_unfold_defs defs =
@@ -265,8 +226,6 @@ let rec comp_and_unfold_defs defs =
   | [] -> ""
   | def :: defs -> comp_new def ^ comp_and_unfold_defs defs
 ;;
-
-(* | def :: defs -> comp_and_unfold_defs defs types ^ comp_new def types*)
 
 let wasm (annot_exprs : annot_expr list) (globals : Preprocess.global_def list) =
   Printf.sprintf
