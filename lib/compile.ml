@@ -148,9 +148,10 @@ let rec generate_local_vars vars =
     ^ generate_local_vars vars
 ;;
 
-let rec get_names_with_map expr map =
+let rec get_names_for_forward_declaration expr map =
   match expr with
-  | ALet (name, ty, _, body) -> get_names_with_map body (Environment.add name ty map)
+  | ALet (name, ty, _, body) ->
+    get_names_for_forward_declaration body (Environment.add name ty map)
   | ALam _ -> failwith "no lambdas allowed"
   | AFunDef _ -> failwith "no fundefs allowed"
   | ACstI _ | AVar _ | APrim _ | AApp _ -> map
@@ -174,8 +175,9 @@ let rec comp_new expr =
     let e2_comp = comp e2 in
     e1_comp ^ "\n" ^ e2_comp ^ "\n" ^ binop_to_wasm op ty
   | AFunDef (name, args, body, ret_ty) ->
-    (* let forward_dec = get_names_for_forward_declaration body types in*)
-    let forward_dec = unfold_forward_decs (get_names_with_map body Environment.empty) in
+    let forward_dec =
+      unfold_forward_decs (get_names_for_forward_declaration body Environment.empty)
+    in
     Printf.sprintf
       "(func $%s %s (result %s)\n %s \n %s \n)"
       name
