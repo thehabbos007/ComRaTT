@@ -16,12 +16,6 @@ let wasm_type_of_type ty =
   | TArrow (_t1, _t2) -> "arrow"
 ;;
 
-let show_type_lookup_error types target =
-  print_endline (string_of_int target ^ " not found in ");
-  List.map (fun (idx, _ty) -> print_endline (string_of_int idx)) types |> ignore;
-  "fejl"
-;;
-
 let rec args_to_str (arg_list : (sym * typ) list) =
   match arg_list with
   | [] -> ""
