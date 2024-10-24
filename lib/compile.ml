@@ -12,7 +12,7 @@ let binop_to_wasm op ty =
 let wasm_type_of_type ty =
   match ty with
   | TInt -> "i64"
-  | TVar x -> string_of_int x
+  | TVar index -> failwith ("error: TVar found with index " ^ string_of_int index)
   | TArrow (_t1, _t2) -> "arrow"
 ;;
 
