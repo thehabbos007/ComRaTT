@@ -124,21 +124,6 @@ let _a _a =
   List.map _show_global _globals |> ignore
 ;;
 
-let _partialappok =
-  ast_of_text "let add = fun x -> fun y -> x + y in let add1 = add 1 in add1 2 "
-;;
-
-let _partialappthreesum =
-  ast_of_text
-    "let add_three = fun x -> fun y -> fun z -> x+y+z in let add1 = add_three 1 in let \
-     add2 = add1 2 in add2 3"
-;;
-
-let _partialappthreesum2 =
-  ast_of_text "let add_three = fun x -> fun y -> fun z -> x+y+z in add_three 3 4 5"
-;;
-
-let _simpleadd = ast_of_text "let add = fun x -> fun y -> x+y in add 41 1"
 let _toplevel = ast_of_text "def add x y = x + y;"
 
 let _toplevel_eta =
@@ -215,6 +200,8 @@ let _function =
   ast_of_text "def add x y = x+y; def main = let x = 40 in let y = 2 in add x y;"
 ;;
 
+let _delay_adv = ast_of_text "def main = let x = delay 43 in advance x;"
+
 (*
    let () =
    Result.map (fun (subst, _) -> print_endline (string_of_int (List.length subst))) _main
@@ -241,6 +228,6 @@ let () =
          print_endline (string_of_annot_expr _lifted))
          annot_exprs)
       *)
-    _twofunctions
+    _delay_adv
   |> ignore
 ;;
