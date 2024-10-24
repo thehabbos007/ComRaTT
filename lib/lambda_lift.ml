@@ -22,16 +22,29 @@ let fresh_var =
     Printf.sprintf "%s_%d" prefix !counter
 ;;
 
+let type_of expr =
+  match expr with
+  | AConst (_, t)
+  | AVar (_, t)
+  | ALam (_, _, t)
+  | AFunDef (_, _, _, t)
+  | AApp (_, _, t)
+  | APrim (_, _, _, t)
+  | ALet (_, t, _, _) -> t
+;;
+
+let shadow_assoc_put assoc x v = (x, v) :: assoc
+let shadow_assoc_get x env = List.assoc_opt x env
+
 let lift_lambdas globals expr =
   let defs = ref [] in
   let add_def def = defs := def :: !defs in
-  let rec lift = function
-    | AConst _ as c -> c
-    | AVar _ as v -> v
+  let rec lift expr =
+    match expr with
+    | AConst _ | AVar _ -> expr
     | ALam (args, body, (TArrow (_arg_type, ret_type) as fun_type)) as lam ->
       let free = List.filter (fun v -> not (List.mem v globals)) (free_vars lam) in
       let fun_name = fresh_var "lambda" in
-      (* WIP types *)
       let new_args = free @ args in
       let fun_def = make_fun_def fun_name new_args (lift body) fun_type in
       add_def fun_def;
@@ -40,11 +53,15 @@ let lift_lambdas globals expr =
           (AVar (fun_name, fun_type), List.map (fun (x, t) -> AVar (x, t)) free, ret_type)
       in
       app
-    | ALam _ -> failwith "Lambdas with non-arrow types do not exist"
+    | ALam _ ->
+      print_endline (show_annot_expr expr);
+      failwith "Lambda with non-arrow type"
     | AFunDef (name, args, body, typ) -> AFunDef (name, args, lift body, typ)
     | AApp (f, args, typ) -> AApp (lift f, List.map lift args, typ)
     | APrim (op, e1, e2, typ) -> APrim (op, lift e1, lift e2, typ)
-    | ALet (x, typ, e1, e2) -> ALet (x, typ, lift e1, lift e2)
+    | ALet (x, _, e1, e2) ->
+      let e1' = lift e1 in
+      ALet (x, type_of e1', e1', lift e2)
   in
   let lifted_expr = lift expr in
   lifted_expr, List.rev !defs

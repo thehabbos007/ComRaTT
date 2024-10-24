@@ -201,6 +201,7 @@ let _function =
 ;;
 
 let _delay_adv = ast_of_text "def main = let x = delay 43 in advance x;"
+let _closures = ast_of_text "def main = let y = 5 in let x = fun x -> x + y in x 7;"
 
 (*
    let () =
@@ -213,10 +214,11 @@ let () =
     (fun annot_exprs ->
       let mapped =
         List.map
-          (fun annot ->
-            let lifted, _ = optimize annot in
-            lifted)
+          (fun expr ->
+            let l, gs = optimize expr in
+            l :: gs)
           annot_exprs
+        |> List.concat
       in
       let compiled = init_wat mapped [] in
       print_endline compiled)
@@ -228,6 +230,6 @@ let () =
          print_endline (string_of_annot_expr _lifted))
          annot_exprs)
       *)
-    _delay_adv
+    _closures
   |> ignore
 ;;
