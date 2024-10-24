@@ -221,7 +221,7 @@ let rec string_of_annot_expr = function
   | ACstI (x, _) -> string_of_int x
   | AVar (name, typ) -> Printf.sprintf "%s : %s" name (string_of_type typ)
   | ALam (args, body, _) ->
-    Printf.sprintf "fun %s-> %s" (unfold_lam_args args) (string_of_annot_expr body)
+    Printf.sprintf "(fun %s-> %s)" (unfold_lam_args args) (string_of_annot_expr body)
   | AApp (func, args, typ) ->
     Printf.sprintf
       "%s %s) : %s"

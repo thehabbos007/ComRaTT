@@ -24,8 +24,12 @@ let optarg(x) :=
 prog:
   | fs = fundefs* e = optarg(expr) EOF { fs @ e }
 
+optargs:
+    | { [] }
+    | args = IDENT+ { args }
+
 fundefs:
-  | DEF x = IDENT args = IDENT+ EQUALS e = expr SEMI { FunDef (x, args, e) }
+  | DEF x = IDENT args = optargs EQUALS e = expr SEMI { FunDef (x, args, e) }
 
 expr:
   | LET x = IDENT EQUALS e1 = expr IN e2 = expr { Let (x, e1, e2) }

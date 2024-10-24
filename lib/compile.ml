@@ -1,5 +1,6 @@
 open Source
 open Annotate
+open Preprocess
 
 let binop_to_wasm op ty =
   match op, ty with
@@ -12,7 +13,7 @@ let binop_to_wasm op ty =
 let wasm_type_of_type ty =
   match ty with
   | TInt -> "i64"
-  | TVar x -> string_of_int x
+  | TVar index -> failwith ("error: TVar found with index " ^ string_of_int index)
   | TArrow (_t1, _t2) -> "arrow"
 ;;
 
@@ -23,61 +24,36 @@ let rec args_to_str (arg_list : (sym * typ) list) =
     Printf.sprintf "(param $%s %s) %s" name (wasm_type_of_type typ) (args_to_str tail)
 ;;
 
-(* den går ikke, for det er jo let der har navne...*)
-let fun_string name args ret_typ =
-  Printf.sprintf "(func $%s %s (result %s))" name (args_to_str args) ret_typ
-;;
-
 let var_str name = "local.get $" ^ name
 
-(* what to do with let right hand side?*)
-let let_str name ret_ty body =
-  Printf.sprintf "(func $%s args? (result %s)\n    %s\n  )" name ret_ty body
-;;
-
-let lambda_let_str name ret_ty body args =
-  Printf.sprintf
-    "(func $%s %s (result %s)\n    %s\n  ) (export \"%s\" (func $%s))"
-    name
-    (args_to_str args)
-    ret_ty
-    body
-    name
-    name
-;;
-
-let apply_str name arg = Printf.sprintf "(call $%s (%s))" name arg
-
-let acsti_to_str annot_expr =
-  match annot_expr with
-  | ACstI (number, _) -> string_of_int number
-  | _ -> failwith "hanzo"
-;;
-
-let rec push_args args =
-  match args with
+let rec generate_local_vars vars =
+  match vars with
   | [] -> ""
-  | head :: tail -> "i64.const " ^ acsti_to_str head ^ "\n" ^ push_args tail
+  | (name, ty, _) :: vars ->
+    Printf.sprintf "(local $%s %s)" name (wasm_type_of_type ty)
+    ^ "\n"
+    ^ generate_local_vars vars
 ;;
 
-let create_outer ret_ty to_be_called name args =
-  Printf.sprintf
-    "%s (func $caller (result %s)\n\
-    \ %s\n\
-    \ call $%s \n\n\
-     ) (export \"caller\" (func $caller))"
-    to_be_called
-    ret_ty
-    (push_args args)
-    name
+(* TODO: this is not entirely complete as the "_twofunctions" example that binds x, uses it and then rebinds it for new use, does not compile correctly *)
+let rec get_names_for_forward_declaration expr map =
+  match expr with
+  | ALet (name, ty, _, body) ->
+    get_names_for_forward_declaration body (Environment.add name ty map)
+  | ALam _ -> failwith "no lambdas allowed"
+  | AFunDef _ -> failwith "no fundefs allowed"
+  | ACstI _ | AVar _ | APrim _ | AApp _ -> map
 ;;
 
-(*
-   what is fastest: string concat or format strings?
+let unfold_forward_decs decs =
+  Environment.fold
+    (fun name ty acc ->
+      Printf.sprintf "(local $%s %s)\n" name (wasm_type_of_type ty) ^ acc)
+    decs
+    ""
+;;
 
-   assume: lambdas are never nested and all lambdas are in a top level let binding
-*)
-let rec comp (expr : annot_expr) : string =
+let rec comp expr =
   match expr with
   | AVar (name, _) -> var_str name
   (* type of ACstI is always int, discard for now *)
@@ -86,32 +62,36 @@ let rec comp (expr : annot_expr) : string =
     let e1_comp = comp e1 in
     let e2_comp = comp e2 in
     e1_comp ^ "\n" ^ e2_comp ^ "\n" ^ binop_to_wasm op ty
-  | AApp (name, args, _) ->
-    apply_str (comp name) (List.fold_left (fun acc arg -> acc ^ comp arg) "" args)
-  (* TODO rhs of let binding is not handled at all
-     we still need to handle the call part of functions
-     -> explicitly handled in the pattern below
-  *)
-  | ALet (_name, _ret_ty, ALam (_largs, _body, _t), AApp (_appname, _args, _ty)) ->
-    create_outer
-      (wasm_type_of_type _ret_ty)
-      (lambda_let_str _name (wasm_type_of_type _ret_ty) (comp _body) _largs)
-      _name
-      _args
-  | ALet (name, _, ALam (args, body, ret_ty), _) ->
-    (* Maybe we put together the RHS of all let bindings
-       in some glued together main function? *)
-    lambda_let_str name (wasm_type_of_type ret_ty) (comp body) args
-  | ALet (name, ret_ty, body, _) -> let_str name (wasm_type_of_type ret_ty) (comp body)
-  | _ -> failwith "not supported"
-
-and call_function name _args =
-  Printf.sprintf
-    "(call $%s (%s))"
-    (comp name)
-    (List.fold_left (fun acc arg -> acc ^ comp arg ^ " ") "" _args)
-
-and comp_rhs rhs _lhs = Printf.sprintf "(%s)" (comp rhs)
+  | AFunDef (name, args, body, ret_ty) ->
+    let forward_dec =
+      unfold_forward_decs (get_names_for_forward_declaration body Environment.empty)
+    in
+    Printf.sprintf
+      "(func $%s %s (result %s)\n %s \n %s \n)"
+      name
+      (args_to_str args)
+      (wasm_type_of_type (EliminatePartialApp.final_type ret_ty))
+      forward_dec
+      (comp body)
+  | ALam _ -> failwith "lambda should have been lifted :("
+  | ALet (name, _ty, rhs, AVar (name', _ty')) when name = name' ->
+    let comp_rhs = comp rhs in
+    Printf.sprintf "%s \n local.tee $%s" comp_rhs name
+  | ALet (name, _ty, rhs, body) ->
+    let comp_rhs = comp rhs in
+    let set_name_to_rhs = Printf.sprintf "(local.set $%s (%s))" name comp_rhs in
+    let comp_body = comp body in
+    Printf.sprintf "%s\n %s" set_name_to_rhs comp_body
+  | AApp (func, args, _ty) ->
+    (* Assume that calling a function is done with a valid function name *)
+    (match func with
+     | AVar (name, _) ->
+       Printf.sprintf
+         "%s\ncall $%s"
+         (List.fold_left (fun acc arg -> acc ^ comp arg ^ "\n") "" args)
+         name
+     | _ -> failwith "attempted calling a function that was not a valid AVar")
+;;
 
 let comp_global_defs (globals : Preprocess.global_def list) =
   List.fold_left
@@ -121,6 +101,15 @@ let comp_global_defs (globals : Preprocess.global_def list) =
     globals
 ;;
 
-let init_wat (main_expr : annot_expr) (globals : Preprocess.global_def list) =
-  Printf.sprintf "(module \n%s\n%s)" (comp_global_defs globals) (comp main_expr)
+let rec comp_and_unfold_defs defs =
+  match defs with
+  | [] -> ""
+  | def :: defs -> comp def ^ comp_and_unfold_defs defs
+;;
+
+let init_wat (annot_exprs : annot_expr list) (globals : Preprocess.global_def list) =
+  Printf.sprintf
+    "(module \n %s\n %s\n (export \"main\" (func $main)))"
+    (comp_global_defs globals)
+    (comp_and_unfold_defs annot_exprs)
 ;;

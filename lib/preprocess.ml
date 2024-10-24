@@ -38,36 +38,26 @@ open struct
     List.fold_right (fun (_, t) acc -> TArrow (t, acc)) params ret_type
   ;;
 
-  let closure_convert globals expr =
-    let rec convert = function
-      | ALet (x, t1, ALam (params, body, t2), e2) ->
-        ALet (x, t1, ALam (params, convert body, t2), convert e2)
-      | ALam (params, body, t) as e ->
-        let free_vars =
-          List.filter
-            (fun (v, _) -> not (List.mem v globals || List.mem v (List.map fst params)))
-            (free_vars e)
-        in
-        let new_params = free_vars @ params in
-        let converted_body = convert body in
-        let lambda = ALam (new_params, converted_body, t) in
-        let substitute_type = convert_params_to_arrow params t in
-        AApp (lambda, List.map (fun (x, t) -> AVar (x, t)) free_vars, substitute_type)
-      | AApp (e1, e2, t) -> AApp (convert e1, List.map convert e2, t)
-      | APrim (op, e1, e2, t) -> APrim (op, convert e1, convert e2, t)
-      | ALet (x, t, e1, e2) -> ALet (x, t, convert e1, convert e2)
-      | e -> e
-    in
-    convert expr
+  let rec closure_convert expr =
+    match expr with
+    | AFunDef (name, params, body, t) -> AFunDef (name, params, closure_convert body, t)
+    | ALam (params, body, t) ->
+      let free_vars = free_vars expr in
+      let new_params = free_vars @ params in
+      let converted_body = closure_convert body in
+      let lambda = ALam (new_params, converted_body, t) in
+      let substitute_type = convert_params_to_arrow params t in
+      AApp (lambda, List.map (fun (x, t) -> AVar (x, t)) free_vars, substitute_type)
+    | AApp (e1, e2, t) -> AApp (closure_convert e1, List.map closure_convert e2, t)
+    | APrim (op, e1, e2, t) -> APrim (op, closure_convert e1, closure_convert e2, t)
+    | ALet (x, t, e1, e2) -> ALet (x, t, closure_convert e1, closure_convert e2)
+    | ACstI _ | AVar _ -> expr
   ;;
 
   let lift_lambdas expr =
     let definitions = ref [] in
-    let rec lift = function
-      (* Important pattern: keep top-level lambda bindings,
-         these are user-defined top-levelfunctions *)
-      | ALet (x, t1, ALam (params, body, t2), e2) ->
-        ALet (x, t1, ALam (params, lift body, t2), lift e2)
+    let rec lift expr =
+      match expr with
       | ALam (params, body, ret_type) ->
         let lifted_body = lift body in
         let name = unique_name "global_lam" in
@@ -75,11 +65,10 @@ open struct
         := { name; fundef = AFunDef (name, params, lifted_body, ret_type); ret_type }
            :: !definitions;
         AVar (name, ret_type)
+      | AFunDef (name, params, body, t) -> AFunDef (name, params, lift body, t)
       | AApp (e1, e2, t) -> AApp (lift e1, List.map lift e2, t)
       | APrim (op, e1, e2, t) -> APrim (op, lift e1, lift e2, t)
       | ALet (x, t, e1, e2) -> ALet (x, t, lift e1, lift e2)
-      | AFunDef (name, params, body, ret_type) ->
-        AFunDef (name, params, lift body, ret_type)
       | ACstI _ | AVar _ -> expr
     in
     let lifted_expr = lift expr in
@@ -88,8 +77,8 @@ open struct
 end
 
 module Lift = struct
-  let lambda_lift_expr globals expr =
-    let closed_expr = closure_convert globals expr in
+  let lambda_lift_expr expr =
+    let closed_expr = closure_convert expr in
     lift_lambdas closed_expr
   ;;
 end
@@ -211,5 +200,6 @@ end
 let optimize expr =
   let expr = ConstantFold.constant_fold_expr expr in
   let eliminated = EliminatePartialApp.eliminate_partial expr in
-  Lift.lambda_lift_expr [] eliminated
+  (* Lift.lambda_lift_expr eliminated*)
+  eliminated, []
 ;;
