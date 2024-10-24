@@ -164,24 +164,6 @@ let unfold_forward_decs decs =
     ""
 ;;
 
-let rec get_names_for_forward_declaration expr =
-  match expr with
-  (* A let binding is important.
-     We need to collect the name and the type and then call
-     recursively in both the rhs and the body.
-     Nope, not the rhs. Let bindings in there are only
-     temporary and used for giving a value to name.
-
-     TODO: how is shadowing handled here? i guess the first value will be hit during a lookup, which is bad. Handle appropriately.
-  *)
-  | ALet (name, ty, _, body) ->
-    Printf.sprintf "(local $%s %s)\n" name (wasm_type_of_type ty)
-    ^ get_names_for_forward_declaration body
-  | ALam _ -> failwith "no lambdas allowed"
-  | AFunDef _ -> failwith "no fundefs allowed"
-  | ACstI _ | AVar _ | APrim _ | AApp _ -> ""
-;;
-
 let rec comp_new expr =
   match expr with
   | AVar (name, _) -> var_str name
