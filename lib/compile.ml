@@ -149,7 +149,7 @@ let rec comp_and_unfold_defs defs =
   | def :: defs -> comp_new def ^ comp_and_unfold_defs defs
 ;;
 
-let init_wasm (annot_exprs : annot_expr list) (globals : Preprocess.global_def list) =
+let init_wat (annot_exprs : annot_expr list) (globals : Preprocess.global_def list) =
   Printf.sprintf
     "(module \n %s\n %s\n (export \"main\" (func $main)))"
     (comp_global_defs globals)

@@ -227,7 +227,7 @@ let () =
             lifted)
           annot_exprs
       in
-      let compiled = init_wasm mapped [] in
+      let compiled = init_wat mapped [] in
       print_endline compiled)
       (*
          List.iter

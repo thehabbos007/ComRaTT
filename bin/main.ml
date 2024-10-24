@@ -16,7 +16,7 @@ let () =
    print_endline "----- Globally lifted lambdas -----";
    List.iter print_global globals;
    print_endline "----- WAT -----";
-   let compiled = Compile.init_wat lifted globals in
+   let compiled = Compile.init_wat [ lifted ] globals in
    print_endline compiled;
    Result.ok ())
   |> Result.map_error print_endline
