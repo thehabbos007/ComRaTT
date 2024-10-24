@@ -24,42 +24,7 @@ let rec args_to_str (arg_list : (sym * typ) list) =
     Printf.sprintf "(param $%s %s) %s" name (wasm_type_of_type typ) (args_to_str tail)
 ;;
 
-(* den går ikke, for det er jo let der har navne...*)
-let fun_string name args ret_typ =
-  Printf.sprintf "(func $%s %s (result %s))" name (args_to_str args) ret_typ
-;;
-
 let var_str name = "local.get $" ^ name
-
-(* what to do with let right hand side?*)
-let let_str name ret_ty body =
-  Printf.sprintf "(func $%s args? (result %s)\n    %s\n  )" name ret_ty body
-;;
-
-let lambda_let_str name ret_ty body args =
-  Printf.sprintf
-    "(func $%s %s (result %s)\n    %s\n  ) (export \"%s\" (func $%s))"
-    name
-    (args_to_str args)
-    ret_ty
-    body
-    name
-    name
-;;
-
-let apply_str name arg = Printf.sprintf "(call $%s (%s))" name arg
-
-let acsti_to_str annot_expr =
-  match annot_expr with
-  | ACstI (number, _) -> string_of_int number
-  | _ -> failwith "hanzo"
-;;
-
-let rec lookup (names : (sym * typ * string) list) name =
-  match names with
-  | [] -> failwith "name not found"
-  | (n, _, v) :: rest -> if n = name then v else lookup rest name
-;;
 
 let rec generate_local_vars vars =
   match vars with
@@ -88,14 +53,14 @@ let unfold_forward_decs decs =
     ""
 ;;
 
-let rec comp_new expr =
+let rec comp expr =
   match expr with
   | AVar (name, _) -> var_str name
   (* type of ACstI is always int, discard for now *)
   | ACstI (num, _) -> "i64.const " ^ string_of_int num
   | APrim (op, e1, e2, ty) ->
-    let e1_comp = comp_new e1 in
-    let e2_comp = comp_new e2 in
+    let e1_comp = comp e1 in
+    let e2_comp = comp e2 in
     e1_comp ^ "\n" ^ e2_comp ^ "\n" ^ binop_to_wasm op ty
   | AFunDef (name, args, body, ret_ty) ->
     let forward_dec =
@@ -107,15 +72,15 @@ let rec comp_new expr =
       (args_to_str args)
       (wasm_type_of_type (EliminatePartialApp.final_type ret_ty))
       forward_dec
-      (comp_new body)
+      (comp body)
   | ALam _ -> failwith "lambda should have been lifted :("
   | ALet (name, _ty, rhs, AVar (name', _ty')) when name = name' ->
-    let comp_rhs = comp_new rhs in
+    let comp_rhs = comp rhs in
     Printf.sprintf "%s \n local.tee $%s" comp_rhs name
   | ALet (name, _ty, rhs, body) ->
-    let comp_rhs = comp_new rhs in
+    let comp_rhs = comp rhs in
     let set_name_to_rhs = Printf.sprintf "(local.set $%s (%s))" name comp_rhs in
-    let comp_body = comp_new body in
+    let comp_body = comp body in
     Printf.sprintf "%s\n %s" set_name_to_rhs comp_body
   | AApp (func, args, _ty) ->
     (* Assume that calling a function is done with a valid function name *)
@@ -123,7 +88,7 @@ let rec comp_new expr =
      | AVar (name, _) ->
        Printf.sprintf
          "%s\ncall $%s"
-         (List.fold_left (fun acc arg -> acc ^ comp_new arg ^ "\n") "" args)
+         (List.fold_left (fun acc arg -> acc ^ comp arg ^ "\n") "" args)
          name
      | _ -> failwith "attempted calling a function that was not a valid AVar")
 ;;
@@ -131,7 +96,7 @@ let rec comp_new expr =
 let comp_global_defs (globals : Preprocess.global_def list) =
   List.fold_left
     (fun acc ({ name; fundef; ret_type; _ } : Preprocess.global_def) ->
-      acc ^ comp_new (ALet (name, ret_type, fundef, ACstI (0, TInt))) ^ "\n")
+      acc ^ comp (ALet (name, ret_type, fundef, ACstI (0, TInt))) ^ "\n")
     ""
     globals
 ;;
@@ -139,7 +104,7 @@ let comp_global_defs (globals : Preprocess.global_def list) =
 let rec comp_and_unfold_defs defs =
   match defs with
   | [] -> ""
-  | def :: defs -> comp_new def ^ comp_and_unfold_defs defs
+  | def :: defs -> comp def ^ comp_and_unfold_defs defs
 ;;
 
 let init_wat (annot_exprs : annot_expr list) (globals : Preprocess.global_def list) =
