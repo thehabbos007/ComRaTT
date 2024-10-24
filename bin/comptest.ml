@@ -218,7 +218,7 @@ let _function =
 *)
 let () =
   Result.map
-    (fun (subst, annot_exprs) ->
+    (fun annot_exprs ->
       let mapped =
         List.map
           (fun annot ->
@@ -226,7 +226,7 @@ let () =
             lifted)
           annot_exprs
       in
-      let compiled = wasm subst mapped [] in
+      let compiled = wasm mapped [] in
       print_endline compiled)
       (*
          List.iter

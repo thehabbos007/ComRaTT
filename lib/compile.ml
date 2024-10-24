@@ -22,19 +22,6 @@ let show_type_lookup_error types target =
   "fejl"
 ;;
 
-let rec wasm_type_of_type_2 ty types =
-  match ty with
-  | TInt -> "i64"
-  | TVar x -> lookup_type types x
-  | TArrow (_t1, _t2) -> "arrow"
-
-and lookup_type types target =
-  match types with
-  | [] -> failwith (show_type_lookup_error types target)
-  | (index, actual) :: rest ->
-    if index = target then wasm_type_of_type_2 actual types else lookup_type rest target
-;;
-
 let rec args_to_str (arg_list : (sym * typ) list) =
   match arg_list with
   | [] -> ""
@@ -42,15 +29,11 @@ let rec args_to_str (arg_list : (sym * typ) list) =
     Printf.sprintf "(param $%s %s) %s" name (wasm_type_of_type typ) (args_to_str tail)
 ;;
 
-let rec args_to_str_2 (arg_list : (sym * typ) list) types =
+let rec args_to_str_2 (arg_list : (sym * typ) list) =
   match arg_list with
   | [] -> ""
   | (name, typ) :: tail ->
-    Printf.sprintf
-      "(param $%s %s) %s"
-      name
-      (wasm_type_of_type_2 typ types)
-      (args_to_str_2 tail types)
+    Printf.sprintf "(param $%s %s) %s" name (wasm_type_of_type typ) (args_to_str_2 tail)
 ;;
 
 (* den går ikke, for det er jo let der har navne...*)
@@ -169,33 +152,32 @@ let rec lookup (names : (sym * typ * string) list) name =
   | (n, _, v) :: rest -> if n = name then v else lookup rest name
 ;;
 
-let rec generate_local_vars vars types =
+let rec generate_local_vars vars =
   match vars with
   | [] -> ""
   | (name, ty, _) :: vars ->
-    Printf.sprintf "(local $%s %s)" name (wasm_type_of_type_2 ty types)
+    Printf.sprintf "(local $%s %s)" name (wasm_type_of_type ty)
     ^ "\n"
-    ^ generate_local_vars vars types
+    ^ generate_local_vars vars
 ;;
 
-let rec get_names_with_map expr _types map =
+let rec get_names_with_map expr map =
   match expr with
-  | ALet (name, ty, _, body) ->
-    get_names_with_map body _types (Environment.add name ty map)
+  | ALet (name, ty, _, body) -> get_names_with_map body (Environment.add name ty map)
   | ALam _ -> failwith "no lambdas allowed"
   | AFunDef _ -> failwith "no fundefs allowed"
   | ACstI _ | AVar _ | APrim _ | AApp _ -> map
 ;;
 
-let unfold_forward_decs decs types =
+let unfold_forward_decs decs =
   Environment.fold
     (fun name ty acc ->
-      Printf.sprintf "(local $%s %s)\n" name (wasm_type_of_type_2 ty types) ^ acc)
+      Printf.sprintf "(local $%s %s)\n" name (wasm_type_of_type ty) ^ acc)
     decs
     ""
 ;;
 
-let rec get_names_for_forward_declaration expr types =
+let rec get_names_for_forward_declaration expr =
   match expr with
   (* A let binding is important.
      We need to collect the name and the type and then call
@@ -207,14 +189,14 @@ let rec get_names_for_forward_declaration expr types =
      will be hit during a lookup, which is bad. Handle appropriately.
   *)
   | ALet (name, ty, _, body) ->
-    Printf.sprintf "(local $%s %s)\n" name (wasm_type_of_type_2 ty types)
-    ^ get_names_for_forward_declaration body types
+    Printf.sprintf "(local $%s %s)\n" name (wasm_type_of_type ty)
+    ^ get_names_for_forward_declaration body
   | ALam _ -> failwith "no lambdas allowed"
   | AFunDef _ -> failwith "no fundefs allowed"
   | ACstI _ | AVar _ | APrim _ | AApp _ -> ""
 ;;
 
-let rec comp_new expr types =
+let rec comp_new expr =
   match expr with
   | AVar (name, _) -> var_str name
   (* type of ACstI is always int, discard for now *)
@@ -225,24 +207,22 @@ let rec comp_new expr types =
     e1_comp ^ "\n" ^ e2_comp ^ "\n" ^ binop_to_wasm op ty
   | AFunDef (name, args, body, ret_ty) ->
     (* let forward_dec = get_names_for_forward_declaration body types in*)
-    let forward_dec =
-      unfold_forward_decs (get_names_with_map body types Environment.empty) types
-    in
+    let forward_dec = unfold_forward_decs (get_names_with_map body Environment.empty) in
     Printf.sprintf
       "(func $%s %s (result %s)\n %s \n %s \n)"
       name
-      (args_to_str_2 args types)
-      (wasm_type_of_type_2 (final_type ret_ty) types)
+      (args_to_str_2 args)
+      (wasm_type_of_type (final_type ret_ty))
       forward_dec
-      (comp_new body types)
+      (comp_new body)
   | ALam _ -> failwith "lambda should have been lifted :("
   | ALet (name, _ty, rhs, AVar (name', _ty')) when name = name' ->
-    let comp_rhs = comp_new rhs types in
+    let comp_rhs = comp_new rhs in
     Printf.sprintf "%s \n local.tee $%s" comp_rhs name
   | ALet (name, _ty, rhs, body) ->
-    let comp_rhs = comp_new rhs types in
+    let comp_rhs = comp_new rhs in
     let set_name_to_rhs = Printf.sprintf "(local.set $%s (%s))" name comp_rhs in
-    let comp_body = comp_new body types in
+    let comp_body = comp_new body in
     Printf.sprintf "%s\n %s" set_name_to_rhs comp_body
     (*
        let comp_rhs = comp_new rhs types in
@@ -268,7 +248,7 @@ let rec comp_new expr types =
      | AVar (name, _) ->
        Printf.sprintf
          "%s\ncall $%s"
-         (List.fold_left (fun acc arg -> acc ^ comp_new arg types ^ "\n") "" args)
+         (List.fold_left (fun acc arg -> acc ^ comp_new arg ^ "\n") "" args)
          name
      | _ -> failwith "attempted calling a function")
 (*
@@ -281,7 +261,7 @@ let rec comp_new expr types =
 (* Jeg har brug for at returnere en tuple her vel, så jeg kan bobble alle
    navne tilbage til toppen, så de kan defineres i starten af funktionen.
 *)
-and comp_let let_body names types =
+and comp_let let_body names =
   match let_body with
   (* Hvis en let-bindings krop bare er en variabel, som i: let x = 42 in x
      skal vi skubbe 42 på stakken og så bruge local.tee $x
@@ -290,24 +270,20 @@ and comp_let let_body names types =
   | AVar (name, _ty) ->
     let value = lookup names name in
     Printf.sprintf "%s  \n local.tee $%s" value name
-  | others -> comp_new others types
+  | others -> comp_new others
 ;;
 
-let rec comp_and_unfold_defs defs types =
+let rec comp_and_unfold_defs defs =
   match defs with
   | [] -> ""
-  | def :: defs -> comp_new def types ^ comp_and_unfold_defs defs types
+  | def :: defs -> comp_new def ^ comp_and_unfold_defs defs
 ;;
 
 (* | def :: defs -> comp_and_unfold_defs defs types ^ comp_new def types*)
 
-let wasm
-  (types : (int * Annotate.typ) list)
-  (annot_exprs : annot_expr list)
-  (globals : Preprocess.global_def list)
-  =
+let wasm (annot_exprs : annot_expr list) (globals : Preprocess.global_def list) =
   Printf.sprintf
     "(module \n %s\n %s\n (export \"main\" (func $main)))"
     (comp_global_defs globals)
-    (comp_and_unfold_defs annot_exprs types)
+    (comp_and_unfold_defs annot_exprs)
 ;;
