@@ -29,13 +29,6 @@ let rec args_to_str (arg_list : (sym * typ) list) =
     Printf.sprintf "(param $%s %s) %s" name (wasm_type_of_type typ) (args_to_str tail)
 ;;
 
-let rec args_to_str_2 (arg_list : (sym * typ) list) =
-  match arg_list with
-  | [] -> ""
-  | (name, typ) :: tail ->
-    Printf.sprintf "(param $%s %s) %s" name (wasm_type_of_type typ) (args_to_str_2 tail)
-;;
-
 (* den går ikke, for det er jo let der har navne...*)
 let fun_string name args ret_typ =
   Printf.sprintf "(func $%s %s (result %s))" name (args_to_str args) ret_typ
@@ -211,7 +204,7 @@ let rec comp_new expr =
     Printf.sprintf
       "(func $%s %s (result %s)\n %s \n %s \n)"
       name
-      (args_to_str_2 args)
+      (args_to_str args)
       (wasm_type_of_type (final_type ret_ty))
       forward_dec
       (comp_new body)
