@@ -4,7 +4,7 @@ open Source
 
 %token <int> INT
 %token <string> IDENT
-%token LAMBDA IN LET DEF SARROW SEMI
+%token LAMBDA IN LET DEF SARROW SEMI ADVANCE DELAY
 %token PLUS TIMES MINUS TRUE FALSE UNIT
 %token LPAREN RPAREN
 %token EQUALS
@@ -37,6 +37,8 @@ expr:
   | app_expr { $1 }
 
 app_expr:
+  | DELAY e = simple_expr { Delay (e) }
+  | ADVANCE e = simple_expr { Advance (e) }
   | app_expr simple_expr { App ($1, $2) }
   | arith_expr { $1 }
 
