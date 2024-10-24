@@ -16,11 +16,41 @@ let wasm_type_of_type ty =
   | TArrow (_t1, _t2) -> "arrow"
 ;;
 
+let show_type_lookup_error types target =
+  print_endline (string_of_int target ^ " not found in ");
+  List.map (fun (idx, _ty) -> print_endline (string_of_int idx)) types |> ignore;
+  "fejl"
+;;
+
+let rec wasm_type_of_type_2 ty types =
+  match ty with
+  | TInt -> "i64"
+  | TVar x -> lookup_type types x
+  | TArrow (_t1, _t2) -> "arrow"
+
+and lookup_type types target =
+  match types with
+  | [] -> failwith (show_type_lookup_error types target)
+  | (index, actual) :: rest ->
+    if index = target then wasm_type_of_type_2 actual types else lookup_type rest target
+;;
+
 let rec args_to_str (arg_list : (sym * typ) list) =
   match arg_list with
   | [] -> ""
   | (name, typ) :: tail ->
     Printf.sprintf "(param $%s %s) %s" name (wasm_type_of_type typ) (args_to_str tail)
+;;
+
+let rec args_to_str_2 (arg_list : (sym * typ) list) types =
+  match arg_list with
+  | [] -> ""
+  | (name, typ) :: tail ->
+    Printf.sprintf
+      "(param $%s %s) %s"
+      name
+      (wasm_type_of_type_2 typ types)
+      (args_to_str_2 tail types)
 ;;
 
 (* den går ikke, for det er jo let der har navne...*)
@@ -133,7 +163,58 @@ let rec final_type ty =
   | TArrow (_, t2) -> final_type t2
 ;;
 
-let rec comp_new expr =
+let rec lookup (names : (sym * typ * string) list) name =
+  match names with
+  | [] -> failwith "name not found"
+  | (n, _, v) :: rest -> if n = name then v else lookup rest name
+;;
+
+let rec generate_local_vars vars types =
+  match vars with
+  | [] -> ""
+  | (name, ty, _) :: vars ->
+    Printf.sprintf "(local $%s %s)" name (wasm_type_of_type_2 ty types)
+    ^ "\n"
+    ^ generate_local_vars vars types
+;;
+
+let rec get_names_with_map expr _types map =
+  match expr with
+  | ALet (name, ty, _, body) ->
+    get_names_with_map body _types (Environment.add name ty map)
+  | ALam _ -> failwith "no lambdas allowed"
+  | AFunDef _ -> failwith "no fundefs allowed"
+  | ACstI _ | AVar _ | APrim _ | AApp _ -> map
+;;
+
+let unfold_forward_decs decs types =
+  Environment.fold
+    (fun name ty acc ->
+      Printf.sprintf "(local $%s %s)\n" name (wasm_type_of_type_2 ty types) ^ acc)
+    decs
+    ""
+;;
+
+let rec get_names_for_forward_declaration expr types =
+  match expr with
+  (* A let binding is important.
+     We need to collect the name and the type and then call
+     recursively in both the rhs and the body.
+     Nope, not the rhs. Let bindings in there are only
+     temporary and used for giving a value to name.
+
+     TODO: how is shadowing handled here? i guess the first value
+     will be hit during a lookup, which is bad. Handle appropriately.
+  *)
+  | ALet (name, ty, _, body) ->
+    Printf.sprintf "(local $%s %s)\n" name (wasm_type_of_type_2 ty types)
+    ^ get_names_for_forward_declaration body types
+  | ALam _ -> failwith "no lambdas allowed"
+  | AFunDef _ -> failwith "no fundefs allowed"
+  | ACstI _ | AVar _ | APrim _ | AApp _ -> ""
+;;
+
+let rec comp_new expr types =
   match expr with
   | AVar (name, _) -> var_str name
   (* type of ACstI is always int, discard for now *)
@@ -143,36 +224,90 @@ let rec comp_new expr =
     let e2_comp = comp e2 in
     e1_comp ^ "\n" ^ e2_comp ^ "\n" ^ binop_to_wasm op ty
   | AFunDef (name, args, body, ret_ty) ->
+    (* let forward_dec = get_names_for_forward_declaration body types in*)
+    let forward_dec =
+      unfold_forward_decs (get_names_with_map body types Environment.empty) types
+    in
     Printf.sprintf
-      "(func $%s %s (result %s)\n %s \n)"
+      "(func $%s %s (result %s)\n %s \n %s \n)"
       name
-      (args_to_str args)
-      (wasm_type_of_type (final_type ret_ty))
-      (comp_new body)
+      (args_to_str_2 args types)
+      (wasm_type_of_type_2 (final_type ret_ty) types)
+      forward_dec
+      (comp_new body types)
   | ALam _ -> failwith "lambda should have been lifted :("
-  (* This is very much WIP. WASM is stack-based, so let-bindings are wierd *)
-  | ALet (_name, ty, _rhs, _body) ->
-    Printf.sprintf
-      "(local %s) \n %s \n (local.set %s)"
-      (wasm_type_of_type ty)
-      "banan"
-      "banan"
+  | ALet (name, _ty, rhs, AVar (name', _ty')) when name = name' ->
+    let comp_rhs = comp_new rhs types in
+    Printf.sprintf "%s \n local.tee $%s" comp_rhs name
+  | ALet (name, _ty, rhs, body) ->
+    let comp_rhs = comp_new rhs types in
+    let set_name_to_rhs = Printf.sprintf "(local.set $%s (%s))" name comp_rhs in
+    let comp_body = comp_new body types in
+    Printf.sprintf "%s\n %s" set_name_to_rhs comp_body
+    (*
+       let comp_rhs = comp_new rhs types in
+       let set_name_to_rhs = Printf.sprintf "(local.set $%s (%s))" name comp_rhs in
+       let names = [ name, ty, comp_rhs ] in
+       let compiled_let = comp_let body names types in
+       (* let _ = print_endline ("compiled body: " ^ compiled_let ^ "\ncompiled body stop") in*)
+       (* let _ = print_endline ("compiled rhs: " ^ comp_rhs ^ "\ncompiled rhs stop") in*)
+       Printf.sprintf
+       "%s\n %s\n %s"
+       (generate_local_vars names types)
+       set_name_to_rhs
+       compiled_let*)
+    (*
+       Printf.sprintf
+       "(local %s) \n %s \n (local.set %s)"
+       (wasm_type_of_type ty)
+       "banan"
+       "banan"*)
   | AApp (func, args, _ty) ->
-    Printf.sprintf
-      "call $%s %s"
-      (comp_new func)
-      (List.fold_left (fun acc arg -> acc ^ comp_new arg ^ " ") "" args)
+    (* Assume that calling a function is done with a valid function name *)
+    (match func with
+     | AVar (name, _) ->
+       Printf.sprintf
+         "%s\ncall $%s"
+         (List.fold_left (fun acc arg -> acc ^ comp_new arg types ^ "\n") "" args)
+         name
+     | _ -> failwith "attempted calling a function")
+(*
+   Printf.sprintf
+   "call $%s %s"
+   (comp_new func types)
+   (List.fold_left (fun acc arg -> acc ^ comp_new arg types ^ " ") "" args)
+*)
+
+(* Jeg har brug for at returnere en tuple her vel, så jeg kan bobble alle
+   navne tilbage til toppen, så de kan defineres i starten af funktionen.
+*)
+and comp_let let_body names types =
+  match let_body with
+  (* Hvis en let-bindings krop bare er en variabel, som i: let x = 42 in x
+     skal vi skubbe 42 på stakken og så bruge local.tee $x
+     Husk at x skal være defineret på forhånd, men det klares jo af den anden funktion.
+  *)
+  | AVar (name, _ty) ->
+    let value = lookup names name in
+    Printf.sprintf "%s  \n local.tee $%s" value name
+  | others -> comp_new others types
 ;;
 
-let rec comp_and_unfold_defs defs =
+let rec comp_and_unfold_defs defs types =
   match defs with
   | [] -> ""
-  | def :: defs -> comp_new def ^ comp_and_unfold_defs defs
+  | def :: defs -> comp_new def types ^ comp_and_unfold_defs defs types
 ;;
 
-let wasm (annot_exprs : annot_expr list) (globals : Preprocess.global_def list) =
+(* | def :: defs -> comp_and_unfold_defs defs types ^ comp_new def types*)
+
+let wasm
+  (types : (int * Annotate.typ) list)
+  (annot_exprs : annot_expr list)
+  (globals : Preprocess.global_def list)
+  =
   Printf.sprintf
     "(module \n %s\n %s\n (export \"main\" (func $main)))"
     (comp_global_defs globals)
-    (comp_and_unfold_defs annot_exprs)
+    (comp_and_unfold_defs annot_exprs types)
 ;;

@@ -42,9 +42,9 @@ let print_global ({ name; fundef; _ } : Preprocess.global_def) =
 let ast_of_text text =
   (let lexbuf = Lexing.from_string text in
    let* processed = parse_and_print lexbuf in
-   let _, _, annotated = Annotate.annotate_all processed in
+   let _, subst, annotated = Annotate.annotate_all processed in
    (* let lifted, globals = Preprocess.optimize annotated in*)
-   Result.ok annotated)
+   Result.ok (subst, annotated))
   |> Result.map_error (fun x ->
     print_endline x;
     x)

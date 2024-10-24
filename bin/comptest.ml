@@ -194,10 +194,31 @@ let _main_example =
 ;;
 
 let _simple_main = ast_of_text "def main x y = x+y;"
+let _simpler_main = ast_of_text "def main x = x+1;"
+let _simpl_main = ast_of_text "def main x = let y = 42 in x+y;"
+let _main = ast_of_text "def main = let y = 42 in y;"
+let _constant_ret = ast_of_text "def main = let y = 42 in 42;"
+let _add1 = ast_of_text "def main = let y = 41 in y+1;"
+let _advanced = ast_of_text "def main = let x = 1 in let y = 42 in x+y;"
+let _shadow = ast_of_text "def main = let x = 1 in let x = 42 in x;"
 
+let _twofunctions =
+  ast_of_text "def main = let x = 1 in let y = x+1 in let x = 40 in x+y;"
+;;
+
+let _function =
+  ast_of_text "def add x y = x+y; def main = let x = 40 in let y = 2 in add x y;"
+;;
+
+(*
+   let () =
+   Result.map (fun (subst, _) -> print_endline (string_of_int (List.length subst))) _main
+   |> ignore
+   ;;
+*)
 let () =
   Result.map
-    (fun annot_exprs ->
+    (fun (subst, annot_exprs) ->
       let mapped =
         List.map
           (fun annot ->
@@ -205,7 +226,7 @@ let () =
             lifted)
           annot_exprs
       in
-      let compiled = wasm mapped [] in
+      let compiled = wasm subst mapped [] in
       print_endline compiled)
       (*
          List.iter
@@ -215,6 +236,6 @@ let () =
          print_endline (string_of_annot_expr _lifted))
          annot_exprs)
       *)
-    _simple_main
+    _shadow
   |> ignore
 ;;
