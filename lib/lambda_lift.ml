@@ -53,9 +53,7 @@ let lift_lambdas globals expr =
           (AVar (fun_name, fun_type), List.map (fun (x, t) -> AVar (x, t)) free, ret_type)
       in
       app
-    | ALam _ ->
-      print_endline (show_annot_expr expr);
-      failwith "Lambda with non-arrow type"
+    | ALam _ -> failwith "Lambda with non-arrow type"
     | AFunDef (name, args, body, typ) -> AFunDef (name, args, lift body, typ)
     | AApp (f, args, typ) -> AApp (lift f, List.map lift args, typ)
     | APrim (op, e1, e2, typ) -> APrim (op, lift e1, lift e2, typ)
