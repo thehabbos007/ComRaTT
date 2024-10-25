@@ -83,7 +83,7 @@ let rec comp expr =
     Printf.sprintf "%s \n local.tee $%s" comp_rhs name
   | ALet (name, _ty, rhs, body) ->
     let comp_rhs = comp rhs in
-    let set_name_to_rhs = Printf.sprintf "(local.set $%s (%s))" name comp_rhs in
+    let set_name_to_rhs = Printf.sprintf "%s (local.set $%s)" comp_rhs name in
     let comp_body = comp body in
     Printf.sprintf "%s\n %s" set_name_to_rhs comp_body
   | AApp (func, args, _ty) ->
