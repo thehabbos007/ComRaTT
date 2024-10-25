@@ -32,7 +32,7 @@ setup.log
 _opam/
 
 
-prog.wat
+*.wat
 
 result
 .zed
