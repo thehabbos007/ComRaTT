@@ -69,6 +69,8 @@
           devPackages
           ++ [
             pkgs.wasmer
+	    pkgs.python311
+	    pkgs.wabt
             # You can add packages from nixpkgs here
           ];
       };
