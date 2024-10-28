@@ -69,7 +69,7 @@ let rec unify subst t1 t2 =
     unify subst' r1 r2
   | TVar n, t | t, TVar n ->
     if occurs n t then failwith "occurs check" else (n, t) :: subst
-  | _t1, _t2 -> failwith "Type mismatch"
+  | _t1, _t2 -> failwith ("Type mismatch" ^ show_typ _t1 ^ " " ^ show_typ _t2)
 
 and occurs n = function
   | TVar m -> n = m
@@ -80,6 +80,34 @@ and occurs n = function
 let rec construct_arrow_typ ret_typ = function
   | [] -> ret_typ
   | (_, ty) :: rest -> TArrow (ty, construct_arrow_typ ret_typ rest)
+;;
+
+let return_of_binop op =
+  match op with
+  | Add | Sub | Mul -> TInt
+  | Eq | Neq | Lt | Lte | Gt | Gte -> TBool
+;;
+
+let binop_unify subst op t1 t2 =
+  let t1 = apply_subst subst t1 in
+  let t2 = apply_subst subst t2 in
+  match op, t1, t2 with
+  | Add, _, _ when t1 = t2 -> TInt, subst
+  | Sub, _, _ when t1 = t2 -> TInt, subst
+  | Mul, _, _ when t1 = t2 -> TInt, subst
+  | Eq, _, _ when t1 = t2 -> TBool, subst
+  | Neq, _, _ when t1 = t2 -> TBool, subst
+  | Lt, _, _ when t1 = t2 -> TBool, subst
+  | Lte, _, _ when t1 = t2 -> TBool, subst
+  | Gt, _, _ when t1 = t2 -> TBool, subst
+  | Gte, _, _ when t1 = t2 -> TBool, subst
+  | _, TInt, TBool -> failwith "cannot binop int and bool"
+  | _, TBool, TInt -> failwith "cannot binop bool and int"
+  | _, TVar n, t | _, t, TVar n ->
+    if occurs n t then failwith "occurs check binop_operands" else t, (n, t) :: subst
+  | _ ->
+    failwith
+      ("binop not well-typed " ^ show_binop op ^ " " ^ show_typ t1 ^ " " ^ show_typ t2)
 ;;
 
 (* follows https://stanford-cs242.github.io/f19/lectures/02-2-type-systems partly*)
@@ -109,12 +137,13 @@ let rec infer env subst = function
     let result_type = fresh_type () in
     let subst3 = unify subst2 t1 (TArrow (t2, result_type)) in
     subst3, apply_subst subst3 result_type
-  | Prim (_, e1, e2) ->
-    let subst1, t1 = infer env subst e1 in
-    let subst2, t2 = infer env subst1 e2 in
-    let subst3 = unify subst2 t1 TInt in
-    let subst4 = unify subst3 t2 TInt in
-    subst4, TInt
+  | Prim (op, e1, e2) ->
+    let prim_type = return_of_binop op in
+    let subst1, _t1 = infer env subst e1 in
+    let subst2, _t2 = infer env subst1 e2 in
+    (* let subst3 = unify subst2 t1 prim_type in*)
+    (* let subst4 = unify subst3 t2 prim_type in*)
+    subst2, prim_type
   | Let (x, e1, e2) ->
     let subst1, t1 = infer env subst e1 in
     let subst2, t2 = infer ((x, t1) :: env) subst1 e2 in
@@ -164,11 +193,21 @@ let rec annotate env subst expr =
     , AApp (annot1, [ annot2 ], apply_subst subst3 result_type)
     , (None, apply_subst subst3 result_type) )
   | Prim (op, e1, e2) ->
+    let prim_return_type = return_of_binop op in
     let subst1, annot1, (_, t1) = annotate env subst e1 in
+    (* let _ = print_endline (show_annot_expr annot1) in*)
     let subst2, annot2, (_, t2) = annotate env subst1 e2 in
-    let subst3 = unify subst2 t1 TInt in
-    let subst4 = unify subst3 t2 TInt in
-    subst4, APrim (op, annot1, annot2, TInt), (None, TInt)
+    (* let _ = print_endline (show_annot_expr annot2) in*)
+    (* let _subst3 = unify subst1 t1 t1 in*)
+    (* let _subst4 = unify subst2 t2 t2 in*)
+    (* let _ = print_endline (string_of_int (List.length _subst4)) in*)
+    let _prim_op_type, subst3 = binop_unify subst2 op t1 t2 in
+    (* let _ = print_endline (show_typ prim_op_type) in*)
+    (* let _ = print_endline (show_typ t1) in*)
+    (* let _ = print_endline (show_typ t2) in*)
+    (* let subst3 = unify subst2 t1 prim_op_type in*)
+    (* let subst4 = unify subst3 t2 prim_op_type in*)
+    subst3, APrim (op, annot1, annot2, prim_return_type), (None, prim_return_type)
   | Let (x, e1, e2) ->
     let subst1, annot1, (_, t1) = annotate env subst e1 in
     let subst2, annot2, (_, t2) = annotate ((x, t1) :: env) subst1 e2 in
