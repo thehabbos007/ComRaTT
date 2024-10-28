@@ -30,6 +30,12 @@ type annot_expr =
   | AApp of annot_expr * annot_expr list * typ
   | APrim of binop * annot_expr * annot_expr * typ
   | ALet of sym * typ * annot_expr * annot_expr
+  | AIfThenElse of
+      annot_expr
+      * typ
+      * annot_expr
+      * annot_expr
+      * typ (* guard, type of guard, then-branch, else-branch and type of branches*)
 [@@deriving show, eq]
 
 (* Type inference *)
@@ -57,6 +63,7 @@ let rec unify subst t1 t2 =
   match t1, t2 with
   | TVar n1, TVar n2 when n1 = n2 -> subst
   | TInt, TInt -> subst
+  | TBool, TBool -> subst
   | TArrow (a1, r1), TArrow (a2, r2) ->
     let subst' = unify subst a1 a2 in
     unify subst' r1 r2
@@ -112,6 +119,13 @@ let rec infer env subst = function
     let subst1, t1 = infer env subst e1 in
     let subst2, t2 = infer ((x, t1) :: env) subst1 e2 in
     subst2, t2
+  | IfThenElse (guard, then_branch, else_branch) ->
+    let subst_guard, t_guard = infer env subst guard in
+    let uni_subst = unify subst_guard t_guard TBool in
+    let subst_then, t_then = infer env uni_subst then_branch in
+    let subst_else, t_else = infer env subst_then else_branch in
+    let uni_branches = unify subst_else t_then t_else in
+    uni_branches, t_else
 ;;
 
 (* Annotation *)
@@ -159,6 +173,15 @@ let rec annotate env subst expr =
     let subst1, annot1, (_, t1) = annotate env subst e1 in
     let subst2, annot2, (_, t2) = annotate ((x, t1) :: env) subst1 e2 in
     subst2, ALet (x, t1, annot1, annot2), (Some x, apply_subst subst2 t2)
+  | IfThenElse (guard, then_branch, else_branch) ->
+    let subst_guard, guard_annot, (_, t_guard) = annotate env subst guard in
+    let unify_guard = unify subst_guard t_guard TBool in
+    let subst_then, then_annot, (_, t_then) = annotate env unify_guard then_branch in
+    let subst_else, else_annot, (_, t_else) = annotate env subst_then else_branch in
+    let unify_branches = unify subst_else t_then t_else in
+    ( unify_branches
+    , AIfThenElse (guard_annot, t_guard, then_annot, else_annot, t_else)
+    , (None, apply_subst unify_branches t_else) )
 ;;
 
 let prepend_opt_binding env = function
@@ -196,6 +219,13 @@ let rec expr_apply_subst subst expr =
     APrim (op, expr_apply_subst subst e1, expr_apply_subst subst e2, apply_subst subst t)
   | ALet (x, ty, e1, e2) ->
     ALet (x, apply_subst subst ty, expr_apply_subst subst e1, expr_apply_subst subst e2)
+  | AIfThenElse (guard, guard_typ, then_branch, else_branch, typ) ->
+    AIfThenElse
+      ( expr_apply_subst subst guard
+      , apply_subst subst guard_typ
+      , expr_apply_subst subst then_branch
+      , expr_apply_subst subst else_branch
+      , apply_subst subst typ )
 ;;
 
 let annotate_all exprs =
@@ -259,6 +289,13 @@ let rec string_of_annot_expr = function
       (string_of_type typ)
       (string_of_annot_expr rhs)
       (string_of_annot_expr body)
+  | AIfThenElse (guard, _guard_typ, then_branch, else_branch, typ) ->
+    Printf.sprintf
+      "if %s then %s else %s : %s"
+      (string_of_annot_expr guard)
+      (string_of_annot_expr then_branch)
+      (string_of_annot_expr else_branch)
+      (string_of_type typ)
 
 and unfold_app_args = function
   | [] -> ""

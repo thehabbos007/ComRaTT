@@ -18,6 +18,7 @@ type expr =
   | Prim of binop * expr * expr
   | Let of string * expr * expr
   | FunDef of string * string list * expr
+  | IfThenElse of expr * expr * expr
 [@@deriving show, eq]
 
 (* Pretty printing *)

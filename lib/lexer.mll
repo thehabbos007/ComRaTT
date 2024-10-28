@@ -16,6 +16,9 @@ rule token = parse
   | "in"     { IN }
   | "true"   { TRUE }
   | "false"  { FALSE }
+  | "if"     { IF }
+  | "then"   { THEN }
+  | "else"   { ELSE }
   | "()"     { UNIT }
   | "+"      { PLUS }
   | "*"      { TIMES }

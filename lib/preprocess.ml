@@ -32,6 +32,7 @@ open struct
       let fv1 = free_vars e1 in
       let fv2 = List.filter (( <> ) (x, t)) (free_vars e2) in
       List.sort_uniq compare (fv1 @ fv2)
+    | _ -> failwith "ifthenelse"
   ;;
 
   let convert_params_to_arrow params ret_type =
@@ -52,6 +53,7 @@ open struct
     | APrim (op, e1, e2, t) -> APrim (op, closure_convert e1, closure_convert e2, t)
     | ALet (x, t, e1, e2) -> ALet (x, t, closure_convert e1, closure_convert e2)
     | AConst _ | AVar _ -> expr
+    | _ -> failwith "ifthenelse"
   ;;
 
   let lift_lambdas expr =
@@ -70,6 +72,7 @@ open struct
       | APrim (op, e1, e2, t) -> APrim (op, lift e1, lift e2, t)
       | ALet (x, t, e1, e2) -> ALet (x, t, lift e1, lift e2)
       | AConst _ | AVar _ -> expr
+      | _ -> failwith "ifthenelse"
     in
     let lifted_expr = lift expr in
     lifted_expr, !definitions
@@ -100,6 +103,13 @@ module ConstantFold = struct
     | AApp (e1, e2, t) -> AApp (constant_fold_expr e1, List.map constant_fold_expr e2, t)
     | AFunDef (name, args, body, t) -> AFunDef (name, args, constant_fold_expr body, t)
     | ALam (params, body, t) -> ALam (params, constant_fold_expr body, t)
+    | AIfThenElse (guard, guard_typ, then_branch, else_branch, typ) ->
+      AIfThenElse
+        ( constant_fold_expr guard
+        , guard_typ
+        , constant_fold_expr then_branch
+        , constant_fold_expr else_branch
+        , typ )
   ;;
 end
 
@@ -131,6 +141,8 @@ module EliminatePartialApp = struct
     | AApp (func, args, ty) -> AApp (subst func, List.map subst args, ty)
     | ALet (name, ty, rhs, body) when name <> bind_old ->
       ALet (name, ty, subst rhs, subst body)
+    | AIfThenElse (guard, guard_typ, then_branch, else_branch, typ) ->
+      AIfThenElse (subst guard, guard_typ, subst then_branch, subst else_branch, typ)
     | AConst _ | ALet _ | AVar _ | AFunDef _ -> aexpr
   ;;
 
@@ -196,6 +208,13 @@ module EliminatePartialApp = struct
       ALet (name, ty, new_lam, eliminate_partial body)
     | ALet (name, ty, rhs, body) ->
       ALet (name, ty, eliminate_partial rhs, eliminate_partial body)
+    | AIfThenElse (guard, guard_typ, then_branch, else_branch, typ) ->
+      AIfThenElse
+        ( eliminate_partial guard
+        , guard_typ
+        , eliminate_partial then_branch
+        , eliminate_partial else_branch
+        , typ )
   ;;
 end
 

@@ -4,7 +4,7 @@ open Source
 
 %token <int> INT
 %token <string> IDENT
-%token LAMBDA IN LET DEF SARROW SEMI
+%token LAMBDA IN LET DEF SARROW SEMI IF THEN ELSE
 %token PLUS TIMES MINUS TRUE FALSE UNIT
 %token LPAREN RPAREN
 %token EQUALS
@@ -35,6 +35,7 @@ expr:
   | LET x = IDENT EQUALS e1 = expr IN e2 = expr { Let (x, e1, e2) }
   | LAMBDA x = IDENT* SARROW e = expr { Lam (x, e) }
   | app_expr { $1 }
+  | IF guard = app_expr THEN then_branch = app_expr ELSE else_branch = app_expr { IfThenElse(guard, then_branch, else_branch) }
 
 app_expr:
   | app_expr simple_expr { App ($1, $2) }
