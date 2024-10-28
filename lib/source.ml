@@ -2,6 +2,12 @@ type binop =
   | Add
   | Mul
   | Sub
+  | Eq
+  | Lt
+  | Lte
+  | Gt
+  | Gte
+  | Neq
 [@@deriving show, eq]
 
 type const =
@@ -27,4 +33,10 @@ let string_of_binop = function
   | Add -> "+"
   | Mul -> "*"
   | Sub -> "-"
+  | Eq -> "="
+  | Lt -> "<"
+  | Lte -> "<="
+  | Gt -> ">"
+  | Gte -> ">="
+  | Neq -> "<>"
 ;;
