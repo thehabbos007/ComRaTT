@@ -6,13 +6,16 @@ open Source
 %token <string> IDENT
 %token LAMBDA IN LET DEF SARROW SEMI IF THEN ELSE
 %token PLUS TIMES MINUS TRUE FALSE UNIT
+%token LT LTE GT GTE NEQ
 %token LPAREN RPAREN
 %token EQUALS
 %token EOF
 
 %start <expr list> prog
 
+%left LT LTE GT GTE NEQ
 %left PLUS MINUS
+%left EQUALS
 %left TIMES
 
 %%
@@ -43,6 +46,7 @@ app_expr:
 
 arith_expr:
   | e1 = arith_expr op = binop e2 = arith_expr { Prim (op, e1, e2) }
+  | e1 = arith_expr comp = compare e2 = arith_expr { Prim (comp, e1, e2) }
   | simple_expr { $1 }
 
 simple_expr:
@@ -60,3 +64,11 @@ bool:
   | PLUS { Add }
   | TIMES { Mul }
   | MINUS { Sub }
+
+%inline compare:
+    | EQUALS { Eq }
+    | LT { Lt }
+    | LTE { Lte }
+    | GT { Gt }
+    | GTE { Gte }
+    | NEQ { Neq }
