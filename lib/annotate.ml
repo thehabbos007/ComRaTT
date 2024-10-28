@@ -139,11 +139,11 @@ let rec infer env subst = function
     subst3, apply_subst subst3 result_type
   | Prim (op, e1, e2) ->
     let prim_type = return_of_binop op in
-    let subst1, _t1 = infer env subst e1 in
-    let subst2, _t2 = infer env subst1 e2 in
-    (* let subst3 = unify subst2 t1 prim_type in*)
-    (* let subst4 = unify subst3 t2 prim_type in*)
-    subst2, prim_type
+    let subst1, t1 = infer env subst e1 in
+    let subst2, t2 = infer env subst1 e2 in
+    let subst3 = unify subst2 t1 prim_type in
+    let subst4 = unify subst3 t2 prim_type in
+    subst4, prim_type
   | Let (x, e1, e2) ->
     let subst1, t1 = infer env subst e1 in
     let subst2, t2 = infer ((x, t1) :: env) subst1 e2 in
