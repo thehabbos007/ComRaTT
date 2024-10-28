@@ -33,6 +33,7 @@ _opam/
 
 
 *.wat
+*.wasm
 
 result
 .zed
