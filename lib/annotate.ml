@@ -195,18 +195,8 @@ let rec annotate env subst expr =
   | Prim (op, e1, e2) ->
     let prim_return_type = return_of_binop op in
     let subst1, annot1, (_, t1) = annotate env subst e1 in
-    (* let _ = print_endline (show_annot_expr annot1) in*)
     let subst2, annot2, (_, t2) = annotate env subst1 e2 in
-    (* let _ = print_endline (show_annot_expr annot2) in*)
-    (* let _subst3 = unify subst1 t1 t1 in*)
-    (* let _subst4 = unify subst2 t2 t2 in*)
-    (* let _ = print_endline (string_of_int (List.length _subst4)) in*)
     let _prim_op_type, subst3 = binop_unify subst2 op t1 t2 in
-    (* let _ = print_endline (show_typ prim_op_type) in*)
-    (* let _ = print_endline (show_typ t1) in*)
-    (* let _ = print_endline (show_typ t2) in*)
-    (* let subst3 = unify subst2 t1 prim_op_type in*)
-    (* let subst4 = unify subst3 t2 prim_op_type in*)
     subst3, APrim (op, annot1, annot2, prim_return_type), (None, prim_return_type)
   | Let (x, e1, e2) ->
     let subst1, annot1, (_, t1) = annotate env subst e1 in
