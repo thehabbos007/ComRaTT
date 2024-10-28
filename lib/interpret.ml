@@ -17,6 +17,7 @@ let string_of_value = function
 let rec interp (x : annot_expr) env =
   match x with
   | AConst (CInt i, _) -> VInt i
+  | AConst (CBool b, _) -> VBool b
   | AVar (v, _) ->
     (match Environment.find_opt v env with
      | Some var -> var
@@ -28,7 +29,13 @@ let rec interp (x : annot_expr) env =
        (match op with
         | Add -> VInt (x + y)
         | Mul -> VInt (x * y)
-        | Sub -> VInt (x - y))
+        | Sub -> VInt (x - y)
+        | Eq -> VBool (x = y)
+        | Lt -> VBool (x < y)
+        | Lte -> VBool (x <= y)
+        | Gt -> VBool (x > y)
+        | Gte -> VBool (x >= y)
+        | Neq -> VBool (x <> y))
      | _, VClosure _ ->
        failwith "cannot do primitive operations on anything and a closure"
      | VClosure _, _ -> failwith "cannot do primitive operations on closure and anything"
@@ -53,5 +60,14 @@ let rec interp (x : annot_expr) env =
     let e1' = interp e1 env in
     let env' = Environment.add name e1' env in
     interp e2 env'
-  | _ -> failwith "oopsie, applied more than one lambda arg.."
+  | AIfThenElse (guard, _, then_branch, else_branch, _) ->
+    let guard_holds = interp guard env in
+    (match guard_holds with
+     | VBool t -> if t then interp then_branch env else interp else_branch env
+     | VInt i -> if i <> 0 then interp then_branch env else interp else_branch env
+     (* closures? *)
+     | _ -> failwith "interp: if-guard not valid")
+  (* This might not work in all cases *)
+  | AFunDef (_name, _args, body, _) -> interp body env
+  | _ -> failwith "Oops, unhandled or invalid annot_expr in interp"
 ;;
