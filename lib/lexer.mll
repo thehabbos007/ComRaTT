@@ -28,6 +28,11 @@ rule token = parse
   | "="      { EQUALS }
   | "->"     { SARROW }
   | ";"      { SEMI }
+  | "<"      { LT }
+  | "<="     { LTE }
+  | ">"      { GT }
+  | ">="     { GTE }
+  | "<>"     { NEQ }
   | ident as id { IDENT id }
   | digit+ as d { INT (int_of_string d) }
   | eof      { EOF }
