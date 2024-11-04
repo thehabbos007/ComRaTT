@@ -38,6 +38,18 @@ type annot_expr =
       * typ (* guard, type of guard, then-branch, else-branch and type of branches*)
 [@@deriving show, eq]
 
+let type_of expr =
+  match expr with
+  | AConst (_, t)
+  | AVar (_, t)
+  | ALam (_, _, t)
+  | AFunDef (_, _, _, t)
+  | AApp (_, _, t)
+  | APrim (_, _, _, t)
+  | ALet (_, t, _, _) -> t
+  | AIfThenElse (_, _, _, _, t) -> t
+;;
+
 (* Type inference *)
 let type_counter = ref 0
 
@@ -199,9 +211,8 @@ let rec annotate env subst expr =
       List.map (fun (arg, ty) -> arg, apply_subst subst' ty) arg_types
     in
     let expr_type = construct_arrow_typ body_type arg_types in
-    ( subst'
-    , ALam (substituted_args, body_annot, body_type)
-    , (None, apply_subst subst' expr_type) )
+    let expr_type = apply_subst subst' expr_type in
+    subst', ALam (substituted_args, body_annot, expr_type), (None, expr_type)
   | App (e1, e2) ->
     let subst1, annot1, (_, t1) = annotate env subst e1 in
     let subst2, annot2, (_, t2) = annotate env subst1 e2 in
