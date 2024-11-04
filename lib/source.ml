@@ -24,8 +24,6 @@ type expr =
   | Prim of binop * expr * expr
   | Let of string * expr * expr
   | FunDef of string * string list * expr
-  | Delay of expr
-  | Advance of expr
   | IfThenElse of expr * expr * expr
   | Delay of expr
   | Advance of expr
