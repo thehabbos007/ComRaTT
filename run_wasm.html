@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WebAssembly Example</title>
+</head>
+<body>
+  <h1>WebAssembly in HTML</h1>
+  <p>Check the console for results!</p>
+
+  <script>
+	  const importObject = {
+		console: {
+			log: (value) => console.log("WASM log:", value)
+		}
+	  }
+	  const fetchPromise = fetch("table.wasm")
+	  WebAssembly.instantiateStreaming(fetchPromise, importObject).then((obj) => {
+		obj.instance.exports.test();
+	  })
+  </script>
+</body>
+</html>
+
