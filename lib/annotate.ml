@@ -18,36 +18,36 @@ type typ =
 [@@deriving show, eq]
 
 (** Annotated expression (Types) *)
-type annot_expr =
-  | AConst of const * typ
-  | AVar of sym * typ
+type typed_expr =
+  | TConst of const * typ
+  | TName of sym * typ
   (* TODO: Consider top-level let bindings (top-level constants that are evaluated at the start of the program)
      One thing we have to consider is if we should handle functions that refer to top-level let bindings.
      When we introduce delay/adv, the top level bindings may need to be allocated in the heap at the start of the program.
   *)
-  | ALam of (sym * typ) list * annot_expr * typ
-  | AFunDef of sym * (sym * typ) list * annot_expr * typ
-  | AApp of annot_expr * annot_expr list * typ
-  | APrim of binop * annot_expr * annot_expr * typ
-  | ALet of sym * typ * annot_expr * annot_expr
-  | AIfThenElse of
-      annot_expr
+  | TLam of (sym * typ) list * typed_expr * typ
+  | TFunDef of sym * (sym * typ) list * typed_expr * typ
+  | TApp of typed_expr * typed_expr list * typ
+  | TPrim of binop * typed_expr * typed_expr * typ
+  | TLet of sym * typ * typed_expr * typed_expr
+  | TIfThenElse of
+      typed_expr
       * typ
-      * annot_expr
-      * annot_expr
+      * typed_expr
+      * typed_expr
       * typ (* guard, type of guard, then-branch, else-branch and type of branches*)
 [@@deriving show, eq]
 
 let type_of expr =
   match expr with
-  | AConst (_, t)
-  | AVar (_, t)
-  | ALam (_, _, t)
-  | AFunDef (_, _, _, t)
-  | AApp (_, _, t)
-  | APrim (_, _, _, t)
-  | ALet (_, t, _, _) -> t
-  | AIfThenElse (_, _, _, _, t) -> t
+  | TConst (_, t)
+  | TName (_, t)
+  | TLam (_, _, t)
+  | TFunDef (_, _, _, t)
+  | TApp (_, _, t)
+  | TPrim (_, _, _, t)
+  | TLet (_, t, _, _) -> t
+  | TIfThenElse (_, _, _, _, t) -> t
 ;;
 
 let type_counter = ref 0
@@ -125,23 +125,23 @@ let binop_unify subst op t1 t2 =
 (* follows https://stanford-cs242.github.io/f19/lectures/02-2-type-systems partly*)
 let rec annotate env subst expr =
   match expr with
-  | Const (CInt i) -> subst, AConst (CInt i, TInt), (None, TInt)
-  | Const (CBool b) -> subst, AConst (CBool b, TBool), (None, TBool)
+  | Const (CInt i) -> subst, TConst (CInt i, TInt), (None, TInt)
+  | Const (CBool b) -> subst, TConst (CBool b, TBool), (None, TBool)
   | Const CUnit ->
-    subst, AConst (CUnit, TUnit), (None, TUnit) (* Desugar delay to a thunk *)
+    subst, TConst (CUnit, TUnit), (None, TUnit) (* Desugar delay to a thunk *)
   | Delay e ->
     let subst', body_annot, (_, body_type) = annotate env subst e in
     ( subst'
-    , ALam ([ "unit", TUnit ], body_annot, TArrow (TUnit, body_type))
+    , TLam ([ "unit", TUnit ], body_annot, TArrow (TUnit, body_type))
     , (None, TArrow (TUnit, body_type)) )
   (* Desugar to forcing a thunk *)
   | Advance e ->
     let subst', thunk_body, (_, thunk_type) = annotate env subst e in
-    subst', AApp (thunk_body, [ AConst (CUnit, TUnit) ], thunk_type), (None, thunk_type)
+    subst', TApp (thunk_body, [ TConst (CUnit, TUnit) ], thunk_type), (None, thunk_type)
   | Var x ->
     (try
        let t = apply_subst subst (List.assoc x env) in
-       subst, AVar (x, t), (None, t)
+       subst, TName (x, t), (None, t)
      with
      | Not_found -> failwith ("unbound variable: " ^ x))
   | FunDef (name, args, body) ->
@@ -151,7 +151,7 @@ let rec annotate env subst expr =
       List.map (fun (arg, ty) -> arg, apply_subst subst' ty) arg_types
     in
     let def_type = construct_arrow_typ body_type arg_types |> apply_subst subst' in
-    subst', AFunDef (name, substituted_args, body_annot, def_type), (Some name, def_type)
+    subst', TFunDef (name, substituted_args, body_annot, def_type), (Some name, def_type)
   | Lam (args, body) ->
     let arg_types = List.map (fun arg -> arg, fresh_type ()) args in
     let subst', body_annot, (_, body_type) = annotate (arg_types @ env) subst body in
@@ -160,25 +160,25 @@ let rec annotate env subst expr =
     in
     let expr_type = construct_arrow_typ body_type arg_types in
     let expr_type = apply_subst subst' expr_type in
-    subst', ALam (substituted_args, body_annot, expr_type), (None, expr_type)
+    subst', TLam (substituted_args, body_annot, expr_type), (None, expr_type)
   | App (e1, e2) ->
     let subst1, annot1, (_, t1) = annotate env subst e1 in
     let subst2, annot2, (_, t2) = annotate env subst1 e2 in
     let result_type = fresh_type () in
     let subst3 = unify subst2 t1 (TArrow (t2, result_type)) in
     ( subst3
-    , AApp (annot1, [ annot2 ], apply_subst subst3 result_type)
+    , TApp (annot1, [ annot2 ], apply_subst subst3 result_type)
     , (None, apply_subst subst3 result_type) )
   | Prim (op, e1, e2) ->
     let prim_return_type = return_of_binop op in
     let subst1, annot1, (_, t1) = annotate env subst e1 in
     let subst2, annot2, (_, t2) = annotate env subst1 e2 in
     let _prim_op_type, subst3 = binop_unify subst2 op t1 t2 in
-    subst3, APrim (op, annot1, annot2, prim_return_type), (None, prim_return_type)
+    subst3, TPrim (op, annot1, annot2, prim_return_type), (None, prim_return_type)
   | Let (x, e1, e2) ->
     let subst1, annot1, (_, t1) = annotate env subst e1 in
     let subst2, annot2, (_, t2) = annotate ((x, t1) :: env) subst1 e2 in
-    subst2, ALet (x, t1, annot1, annot2), (Some x, apply_subst subst2 t2)
+    subst2, TLet (x, t1, annot1, annot2), (Some x, apply_subst subst2 t2)
   | IfThenElse (guard, then_branch, else_branch) ->
     let subst_guard, guard_annot, (_, t_guard) = annotate env subst guard in
     let unify_guard = unify subst_guard t_guard TBool in
@@ -186,7 +186,7 @@ let rec annotate env subst expr =
     let subst_else, else_annot, (_, t_else) = annotate env subst_then else_branch in
     let unify_branches = unify subst_else t_then t_else in
     ( unify_branches
-    , AIfThenElse (guard_annot, t_guard, then_annot, else_annot, t_else)
+    , TIfThenElse (guard_annot, t_guard, then_annot, else_annot, t_else)
     , (None, apply_subst unify_branches t_else) )
 ;;
 
@@ -198,35 +198,35 @@ let prepend_opt_binding env = function
 (* type annotate_meta =
   { subst : substitution
   ; env : (sym * typ) list
-  ; annot_exprs : annot_expr list
+  ; annot_exprs : typed_expr list
   }*)
 
 let rec expr_apply_subst subst expr =
   match expr with
-  | AConst _ -> expr
-  | AVar (x, t) -> AVar (x, apply_subst subst t)
-  | AFunDef (name, args, body, t) ->
-    AFunDef
+  | TConst _ -> expr
+  | TName (x, t) -> TName (x, apply_subst subst t)
+  | TFunDef (name, args, body, t) ->
+    TFunDef
       ( name
       , List.map (fun (arg, ty) -> arg, apply_subst subst ty) args
       , expr_apply_subst subst body
       , apply_subst subst t )
-  | ALam (args, body, t) ->
-    ALam
+  | TLam (args, body, t) ->
+    TLam
       ( List.map (fun (arg, ty) -> arg, apply_subst subst ty) args
       , expr_apply_subst subst body
       , apply_subst subst t )
-  | AApp (e1, e2s, t) ->
-    AApp
+  | TApp (e1, e2s, t) ->
+    TApp
       ( expr_apply_subst subst e1
       , List.map (expr_apply_subst subst) e2s
       , apply_subst subst t )
-  | APrim (op, e1, e2, t) ->
-    APrim (op, expr_apply_subst subst e1, expr_apply_subst subst e2, apply_subst subst t)
-  | ALet (x, ty, e1, e2) ->
-    ALet (x, apply_subst subst ty, expr_apply_subst subst e1, expr_apply_subst subst e2)
-  | AIfThenElse (guard, guard_typ, then_branch, else_branch, typ) ->
-    AIfThenElse
+  | TPrim (op, e1, e2, t) ->
+    TPrim (op, expr_apply_subst subst e1, expr_apply_subst subst e2, apply_subst subst t)
+  | TLet (x, ty, e1, e2) ->
+    TLet (x, apply_subst subst ty, expr_apply_subst subst e1, expr_apply_subst subst e2)
+  | TIfThenElse (guard, guard_typ, then_branch, else_branch, typ) ->
+    TIfThenElse
       ( expr_apply_subst subst guard
       , apply_subst subst guard_typ
       , expr_apply_subst subst then_branch
@@ -238,8 +238,8 @@ let annotate_all exprs =
   let env, subst, exprs =
     List.fold_left
       (fun (env, subst, annot_exprs) expr ->
-        let subst', annot_expr, binding = annotate env subst expr in
-        prepend_opt_binding env binding, subst', annot_expr :: annot_exprs)
+        let subst', typed_expr, binding = annotate env subst expr in
+        prepend_opt_binding env binding, subst', typed_expr :: annot_exprs)
       ([], [], [])
       exprs
   in
@@ -263,39 +263,39 @@ let rec unfold_lam_args = function
 ;;
 
 let rec string_of_annot_expr = function
-  | AConst (CInt i, _) -> string_of_int i
-  | AConst (CBool b, _) -> string_of_bool b
-  | AConst (CUnit, _) -> "()"
-  | AVar (name, typ) -> Printf.sprintf "%s : %s" name (string_of_type typ)
-  | ALam (args, body, _) ->
+  | TConst (CInt i, _) -> string_of_int i
+  | TConst (CBool b, _) -> string_of_bool b
+  | TConst (CUnit, _) -> "()"
+  | TName (name, typ) -> Printf.sprintf "%s : %s" name (string_of_type typ)
+  | TLam (args, body, _) ->
     Printf.sprintf "(fun %s-> %s)" (unfold_lam_args args) (string_of_annot_expr body)
-  | AApp (func, args, typ) ->
+  | TApp (func, args, typ) ->
     Printf.sprintf
       "%s %s) : %s"
       (string_of_annot_expr func)
       (unfold_app_args args)
       (string_of_type typ)
-  | APrim (op, e1, e2, _typ) ->
+  | TPrim (op, e1, e2, _typ) ->
     Printf.sprintf
       "%s %s %s"
       (string_of_annot_expr e1)
       (string_of_binop op)
       (string_of_annot_expr e2)
-  | AFunDef (name, args, body, typ) ->
+  | TFunDef (name, args, body, typ) ->
     Printf.sprintf
       "def %s %s: %s = %s;"
       name
       (unfold_lam_args args)
       (string_of_type typ)
       (string_of_annot_expr body)
-  | ALet (name, typ, rhs, body) ->
+  | TLet (name, typ, rhs, body) ->
     Printf.sprintf
       "let (%s : %s) = %s in %s"
       name
       (string_of_type typ)
       (string_of_annot_expr rhs)
       (string_of_annot_expr body)
-  | AIfThenElse (guard, _guard_typ, then_branch, else_branch, typ) ->
+  | TIfThenElse (guard, _guard_typ, then_branch, else_branch, typ) ->
     Printf.sprintf
       "if %s then %s else %s : %s"
       (string_of_annot_expr guard)

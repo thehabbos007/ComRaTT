@@ -13,9 +13,9 @@ let _toplevel_eta =
    let () =
    Result.map
    (fun annot ->
-   print_endline (show_annot_expr annot);
+   print_endline (show_typed_expr annot);
    print_endline "SEP -------";
-   print_endline (show_annot_expr (EliminatePartialApp.eliminate_partial annot)))
+   print_endline (show_typed_expr (EliminatePartialApp.eliminate_partial annot)))
    _partialappok
    |> ignore
    ;;
@@ -35,10 +35,10 @@ let _toplevel_eta =
    (* print_endline "--> AST of eliminated expr";
    List.iter
    (fun annot ->
-   print_endline (show_annot_expr (EliminatePartialApp.eliminate_partial annot)))
+   print_endline (show_typed_expr (EliminatePartialApp.eliminate_partial annot)))
    annot_exprs;*)
    (* print_endline "---> AST of raw expr";
-   List.iter (fun annot -> print_endline (show_annot_expr annot)) annot_exprs;*)
+   List.iter (fun annot -> print_endline (show_typed_expr annot)) annot_exprs;*)
    print_endline "---> Lambda lifted exprs";
    List.iter
    (fun annot ->

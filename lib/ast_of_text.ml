@@ -36,7 +36,7 @@ let process_stdin () =
 let ( let* ) = Result.bind
 
 let print_global ({ name; fundef; _ } : Preprocess.global_def) =
-  Printf.fprintf stdout "%s = %s\n" name (Annotate.show_annot_expr fundef) |> ignore
+  Printf.fprintf stdout "%s = %s\n" name (Annotate.show_typed_expr fundef) |> ignore
 ;;
 
 let ast_of_text text =

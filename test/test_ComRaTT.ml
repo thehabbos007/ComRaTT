@@ -9,134 +9,135 @@ let make_test name input expected =
   >:: fun _ ->
   let result, _ = lambda_lift_expr input in
   assert_bool
-    ("Expected:\n" ^ show_annot_expr expected ^ "\nBut got:\n" ^ show_annot_expr result)
-    (equal_annot_expr result expected)
+    ("Expected:\n" ^ show_typed_expr expected ^ "\nBut got:\n" ^ show_typed_expr result)
+    (equal_typed_expr result expected)
 ;;
 
 let tests =
   "lambda_lifting"
   >::: [ (* Test 1: Simple constant - should remain unchanged *)
-         make_test "constant" (AConst (CInt 42, TInt)) (AConst (CInt 42, TInt))
+         make_test "constant" (TConst (CInt 42, TInt)) (TConst (CInt 42, TInt))
        ; (* Test 2: Simple variable - should remain unchanged *)
-         make_test "variable" (AVar ("x", TInt)) (AVar ("x", TInt))
+         make_test "variable" (TName ("x", TInt)) (TName ("x", TInt))
        ; (* Test 3: Lambda with no free variables - should remain unchanged *)
          make_test
            "lambda_no_free_vars"
-           (ALet
+           (TLet
               ( "y"
               , TInt
-              , ALam ([ "x", TInt ], AVar ("x", TInt), TInt)
-              , AApp (AVar ("x", TInt), [ AConst (CInt 5, TInt) ], TInt) ))
-           (ALet
+              , TLam ([ "x", TInt ], TName ("x", TInt), TInt)
+              , TApp (TName ("x", TInt), [ TConst (CInt 5, TInt) ], TInt) ))
+           (TLet
               ( "y"
               , TInt
-              , ALam ([ "x", TInt ], AVar ("x", TInt), TInt)
-              , AApp (AVar ("x", TInt), [ AConst (CInt 5, TInt) ], TInt) ))
+              , TLam ([ "x", TInt ], TName ("x", TInt), TInt)
+              , TApp (TName ("x", TInt), [ TConst (CInt 5, TInt) ], TInt) ))
        ; (* Test 4: Lambda with a free variable *)
          make_test
            "lambda_with_free_var"
-           (ALet
+           (TLet
               ( "y"
               , TInt
-              , AConst (CInt 5, TInt)
-              , ALam
+              , TConst (CInt 5, TInt)
+              , TLam
                   ( [ "x", TInt ]
-                  , APrim (Add, AVar ("x", TInt), AVar ("y", TInt), TInt)
+                  , TPrim (Add, TName ("x", TInt), TName ("y", TInt), TInt)
                   , TInt ) ))
-           (ALet
+           (TLet
               ( "y"
               , TInt
-              , AConst (CInt 5, TInt)
-              , AApp
-                  (AVar ("#global_lam_1", TInt), [ AVar ("y", TInt) ], TArrow (TInt, TInt))
-              ))
+              , TConst (CInt 5, TInt)
+              , TApp
+                  ( TName ("#global_lam_1", TInt)
+                  , [ TName ("y", TInt) ]
+                  , TArrow (TInt, TInt) ) ))
        ; (* Test 5: Nested lambdas *)
          make_test
            "nested_lambdas"
-           (ALet
+           (TLet
               ( "nested"
               , TInt
-              , ALam
+              , TLam
                   ( [ "x", TInt ]
-                  , ALam
+                  , TLam
                       ( [ "y", TInt ]
-                      , APrim (Add, AVar ("x", TInt), AVar ("y", TInt), TInt)
+                      , TPrim (Add, TName ("x", TInt), TName ("y", TInt), TInt)
                       , TInt )
                   , TInt )
-              , AApp (AVar ("nested", TInt), [ AConst (CInt 1, TInt) ], TInt) ))
-           (ALet
+              , TApp (TName ("nested", TInt), [ TConst (CInt 1, TInt) ], TInt) ))
+           (TLet
               ( "nested"
               , TInt
-              , ALam
+              , TLam
                   ( [ "x", TInt ]
-                  , AApp
-                      ( AVar ("#global_lam_1", TInt)
-                      , [ AVar ("x", TInt) ]
+                  , TApp
+                      ( TName ("#global_lam_1", TInt)
+                      , [ TName ("x", TInt) ]
                       , TArrow (TInt, TInt) )
                   , TInt )
-              , AApp (AVar ("nested", TInt), [ AConst (CInt 1, TInt) ], TInt) ))
+              , TApp (TName ("nested", TInt), [ TConst (CInt 1, TInt) ], TInt) ))
        ; (* Test 6: Multiple free variables *)
          make_test
            "multiple_free_vars"
-           (ALet
+           (TLet
               ( "a"
               , TInt
-              , AConst (CInt 1, TInt)
-              , ALet
+              , TConst (CInt 1, TInt)
+              , TLet
                   ( "b"
                   , TInt
-                  , AConst (CInt 2, TInt)
-                  , ALam
+                  , TConst (CInt 2, TInt)
+                  , TLam
                       ( [ "x", TInt ]
-                      , APrim
+                      , TPrim
                           ( Add
-                          , APrim (Add, AVar ("x", TInt), AVar ("a", TInt), TInt)
-                          , AVar ("b", TInt)
+                          , TPrim (Add, TName ("x", TInt), TName ("a", TInt), TInt)
+                          , TName ("b", TInt)
                           , TInt )
                       , TInt ) ) ))
-           (ALet
+           (TLet
               ( "a"
               , TInt
-              , AConst (CInt 1, TInt)
-              , ALet
+              , TConst (CInt 1, TInt)
+              , TLet
                   ( "b"
                   , TInt
-                  , AConst (CInt 2, TInt)
-                  , AApp
-                      ( AVar ("#global_lam_1", TInt)
-                      , [ AVar ("a", TInt); AVar ("b", TInt) ]
+                  , TConst (CInt 2, TInt)
+                  , TApp
+                      ( TName ("#global_lam_1", TInt)
+                      , [ TName ("a", TInt); TName ("b", TInt) ]
                       , TArrow (TInt, TInt) ) ) ))
        ; (* Test 7: Function application *)
          make_test
            "function_application"
-           (AApp
-              ( ALam ([ "x", TInt ], AVar ("x", TInt), TInt)
-              , [ AConst (CInt 42, TInt) ]
+           (TApp
+              ( TLam ([ "x", TInt ], TName ("x", TInt), TInt)
+              , [ TConst (CInt 42, TInt) ]
               , TInt ))
-           (AApp
-              ( AApp (AVar ("#global_lam_1", TInt), [], TArrow (TInt, TInt))
-              , [ AConst (CInt 42, TInt) ]
+           (TApp
+              ( TApp (TName ("#global_lam_1", TInt), [], TArrow (TInt, TInt))
+              , [ TConst (CInt 42, TInt) ]
               , TInt ))
          (* This test is a little funky, we should technically not allow this? *)
          (* ; (* Test 8: Let binding with lambda in body *)
             make_test
             "let_with_lambda"
-            (ALet
+            (TLet
             ( "z"
             , TInt
             , ACstI (10, TInt)
-            , ALam
+            , TLam
             ( [ "x", TInt ]
-            , APrim (Add, AVar ("x", TInt), AVar ("z", TInt), TInt)
+            , TPrim (Add, TName ("x", TInt), TName ("z", TInt), TInt)
             , TInt ) ))
-            (ALet
+            (TLet
             ( "z"
             , TInt
             , ACstI (10, TInt)
-            , AApp
+            , TApp
             (* This below is wrong because we return a curried function,
             which we don't support in wasm *)
-            (AVar ("#global_lam_1", TInt), [ AVar ("z", TInt) ], TArrow (TInt, TInt))
+            (TName ("#global_lam_1", TInt), [ TName ("z", TInt) ], TArrow (TInt, TInt))
             )) *)
        ]
 ;;
