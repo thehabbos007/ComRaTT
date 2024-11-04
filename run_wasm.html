@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <!-- Dont do a (failing) request for favicon -->
+  <link rel="icon" href="data:,">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>WebAssembly Example</title>
@@ -15,9 +17,9 @@
 			log: (value) => console.log("WASM log:", value)
 		}
 	  }
-	  const fetchPromise = fetch("table.wasm")
+	  const fetchPromise = fetch("memtest.wasm")
 	  WebAssembly.instantiateStreaming(fetchPromise, importObject).then((obj) => {
-		obj.instance.exports.test();
+		console.log(obj.instance.exports.main());
 	  })
   </script>
 </body>
