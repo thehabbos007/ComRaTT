@@ -25,6 +25,8 @@ type expr =
   | Let of string * expr * expr
   | FunDef of string * string list * expr
   | IfThenElse of expr * expr * expr
+  | Delay of expr
+  | Advance of expr
 [@@deriving show, eq]
 
 (* Pretty printing *)

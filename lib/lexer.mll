@@ -19,6 +19,8 @@ rule token = parse
   | "if"     { IF }
   | "then"   { THEN }
   | "else"   { ELSE }
+  | "delay"  { DELAY }
+  | "advance" { ADVANCE }
   | "()"     { UNIT }
   | "+"      { PLUS }
   | "*"      { TIMES }
