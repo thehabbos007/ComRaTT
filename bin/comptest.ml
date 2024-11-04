@@ -79,7 +79,25 @@ let _function =
 ;;
 
 let _delay_adv = ast_of_text "def main = let x = delay 43 in advance x;"
-let _closures = ast_of_text "def main = let y = 5 in let x = fun x -> x + y in x 7;"
+
+let _closures =
+  ast_of_text "def main = let y = 5 in let x = fun x z -> x + y + z in x 5 7;"
+;;
+
+(*
+   f x =
+   let dingo z = z + x
+   in let bingo w = dingo (47 - w)
+   in g (bingo 419)
+
+   g u =
+   let mango x = x + h u
+   in let dingo k = k
+   in mango (dingo u)
+
+   h w = 42
+*)
+let _frub = ast_of_text "def main = let y = 5 in let frub = fun x -> 10 + y in frub ();"
 
 (*
    let () =
@@ -108,6 +126,6 @@ let () =
          print_endline (string_of_annot_expr _lifted))
          annot_exprs)
       *)
-    _closures
+    _frub
   |> ignore
 ;;

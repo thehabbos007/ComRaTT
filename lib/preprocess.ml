@@ -199,12 +199,10 @@ module EliminatePartialApp = struct
   ;;
 end
 
-open Lambda_lift
-
 let optimize expr =
   let expr = ConstantFold.constant_fold_expr expr in
   let eliminated = EliminatePartialApp.eliminate_partial expr in
-  let lifted, globals = lift_lambdas [] eliminated in
+  let lifted, globals = Lambda_lift.lambda_lift eliminated in
   (* print_endline (show_annot_expr lifted);
      List.iter (fun x -> show_annot_expr x |> print_endline) globals;*)
   lifted, globals

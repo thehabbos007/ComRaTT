@@ -32,6 +32,17 @@ type annot_expr =
   | ALet of sym * typ * annot_expr * annot_expr
 [@@deriving show, eq]
 
+let type_of expr =
+  match expr with
+  | AConst (_, t)
+  | AVar (_, t)
+  | ALam (_, _, t)
+  | AFunDef (_, _, _, t)
+  | AApp (_, _, t)
+  | APrim (_, _, _, t)
+  | ALet (_, t, _, _) -> t
+;;
+
 (* Type inference *)
 let type_counter = ref 0
 
@@ -62,7 +73,7 @@ let rec unify subst t1 t2 =
     unify subst' r1 r2
   | TVar n, t | t, TVar n ->
     if occurs n t then failwith "occurs check" else (n, t) :: subst
-  | _t1, _t2 -> failwith "Type mismatch"
+  | t1, t2 -> failwith ("Type mismatch: " ^ show_typ t1 ^ " and " ^ show_typ t2)
 
 and occurs n = function
   | TVar m -> n = m
