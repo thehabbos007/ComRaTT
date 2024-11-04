@@ -104,6 +104,6 @@ let () =
          print_endline (string_of_annot_expr _lifted))
          annot_exprs)
       *)
-    _twofunctions
+    (ast_of_text "def main = let x = delay 42 in advance x;")
   |> ignore
 ;;
