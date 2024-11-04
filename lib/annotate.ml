@@ -38,6 +38,18 @@ type annot_expr =
       * typ (* guard, type of guard, then-branch, else-branch and type of branches*)
 [@@deriving show, eq]
 
+let type_of expr =
+  match expr with
+  | AConst (_, t)
+  | AVar (_, t)
+  | ALam (_, _, t)
+  | AFunDef (_, _, _, t)
+  | AApp (_, _, t)
+  | APrim (_, _, _, t)
+  | ALet (_, t, _, _) -> t
+  | AIfThenElse (_, _, _, _, t) -> t
+;;
+
 (* Type inference *)
 let type_counter = ref 0
 
@@ -115,6 +127,14 @@ let rec infer env subst = function
   | Const (CInt _) -> subst, TInt
   | Const (CBool _) -> subst, TBool
   | Const CUnit -> subst, TUnit
+  | Delay e ->
+    let subst', t = infer env subst e in
+    subst', TArrow (TUnit, t)
+  | Advance e ->
+    let subst1, t = infer env subst e in
+    let inner_type = fresh_type () in
+    let subst2 = unify subst1 t (TArrow (TUnit, inner_type)) in
+    subst2, inner_type
   | Var x ->
     (try
        let t = List.assoc x env in
@@ -162,7 +182,17 @@ let rec annotate env subst expr =
   match expr with
   | Const (CInt i) -> subst, AConst (CInt i, TInt), (None, TInt)
   | Const (CBool b) -> subst, AConst (CBool b, TBool), (None, TBool)
-  | Const CUnit -> subst, AConst (CUnit, TUnit), (None, TUnit)
+  | Const CUnit ->
+    subst, AConst (CUnit, TUnit), (None, TUnit) (* Desugar delay to a thunk *)
+  | Delay e ->
+    let subst', body_annot, (_, body_type) = annotate env subst e in
+    ( subst'
+    , ALam ([ "unit", TUnit ], body_annot, TArrow (TUnit, body_type))
+    , (None, TArrow (TUnit, body_type)) )
+  (* Desugar to forcing a thunk *)
+  | Advance e ->
+    let subst', thunk_body, (_, thunk_type) = annotate env subst e in
+    subst', AApp (thunk_body, [ AConst (CUnit, TUnit) ], thunk_type), (None, thunk_type)
   | Var x ->
     let subst', t = infer env subst expr in
     subst', AVar (x, t), (None, t)
@@ -181,9 +211,8 @@ let rec annotate env subst expr =
       List.map (fun (arg, ty) -> arg, apply_subst subst' ty) arg_types
     in
     let expr_type = construct_arrow_typ body_type arg_types in
-    ( subst'
-    , ALam (substituted_args, body_annot, body_type)
-    , (None, apply_subst subst' expr_type) )
+    let expr_type = apply_subst subst' expr_type in
+    subst', ALam (substituted_args, body_annot, expr_type), (None, expr_type)
   | App (e1, e2) ->
     let subst1, annot1, (_, t1) = annotate env subst e1 in
     let subst2, annot2, (_, t2) = annotate env subst1 e2 in

@@ -16,6 +16,8 @@ rule token = parse
   | "in"     { IN }
   | "true"   { TRUE }
   | "false"  { FALSE }
+  | "delay"  { DELAY }
+  | "advance" { ADVANCE }
   | "if"     { IF }
   | "then"   { THEN }
   | "else"   { ELSE }

@@ -78,6 +78,27 @@ let _function =
   ast_of_text "def add x y = x+y; def main = let x = 40 in let y = 2 in add x y;"
 ;;
 
+let _delay_adv = ast_of_text "def main = let x = delay 43 in advance x;"
+
+let _closures =
+  ast_of_text "def main = let y = 5 in let x = fun x z -> x + y + z in x 5 7;"
+;;
+
+(*
+   f x =
+   let dingo z = z + x
+   in let bingo w = dingo (47 - w)
+   in g (bingo 419)
+
+   g u =
+   let mango x = x + h u
+   in let dingo k = k
+   in mango (dingo u)
+
+   h w = 42
+*)
+let _frub = ast_of_text "def main = let y = 5 in let frub = fun x -> 10 + y in frub ();"
+
 (*
    let () =
    Result.map (fun (subst, _) -> print_endline (string_of_int (List.length subst))) _main
@@ -89,10 +110,11 @@ let () =
     (fun annot_exprs ->
       let mapped =
         List.map
-          (fun annot ->
-            let lifted, _ = optimize annot in
-            lifted)
+          (fun expr ->
+            let l, gs = optimize expr in
+            l :: gs)
           annot_exprs
+        |> List.concat
       in
       let compiled = init_wat mapped [] in
       print_endline compiled)
@@ -104,6 +126,6 @@ let () =
          print_endline (string_of_annot_expr _lifted))
          annot_exprs)
       *)
-    _twofunctions
+    _frub
   |> ignore
 ;;

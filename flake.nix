@@ -41,6 +41,7 @@
           ounit2 = "*";
           menhir = "*";
           monads = "*";
+          base = "*";
         };
       scope = on.buildDuneProject {} "ComRaTT" ./. query;
       overlay = final: prev: {
@@ -72,6 +73,7 @@
 	    pkgs.python311
 	    pkgs.wabt
             # You can add packages from nixpkgs here
+	    pkgs.wabt
           ];
       };
     });
