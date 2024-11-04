@@ -11,6 +11,7 @@ let rec free_vars = function
   | APrim (_, e1, e2, _) -> free_vars e1 @ free_vars e2
   | ALet (x, t, e1, e2) ->
     free_vars e1 @ List.filter (fun v -> v <> (x, t)) (free_vars e2)
+  | AIfThenElse (cond, _, e1, e2, _) -> free_vars cond @ free_vars e1 @ free_vars e2
 ;;
 
 let fresh_var =
@@ -31,6 +32,8 @@ let rec subst_name old_name new_name expr =
   | AApp (f, args, typ) -> AApp (subst_name f, List.map subst_name args, typ)
   | APrim (op, e1, e2, typ) -> APrim (op, subst_name e1, subst_name e2, typ)
   | ALet (x, t, e1, e2) -> ALet (x, t, subst_name e1, subst_name e2)
+  | AIfThenElse (cond, t1, e1, e2, t2) ->
+    AIfThenElse (subst_name cond, t1, subst_name e1, subst_name e2, t2)
 ;;
 
 let rec subst_expr_name new_expr old_name expr =
@@ -44,6 +47,8 @@ let rec subst_expr_name new_expr old_name expr =
   | AApp (f, args, typ) -> AApp (subst_expr_name f, List.map subst_expr_name args, typ)
   | APrim (op, e1, e2, typ) -> APrim (op, subst_expr_name e1, subst_expr_name e2, typ)
   | ALet (x, t, e1, e2) -> ALet (x, t, subst_expr_name e1, subst_expr_name e2)
+  | AIfThenElse (cond, t1, e1, e2, t2) ->
+    AIfThenElse (subst_expr_name cond, t1, subst_expr_name e1, subst_expr_name e2, t2)
 ;;
 
 let rec pop_n_tarrow n tarrow =
@@ -142,6 +147,13 @@ let rec lift expr =
     let e1', supercombinators1, _ = lift e1 in
     let e2', supercombinators2, _ = lift e2 in
     ALet (x, t, e1', e2'), supercombinators1 @ supercombinators2, None
+  | AIfThenElse (cond, t1, e1, e2, t2) ->
+    let cond', supercombinators1, _ = lift cond in
+    let e1', supercombinators2, _ = lift e1 in
+    let e2', supercombinators3, _ = lift e2 in
+    ( AIfThenElse (cond', t1, e1', e2', t2)
+    , supercombinators1 @ supercombinators2 @ supercombinators3
+    , None )
 ;;
 
 let rec flatten_apps expr =
@@ -154,6 +166,8 @@ let rec flatten_apps expr =
   | AApp (f, args, typ) -> AApp (flatten_apps f, List.map flatten_apps args, typ)
   | APrim (op, e1, e2, typ) -> APrim (op, flatten_apps e1, flatten_apps e2, typ)
   | ALet (x, t, e1, e2) -> ALet (x, t, flatten_apps e1, flatten_apps e2)
+  | AIfThenElse (cond, t1, e1, e2, t2) ->
+    AIfThenElse (flatten_apps cond, t1, flatten_apps e1, flatten_apps e2, t2)
 ;;
 
 let lambda_lift expr =

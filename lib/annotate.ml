@@ -47,6 +47,7 @@ let type_of expr =
   | AApp (_, _, t)
   | APrim (_, _, _, t)
   | ALet (_, t, _, _) -> t
+  | AIfThenElse (_, _, _, _, t) -> t
 ;;
 
 (* Type inference *)
