@@ -2,6 +2,12 @@ type binop =
   | Add
   | Mul
   | Sub
+  | Eq
+  | Lt
+  | Lte
+  | Gt
+  | Gte
+  | Neq
 [@@deriving show, eq]
 
 type const =
@@ -20,6 +26,7 @@ type expr =
   | FunDef of string * string list * expr
   | Delay of expr
   | Advance of expr
+  | IfThenElse of expr * expr * expr
 [@@deriving show, eq]
 
 (* Pretty printing *)
@@ -28,4 +35,10 @@ let string_of_binop = function
   | Add -> "+"
   | Mul -> "*"
   | Sub -> "-"
+  | Eq -> "="
+  | Lt -> "<"
+  | Lte -> "<="
+  | Gt -> ">"
+  | Gte -> ">="
+  | Neq -> "<>"
 ;;

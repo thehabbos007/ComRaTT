@@ -18,6 +18,9 @@ rule token = parse
   | "false"  { FALSE }
   | "delay"  { DELAY }
   | "advance" { ADVANCE }
+  | "if"     { IF }
+  | "then"   { THEN }
+  | "else"   { ELSE }
   | "()"     { UNIT }
   | "+"      { PLUS }
   | "*"      { TIMES }
@@ -27,6 +30,11 @@ rule token = parse
   | "="      { EQUALS }
   | "->"     { SARROW }
   | ";"      { SEMI }
+  | "<"      { LT }
+  | "<="     { LTE }
+  | ">"      { GT }
+  | ">="     { GTE }
+  | "<>"     { NEQ }
   | ident as id { IDENT id }
   | digit+ as d { INT (int_of_string d) }
   | eof      { EOF }

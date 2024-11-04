@@ -45,6 +45,7 @@ let rec get_names_for_forward_declaration expr map =
   | ALam _ -> failwith "no lambdas allowed"
   | AFunDef _ -> failwith "no fundefs allowed"
   | AConst _ | AVar _ | APrim _ | AApp _ -> map
+  | _ -> failwith "ifthenelse"
 ;;
 
 let unfold_forward_decs decs =
@@ -95,6 +96,7 @@ let rec comp expr =
          (List.fold_left (fun acc arg -> acc ^ comp arg ^ "\n") "" args)
          name
      | _ -> failwith "attempted calling a function that was not a valid AVar")
+  | _ -> failwith "ifthenelse"
 ;;
 
 let comp_global_defs (globals : Preprocess.global_def list) =
