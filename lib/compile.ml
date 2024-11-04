@@ -113,16 +113,25 @@ let rec comp_and_unfold_defs defs =
   | def :: defs -> comp def ^ comp_and_unfold_defs defs
 ;;
 
+let add_function_table name size =
+  Printf.sprintf "\n(table $%s %s funcref)" name (string_of_int size)
+;;
+
 let add_mem_region name memsize =
   Printf.sprintf "\n(memory $%s %s)" name (string_of_int memsize)
 ;;
 
 let init_wat (annot_exprs : annot_expr list) (globals : Preprocess.global_def list) =
   Printf.sprintf
-    "(module %s %s %s \n %s\n %s\n (export \"main\" (func $main)))"
+    "(module %s %s %s %s \n %s\n %s\n (export \"main\" (func $main)))"
     (add_mem_region "stable" 1)
-    (add_mem_region "tmp1" 1)
-    (add_mem_region "tmp2" 1)
+    (add_mem_region "h1" 1)
+    (add_mem_region "h2" 1)
+    (* TODO
+       - we need to do the size bookkeeping as well as shrinking/growing tables
+       - max size?
+    *)
+    (add_function_table "funcs" 1)
     (comp_global_defs globals)
     (comp_and_unfold_defs annot_exprs)
 ;;
