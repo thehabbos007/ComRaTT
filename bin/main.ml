@@ -10,7 +10,7 @@ let () =
   (let* processed = Ast_of_text.process_stdin () in
    let _, _, annotated = Annotate.annotate_all processed in
    (* Temporary pop head *)
-   let lifted, _globals = Preprocess.optimize (List.hd annotated) in
+   let lifted, _globals = Preprocess.optimize [] (List.hd annotated) in
    print_endline "----- Top level functions -----";
    print_endline (Annotate.show_annot_expr lifted);
    print_endline "----- Globally lifted lambdas -----";

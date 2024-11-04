@@ -218,11 +218,30 @@ module EliminatePartialApp = struct
   ;;
 end
 
-let optimize expr =
+let list_defs exprs =
+  List.map
+    (fun expr ->
+      match expr with
+      | AFunDef (name, _, _, t) -> name, t
+      | _ -> failwith "Top level defs should be top level defs..")
+    exprs
+;;
+
+let optimize defs expr =
   let expr = ConstantFold.constant_fold_expr expr in
   let eliminated = EliminatePartialApp.eliminate_partial expr in
-  let lifted, globals = Lambda_lift.lambda_lift eliminated in
+  let lifted, globals = Lambda_lift.lambda_lift defs eliminated in
   (* print_endline (show_annot_expr lifted);
      List.iter (fun x -> show_annot_expr x |> print_endline) globals;*)
   lifted, globals
+;;
+
+let optimize_program exprs =
+  let defs = list_defs exprs in
+  List.fold_left
+    (fun (fundefs, globals) expr ->
+      let lifted, globals' = optimize defs expr in
+      lifted :: fundefs, globals' @ globals)
+    ([], [])
+    exprs
 ;;

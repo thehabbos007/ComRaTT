@@ -78,7 +78,9 @@ let _function =
   ast_of_text "def add x y = x+y; def main = let x = 40 in let y = 2 in add x y;"
 ;;
 
-let _delay_adv = ast_of_text "def main = let x = delay 43 in advance x;"
+let _delay_adv =
+  ast_of_text "def add x y = x + y; def main = let x = delay (add 2 3) in advance x;"
+;;
 
 let _closures =
   ast_of_text "def main = let y = 5 in let x = fun x z -> x + y + z in x 5 7;"
@@ -108,15 +110,8 @@ let _frub = ast_of_text "def main = let y = 5 in let frub = fun x -> 10 + y in f
 let () =
   Result.map
     (fun annot_exprs ->
-      let mapped =
-        List.map
-          (fun expr ->
-            let l, gs = optimize expr in
-            l :: gs)
-          annot_exprs
-        |> List.concat
-      in
-      let compiled = init_wat mapped [] in
+      let defs, lifted = optimize_program annot_exprs in
+      let compiled = init_wat (defs @ lifted) [] in
       print_endline compiled)
       (*
          List.iter
@@ -126,6 +121,6 @@ let () =
          print_endline (string_of_annot_expr _lifted))
          annot_exprs)
       *)
-    _frub
+    _delay_adv
   |> ignore
 ;;
