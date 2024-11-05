@@ -2,12 +2,19 @@ open Source
 open Annotate
 open Preprocess
 
+(* Comparison operators are signed for now *)
 let binop_to_wasm op ty =
   match op, ty with
-  | Add, TInt -> "i64.add"
-  | Sub, TInt -> "i64.sub"
-  | Mul, TInt -> "i64.mul"
-  | _ -> failwith "binop_to_wasm not supported for type"
+  | Add, TInt -> "(i64.add)"
+  | Sub, TInt -> "(i64.sub)"
+  | Mul, TInt -> "(i64.mul)"
+  | Eq, TBool -> "(i64.eq)"
+  | Lt, TBool -> "(i64.lt_s)"
+  | Lte, TBool -> "(i64.le_s)"
+  | Gt, TBool -> "(i64.gt_s)"
+  | Gte, TBool -> "(i64.ge_s)"
+  | Neq, TBool -> "(i64.ne)"
+  | _ -> failwith ("binop_to_wasm not supported for type" ^ show_typ ty)
 ;;
 
 let wasm_type_of_type ty =
@@ -44,8 +51,7 @@ let rec get_names_for_forward_declaration expr map =
     get_names_for_forward_declaration body (Environment.add name ty map)
   | ALam _ -> failwith "no lambdas allowed"
   | AFunDef _ -> failwith "no fundefs allowed"
-  | AConst _ | AVar _ | APrim _ | AApp _ -> map
-  | _ -> failwith "ifthenelse"
+  | AConst _ | AVar _ | APrim _ | AApp _ | AIfThenElse _ -> map
 ;;
 
 let unfold_forward_decs decs =
@@ -96,7 +102,14 @@ let rec comp expr =
          (List.fold_left (fun acc arg -> acc ^ comp arg ^ "\n") "" args)
          name
      | _ -> failwith "attempted calling a function that was not a valid AVar")
-  | _ -> failwith "ifthenelse"
+  | AIfThenElse (guard, _guard_typ, then_branch, else_branch, branch_type) ->
+    (* The result part of the if should be left out if void, but we do not support that *)
+    Printf.sprintf
+      "%s (if (result %s) (then %s) (else %s))"
+      (comp guard)
+      (wasm_type_of_type branch_type)
+      (comp then_branch)
+      (comp else_branch)
 ;;
 
 let comp_global_defs (globals : Preprocess.global_def list) =
