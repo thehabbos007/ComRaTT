@@ -17,6 +17,15 @@ type typ =
   | TArrow of typ * typ
 [@@deriving show, eq]
 
+(* Pretty printing *)
+let rec string_of_type = function
+  | TInt -> "int"
+  | TBool -> "bool"
+  | TUnit -> "()"
+  | TVar n -> "t" ^ string_of_int n
+  | TArrow (t1, t2) -> "(" ^ string_of_type t1 ^ " -> " ^ string_of_type t2 ^ ")"
+;;
+
 (** Annotated expression (Types) *)
 type annot_expr =
   | AConst of const * typ
@@ -121,6 +130,15 @@ let binop_unify subst op t1 t2 =
       ("binop not well-typed " ^ show_binop op ^ " " ^ show_typ t1 ^ " " ^ show_typ t2)
 ;;
 
+let rec pop_n_tarrow n tarrow =
+  match tarrow with
+  | _ when n = 0 -> tarrow
+  | TArrow (_, r) when n = 1 -> r
+  | TArrow (_, r) -> pop_n_tarrow (n - 1) r
+  | _ ->
+    failwith ("Trying to pop " ^ string_of_int n ^ " args from " ^ string_of_type tarrow)
+;;
+
 (* Inference function *)
 (* follows https://stanford-cs242.github.io/f19/lectures/02-2-type-systems partly*)
 let rec annotate env subst expr =
@@ -137,7 +155,8 @@ let rec annotate env subst expr =
   (* Desugar to forcing a thunk *)
   | Advance e ->
     let subst', thunk_body, (_, thunk_type) = annotate env subst e in
-    subst', AApp (thunk_body, [ AConst (CUnit, TUnit) ], thunk_type), (None, thunk_type)
+    let typ = pop_n_tarrow 1 thunk_type in
+    subst', AApp (thunk_body, [ AConst (CUnit, TUnit) ], typ), (None, typ)
   | Var x ->
     (try
        let t = apply_subst subst (List.assoc x env) in
@@ -245,15 +264,6 @@ let annotate_all exprs =
   in
   let exprs' = List.map (expr_apply_subst subst) exprs in
   env, subst, exprs'
-;;
-
-(* Pretty printing *)
-let rec string_of_type = function
-  | TInt -> "int"
-  | TBool -> "bool"
-  | TUnit -> "()"
-  | TVar n -> "t" ^ string_of_int n
-  | TArrow (t1, t2) -> "(" ^ string_of_type t1 ^ " -> " ^ string_of_type t2 ^ ")"
 ;;
 
 let rec unfold_lam_args = function

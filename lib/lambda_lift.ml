@@ -53,15 +53,6 @@ let rec subst_expr_name new_expr old_name expr =
     AIfThenElse (subst_expr_name cond, t1, subst_expr_name e1, subst_expr_name e2, t2)
 ;;
 
-let rec pop_n_tarrow n tarrow =
-  match tarrow with
-  | _ when n = 0 -> tarrow
-  | TArrow (_, r) when n = 1 -> r
-  | TArrow (_, r) -> pop_n_tarrow (n - 1) r
-  | _ ->
-    failwith ("Trying to pop " ^ string_of_int n ^ " args from " ^ string_of_type tarrow)
-;;
-
 let push_ts_tarrow typs tarrow =
   List.fold_right (fun x acc -> TArrow (x, acc)) typs tarrow
 ;;
