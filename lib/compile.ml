@@ -26,7 +26,7 @@ let rec args_to_str (arg_list : (sym * typ) list) =
     Printf.sprintf "(param $%s %s) %s" name (wasm_type_of_type typ) (args_to_str tail)
 ;;
 
-let var_str name = "local.get $" ^ name
+let var_str name = "(local.get $" ^ name ^ ")"
 
 let rec generate_local_vars vars =
   match vars with
@@ -60,9 +60,9 @@ let rec comp expr =
   match expr with
   | AVar (name, _) -> var_str name
   (* type of ACstI is always int, discard for now *)
-  | AConst (CInt num, _) -> "i64.const " ^ string_of_int num
-  | AConst (CBool b, _) -> "i32.const " ^ if b then "1" else "0"
-  | AConst (CUnit, _) -> "i32.const " ^ "-1"
+  | AConst (CInt num, _) -> "(i64.const " ^ string_of_int num ^ ")"
+  | AConst (CBool b, _) -> "(i32.const " ^ if b then "1" else "0" ^ ")"
+  | AConst (CUnit, _) -> "(i32.const " ^ "-1)"
   | APrim (op, e1, e2, ty) ->
     let e1_comp = comp e1 in
     let e2_comp = comp e2 in
