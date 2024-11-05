@@ -7,15 +7,8 @@ let _function = ast_of_text "def main = let x = fun x -> x + 1 in x 1;"
 let () =
   Result.map
     (fun annot_exprs ->
-      let mapped =
-        List.map
-          (fun expr ->
-            let l, gs = optimize expr in
-            l :: gs)
-          annot_exprs
-        |> List.concat
-      in
-      let compiled = init_wat mapped [] in
+      let defs, lifted = optimize_program annot_exprs in
+      let compiled = init_wat (defs @ lifted) [] in
       print_endline compiled)
       (*
          List.iter

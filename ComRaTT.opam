@@ -16,6 +16,7 @@ depends: [
   "ounit2"
   "menhir"
   "monads"
+  "base"
   "odoc" {with-doc}
 ]
 build: [

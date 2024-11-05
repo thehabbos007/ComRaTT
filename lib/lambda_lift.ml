@@ -1,17 +1,19 @@
 open Annotate
 
-let rec free_vars = function
+let rec free_vars ?(except = []) expr =
+  let filter args v = (not (List.mem v args)) && not (List.mem v except) in
+  match expr with
   | AConst _ -> []
   | AVar (x, t) -> [ x, t ]
-  | ALam (args, body, _) -> List.filter (fun v -> not (List.mem v args)) (free_vars body)
-  | AFunDef (_, args, body, _) ->
-    List.filter (fun v -> not (List.mem v args)) (free_vars body)
+  | ALam (args, body, _) -> List.filter (filter args) (free_vars ~except body)
+  | AFunDef (_, args, body, _) -> List.filter (filter args) (free_vars ~except body)
   | AApp (f, args, _) ->
-    List.fold_left (fun acc e -> acc @ free_vars e) (free_vars f) args
-  | APrim (_, e1, e2, _) -> free_vars e1 @ free_vars e2
+    List.fold_left (fun acc e -> acc @ free_vars ~except e) (free_vars ~except f) args
+  | APrim (_, e1, e2, _) -> free_vars ~except e1 @ free_vars ~except e2
   | ALet (x, t, e1, e2) ->
-    free_vars e1 @ List.filter (fun v -> v <> (x, t)) (free_vars e2)
-  | AIfThenElse (cond, _, e1, e2, _) -> free_vars cond @ free_vars e1 @ free_vars e2
+    free_vars ~except e1 @ List.filter (fun v -> v <> (x, t)) (free_vars ~except e2)
+  | AIfThenElse (cond, _, e1, e2, _) ->
+    free_vars ~except cond @ free_vars ~except e1 @ free_vars ~except e2
 ;;
 
 let fresh_var =
@@ -96,15 +98,15 @@ let create_full_app_wrapper name args body typ =
     AFunDef (name ^ "_full", full_args, new_body, typ))
 ;;
 
-let rec lift expr =
+let rec lift (defs : (sym * typ) list) expr =
   match expr with
   | AConst _ | AVar _ -> expr, [], None
   | ALam (args, body, fun_type) as lam ->
-    let free = free_vars lam in
+    let free = free_vars ~except:defs lam in
     let lifted_name = fresh_var "lambda" in
     let new_args = free @ args in
     let lifted_typ = push_ts_tarrow (List.map snd free) fun_type in
-    let body', supercombinators1, _ = lift body in
+    let body', supercombinators1, _ = lift defs body in
     let fun_def = AFunDef (lifted_name, new_args, body', lifted_typ) in
     let app =
       if List.length free > 0
@@ -115,14 +117,14 @@ let rec lift expr =
     in
     app, fun_def :: supercombinators1, Some lifted_name
   | AFunDef (name, args, body, typ) ->
-    let body', supercombinators, _ = lift body in
+    let body', supercombinators, _ = lift defs body in
     AFunDef (name, args, body', typ), supercombinators, None
   | AApp (f, args, typ) ->
-    let f', supercombinators1, _ = lift f in
+    let f', supercombinators1, _ = lift defs f in
     let args', arg_supercombinators =
       List.fold_left
         (fun (args, supercombinators) arg ->
-          let arg', supercombinators', _ = lift arg in
+          let arg', supercombinators', _ = lift defs arg in
           arg' :: args, supercombinators @ supercombinators')
         ([], [])
         args
@@ -130,27 +132,27 @@ let rec lift expr =
     let args' = List.rev args' in
     AApp (f', args', typ), arg_supercombinators @ supercombinators1, None
   | APrim (op, e1, e2, typ) ->
-    let e1', supercombinators1, _ = lift e1 in
-    let e2', supercombinators2, _ = lift e2 in
+    let e1', supercombinators1, _ = lift defs e1 in
+    let e2', supercombinators2, _ = lift defs e2 in
     APrim (op, e1', e2', typ), supercombinators1 @ supercombinators2, None
   | ALet (x, t, (ALam _ as e1), e2) ->
-    let lifted_expr, supercombinators1, lifted_name_opt = lift e1 in
+    let lifted_expr, supercombinators1, lifted_name_opt = lift defs e1 in
     (match lifted_name_opt with
      | Some _new_name ->
        let e2' = subst_expr_name lifted_expr x e2 in
-       let e2'', supercombinators2, _ = lift e2' in
+       let e2'', supercombinators2, _ = lift defs e2' in
        e2'', supercombinators1 @ supercombinators2, None
      | None ->
-       let e2', supercombinators2, _ = lift e2 in
+       let e2', supercombinators2, _ = lift defs e2 in
        ALet (x, t, lifted_expr, e2'), supercombinators1 @ supercombinators2, None)
   | ALet (x, t, e1, e2) ->
-    let e1', supercombinators1, _ = lift e1 in
-    let e2', supercombinators2, _ = lift e2 in
+    let e1', supercombinators1, _ = lift defs e1 in
+    let e2', supercombinators2, _ = lift defs e2 in
     ALet (x, t, e1', e2'), supercombinators1 @ supercombinators2, None
   | AIfThenElse (cond, t1, e1, e2, t2) ->
-    let cond', supercombinators1, _ = lift cond in
-    let e1', supercombinators2, _ = lift e1 in
-    let e2', supercombinators3, _ = lift e2 in
+    let cond', supercombinators1, _ = lift defs cond in
+    let e1', supercombinators2, _ = lift defs e1 in
+    let e2', supercombinators3, _ = lift defs e2 in
     ( AIfThenElse (cond', t1, e1', e2', t2)
     , supercombinators1 @ supercombinators2 @ supercombinators3
     , None )
@@ -170,8 +172,8 @@ let rec flatten_apps expr =
     AIfThenElse (flatten_apps cond, t1, flatten_apps e1, flatten_apps e2, t2)
 ;;
 
-let lambda_lift expr =
-  let lifted, globals, _ = lift expr in
+let lambda_lift defs expr =
+  let lifted, globals, _ = lift defs expr in
   let lifted = flatten_apps lifted in
   let globals = List.map flatten_apps globals in
   lifted, globals

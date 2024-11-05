@@ -50,7 +50,6 @@ let type_of expr =
   | AIfThenElse (_, _, _, _, t) -> t
 ;;
 
-(* Type inference *)
 let type_counter = ref 0
 
 let fresh_type () =
@@ -122,62 +121,8 @@ let binop_unify subst op t1 t2 =
       ("binop not well-typed " ^ show_binop op ^ " " ^ show_typ t1 ^ " " ^ show_typ t2)
 ;;
 
+(* Inference function *)
 (* follows https://stanford-cs242.github.io/f19/lectures/02-2-type-systems partly*)
-let rec infer env subst = function
-  | Const (CInt _) -> subst, TInt
-  | Const (CBool _) -> subst, TBool
-  | Const CUnit -> subst, TUnit
-  | Delay e ->
-    let subst', t = infer env subst e in
-    subst', TArrow (TUnit, t)
-  | Advance e ->
-    let subst1, t = infer env subst e in
-    let inner_type = fresh_type () in
-    let subst2 = unify subst1 t (TArrow (TUnit, inner_type)) in
-    subst2, inner_type
-  | Var x ->
-    (try
-       let t = List.assoc x env in
-       subst, apply_subst subst t
-     with
-     | Not_found -> failwith ("unbound variable: " ^ x))
-  | FunDef (_name, args, e) ->
-    let arg_types = List.map (fun arg -> arg, fresh_type ()) args in
-    let subst', result_type = infer (arg_types @ env) subst e in
-    let expr_type = construct_arrow_typ result_type arg_types in
-    subst', apply_subst subst' expr_type
-  | Lam (args, e) ->
-    let arg_types = List.map (fun arg -> arg, fresh_type ()) args in
-    let subst', result_type = infer (arg_types @ env) subst e in
-    let expr_type = construct_arrow_typ result_type arg_types in
-    subst', apply_subst subst' expr_type
-  | App (e1, e2) ->
-    let subst1, t1 = infer env subst e1 in
-    let subst2, t2 = infer env subst1 e2 in
-    let result_type = fresh_type () in
-    let subst3 = unify subst2 t1 (TArrow (t2, result_type)) in
-    subst3, apply_subst subst3 result_type
-  | Prim (op, e1, e2) ->
-    let prim_type = return_of_binop op in
-    let subst1, t1 = infer env subst e1 in
-    let subst2, t2 = infer env subst1 e2 in
-    let subst3 = unify subst2 t1 prim_type in
-    let subst4 = unify subst3 t2 prim_type in
-    subst4, prim_type
-  | Let (x, e1, e2) ->
-    let subst1, t1 = infer env subst e1 in
-    let subst2, t2 = infer ((x, t1) :: env) subst1 e2 in
-    subst2, t2
-  | IfThenElse (guard, then_branch, else_branch) ->
-    let subst_guard, t_guard = infer env subst guard in
-    let uni_subst = unify subst_guard t_guard TBool in
-    let subst_then, t_then = infer env uni_subst then_branch in
-    let subst_else, t_else = infer env subst_then else_branch in
-    let uni_branches = unify subst_else t_then t_else in
-    uni_branches, t_else
-;;
-
-(* Annotation *)
 let rec annotate env subst expr =
   match expr with
   | Const (CInt i) -> subst, AConst (CInt i, TInt), (None, TInt)
@@ -194,8 +139,11 @@ let rec annotate env subst expr =
     let subst', thunk_body, (_, thunk_type) = annotate env subst e in
     subst', AApp (thunk_body, [ AConst (CUnit, TUnit) ], thunk_type), (None, thunk_type)
   | Var x ->
-    let subst', t = infer env subst expr in
-    subst', AVar (x, t), (None, t)
+    (try
+       let t = apply_subst subst (List.assoc x env) in
+       subst, AVar (x, t), (None, t)
+     with
+     | Not_found -> failwith ("unbound variable: " ^ x))
   | FunDef (name, args, body) ->
     let arg_types = List.map (fun arg -> arg, fresh_type ()) args in
     let subst', body_annot, (_, body_type) = annotate (arg_types @ env) subst body in
