@@ -8,12 +8,14 @@ type binop =
   | Gt
   | Gte
   | Neq
+  | Cons
 [@@deriving show, eq]
 
 type const =
   | CInt of int
   | CBool of bool
   | CUnit
+  | CNil
 [@@deriving show, eq]
 
 type expr =
@@ -41,4 +43,5 @@ let string_of_binop = function
   | Gt -> ">"
   | Gte -> ">="
   | Neq -> "<>"
+  | Cons -> "::"
 ;;

@@ -147,12 +147,14 @@ module EliminatePartialApp = struct
     | TInt | TBool | TUnit -> []
     | TVar _ -> []
     | TArrow (t1, t2) -> t1 :: unpack_type t2
+    | TList t -> unpack_type t
   ;;
 
   let rec final_type ty =
     match ty with
     | TInt | TBool | TUnit | TVar _ -> ty
     | TArrow (_, t2) -> final_type t2
+    | TList t -> final_type t
   ;;
 
   let generate_names types =

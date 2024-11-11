@@ -15,6 +15,7 @@ type typ =
   | TUnit
   | TVar of typ_var
   | TArrow of typ * typ
+  | TList of typ
 [@@deriving show, eq]
 
 and typ_var = (typ_var_kind * int) ref (* kind and binding level *)
@@ -51,6 +52,7 @@ let rec string_of_type = function
   | TUnit -> "()"
   | TVar tv -> "TVar (" ^ string_of_type_var_kind tv ^ ")"
   | TArrow (t1, t2) -> "(" ^ string_of_type t1 ^ " -> " ^ string_of_type t2 ^ ")"
+  | TList ty -> "List " ^ string_of_type ty
 
 and string_of_type_var_kind tvar =
   match fst !tvar with
@@ -115,6 +117,7 @@ let rec free_tvs t : typ_var list =
   | TBool | TInt | TUnit -> []
   | TVar tv -> [ tv ]
   | TArrow (t1, t2) -> union (free_tvs t1, free_tvs t2)
+  | TList ty -> free_tvs ty
 ;;
 
 let occur_check tv tyvars =
@@ -157,10 +160,12 @@ let rec unify t1 t2 : unit =
     else link_var_to_typ tv2 t1'
   | TVar tv1, _ -> link_var_to_typ tv1 t2'
   | _, TVar tv2 -> link_var_to_typ tv2 t1'
+  | TList t1, TList t2 -> unify t1 t2
   | TInt, t -> failwith ("type error: int and " ^ string_of_type t)
   | TBool, t -> failwith ("type error: bool and " ^ string_of_type t)
   | TArrow _, t -> failwith ("type error: function and " ^ string_of_type t)
   | TUnit, t -> failwith ("type error: unit and " ^ string_of_type t)
+  | TList _, t -> failwith ("type error list and " ^ string_of_type t)
 ;;
 
 let next_type_var = ref 0
@@ -193,6 +198,7 @@ let rec copy_typ subst t : typ =
     in
     loop subst
   | TArrow (t1, t2) -> TArrow (copy_typ subst t1, copy_typ subst t2)
+  | TList t -> TList (copy_typ subst t)
 ;;
 
 let specialize level (TypeScheme (tvs, t)) : typ =
@@ -209,6 +215,9 @@ let rec typ (level : int) (env : tenv) (e : expr) : typed_expr * typ =
   | Const (CInt v) -> TConst (CInt v, TInt), TInt
   | Const (CBool v) -> TConst (CBool v, TBool), TBool
   | Const CUnit -> TConst (CUnit, TUnit), TUnit
+  | Const CNil ->
+    let list_typ = TList (TVar (fresh_type_var level)) in
+    TConst (CNil, list_typ), list_typ
   | Var x ->
     let typ = specialize level (List.assoc x env) in
     TName (x, typ), typ
@@ -228,6 +237,9 @@ let rec typ (level : int) (env : tenv) (e : expr) : typed_expr * typ =
         unify TInt t2;
         unify t1 t2;
         TBool
+      | Cons ->
+        unify (TList t1) t2;
+        t2
     in
     TPrim (op, e1, e2, typ), typ
   | Let (name, e1, e2) ->

@@ -24,6 +24,7 @@ let wasm_type_of_type ty =
   | TUnit -> "i32"
   | TVar tv -> failwith ("error: TVar found with index " ^ string_of_type_var_kind tv)
   | TArrow (_t1, _t2) -> "arrow"
+  | TList _ -> failwith "TODO: wasm type of list"
 ;;
 
 let rec args_to_str (arg_list : (sym * typ) list) =
@@ -65,10 +66,10 @@ let unfold_forward_decs decs =
 let rec comp expr name_idx funtable =
   match expr with
   | TName (name, _) -> var_str name
-  (* type of ACstI is always int, discard for now *)
   | TConst (CInt num, _) -> "(i64.const " ^ string_of_int num ^ ")"
   | TConst (CBool b, _) -> "(i32.const " ^ if b then "1" else "0" ^ ")"
   | TConst (CUnit, _) -> "(i32.const " ^ "-1)"
+  | TConst (CNil, _) -> failwith "TODO: compilation of NIL"
   | TPrim (op, e1, e2, ty) ->
     let e1_comp = comp e1 name_idx funtable in
     let e2_comp = comp e2 name_idx funtable in
