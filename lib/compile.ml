@@ -62,7 +62,7 @@ let unfold_forward_decs decs =
     ""
 ;;
 
-let rec comp expr =
+let rec comp expr name_idx funtable =
   match expr with
   | TName (name, _) -> var_str name
   (* type of ACstI is always int, discard for now *)
@@ -70,8 +70,8 @@ let rec comp expr =
   | TConst (CBool b, _) -> "(i32.const " ^ if b then "1" else "0" ^ ")"
   | TConst (CUnit, _) -> "(i32.const " ^ "-1)"
   | TPrim (op, e1, e2, ty) ->
-    let e1_comp = comp e1 in
-    let e2_comp = comp e2 in
+    let e1_comp = comp e1 name_idx funtable in
+    let e2_comp = comp e2 name_idx funtable in
     e1_comp ^ "\n" ^ e2_comp ^ "\n" ^ binop_to_wasm op ty
   | TFunDef (name, args, body, ret_ty) ->
     let forward_dec =
@@ -83,15 +83,15 @@ let rec comp expr =
       (args_to_str args)
       (wasm_type_of_type (EliminatePartialApp.final_type ret_ty))
       forward_dec
-      (comp body)
+      (comp body name_idx funtable)
   | TLam _ -> failwith "lambda should have been lifted :("
   | TLet (name, _ty, rhs, TName (name', _ty')) when name = name' ->
-    let comp_rhs = comp rhs in
+    let comp_rhs = comp rhs name_idx funtable in
     Printf.sprintf "%s \n local.tee $%s" comp_rhs name
   | TLet (name, _ty, rhs, body) ->
-    let comp_rhs = comp rhs in
+    let comp_rhs = comp rhs name_idx funtable in
     let set_name_to_rhs = Printf.sprintf "%s (local.set $%s)" comp_rhs name in
-    let comp_body = comp body in
+    let comp_body = comp body name_idx funtable in
     Printf.sprintf "%s\n %s" set_name_to_rhs comp_body
   | TApp (func, args, _ty) ->
     (* Assume that calling a function is done with a valid function name *)
@@ -99,31 +99,34 @@ let rec comp expr =
      | TName (name, _) ->
        Printf.sprintf
          "%s\ncall $%s"
-         (List.fold_left (fun acc arg -> acc ^ comp arg ^ "\n") "" args)
+         (List.fold_left (fun acc arg -> acc ^ comp arg name_idx funtable ^ "\n") "" args)
          name
      | _ -> failwith "attempted calling a function that was not a valid AVar")
   | TIfThenElse (guard, _guard_typ, then_branch, else_branch, branch_type) ->
     (* The result part of the if should be left out if void, but we do not support that *)
     Printf.sprintf
       "%s (if (result %s) (then %s) (else %s))"
-      (comp guard)
+      (comp guard name_idx funtable)
       (wasm_type_of_type branch_type)
-      (comp then_branch)
-      (comp else_branch)
+      (comp then_branch name_idx funtable)
+      (comp else_branch name_idx funtable)
 ;;
 
-let comp_global_defs (globals : Preprocess.global_def list) =
+let comp_global_defs (globals : Preprocess.global_def list) name_idx funtable =
   List.fold_left
     (fun acc ({ name; fundef; ret_type; _ } : Preprocess.global_def) ->
-      acc ^ comp (TLet (name, ret_type, fundef, TConst (CInt 0, TInt))) ^ "\n")
+      acc
+      ^ comp (TLet (name, ret_type, fundef, TConst (CInt 0, TInt))) name_idx funtable
+      ^ "\n")
     ""
     globals
 ;;
 
-let rec comp_and_unfold_defs defs =
+let rec comp_and_unfold_defs defs name_idx funtable =
   match defs with
   | [] -> ""
-  | def :: defs -> comp def ^ comp_and_unfold_defs defs
+  | def :: defs ->
+    comp def name_idx funtable ^ comp_and_unfold_defs defs name_idx funtable
 ;;
 
 let add_function_table name size =
@@ -134,9 +137,49 @@ let add_mem_region name memsize =
   Printf.sprintf "\n(memory $%s %s)" name (string_of_int memsize)
 ;;
 
-let init_wat (annot_exprs : typed_expr list) (globals : Preprocess.global_def list) =
+let rec args_to_sig_str (arg_list : (sym * typ) list) =
+  match arg_list with
+  | [] -> ")"
+  | (_, typ) :: tail ->
+    Printf.sprintf " %s%s" (wasm_type_of_type typ) (args_to_sig_str tail)
+;;
+
+let generate_arg_string args =
+  if List.length args = 0 then " " else Printf.sprintf " (param%s" (args_to_sig_str args)
+;;
+
+let generate_signature idx args typ =
   Printf.sprintf
-    "(module %s %s %s %s \n %s\n %s\n (export \"main\" (func $main)))"
+    "(type $gentypesig%s (func%s(result %s)))\n"
+    (string_of_int idx)
+    (generate_arg_string args)
+    (wasm_type_of_type (EliminatePartialApp.final_type typ))
+;;
+
+let forward_declare_funtion_signatures signatures =
+  FunTable.fold
+    (fun idx (args, typ) output -> generate_signature idx args typ ^ output)
+    signatures
+    "\n"
+;;
+
+let add_functions_to_table name_idx =
+  Environment.fold
+    (fun name idx acc ->
+      Printf.sprintf "\n(elem (i32.const %s) $%s)" (string_of_int idx) name ^ acc)
+    name_idx
+    ""
+;;
+
+(* Ville det være federe bare at have alt informationen om funktioner i en stor bunke og så splitte det op her i stedet?*)
+let init_wat
+  (annot_exprs : typed_expr list)
+  (globals : Preprocess.global_def list)
+  name_idx
+  funtable
+  =
+  Printf.sprintf
+    "(module %s %s %s %s %s %s \n %s\n %s\n (export \"main\" (func $main)))"
     (add_mem_region "stable" 1)
     (add_mem_region "h1" 1)
     (add_mem_region "h2" 1)
@@ -144,7 +187,10 @@ let init_wat (annot_exprs : typed_expr list) (globals : Preprocess.global_def li
        - we need to do the size bookkeeping as well as shrinking/growing tables
        - max size?
     *)
-    (add_function_table "funcs" 1)
-    (comp_global_defs globals)
-    (comp_and_unfold_defs annot_exprs)
+    (add_function_table "funcs" (FunTable.cardinal funtable))
+    (* Initial size is just the amount of functions we have *)
+    ("\n" ^ forward_declare_funtion_signatures funtable)
+    (add_functions_to_table name_idx)
+    (comp_global_defs globals name_idx funtable)
+    (comp_and_unfold_defs annot_exprs name_idx funtable)
 ;;
