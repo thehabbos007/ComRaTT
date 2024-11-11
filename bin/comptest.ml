@@ -100,7 +100,7 @@ let _closures =
 
    h w = 42
 *)
-let _frub = ast_of_text "def fib x = fib (x + 1); def main = fib 2;"
+let _frub = ast_of_text "def fib x = if x = 2 then 8 else fib (x + 1); def main = fib 2;"
 
 (*
    let () =

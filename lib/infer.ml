@@ -129,7 +129,7 @@ let prune_level max_level tvs =
   List.iter reduce_level tvs
 ;;
 
-let rec link_var_to_typ tv typ =
+let link_var_to_typ tv typ =
   let _, level = !tv in
   let fvs = free_tvs typ in
   occur_check tv fvs;
@@ -170,12 +170,12 @@ let fresh_type_var level =
   ref (Unlink !next_type_var, level)
 ;;
 
-let rec generalize level (t : typ) : typ_scheme =
-  let notfreeincontext tyvar =
+let generalize level (t : typ) : typ_scheme =
+  let not_free_in_context tyvar =
     let _, linkLevel = !tyvar in
     linkLevel > level
   in
-  let tvs = List.filter notfreeincontext (free_tvs t) in
+  let tvs = List.filter not_free_in_context (free_tvs t) in
   TypeScheme (unique tvs, t)
 ;;
 
@@ -218,12 +218,15 @@ let rec typ (level : int) (env : tenv) (e : expr) : typed_expr * typ =
     let typ =
       match op with
       | Mul | Add | Sub ->
-        unify TInt t1;
         unify TInt t2;
+        unify t1 t2;
         TInt
-      | Eq | Lt | Lte | Gt | Gte | Neq ->
-        unify TBool t1;
-        unify TBool t2;
+      | Eq | Neq ->
+        unify t1 t2;
+        TBool
+      | Lt | Lte | Gt | Gte ->
+        unify TInt t2;
+        unify t1 t2;
         TBool
     in
     TPrim (op, e1, e2, typ), typ
@@ -285,6 +288,45 @@ let get_fundef_name = function
   | _ -> failwith "expected FunDef"
 ;;
 
+let rec resolve_type t =
+  match t with
+  | TVar tv ->
+    (match !tv with
+     | Link target, _ -> target
+     | _ -> t)
+  | TArrow (t1, t2) -> TArrow (resolve_type t1, resolve_type t2)
+  | _ -> t
+;;
+
+let rec simplify_types = function
+  | TConst (c, t) -> TConst (c, resolve_type t)
+  | TName (name, t) -> TName (name, resolve_type t)
+  | TLam (params, body, t) ->
+    TLam
+      ( List.map (fun (p, t) -> p, resolve_type t) params
+      , simplify_types body
+      , resolve_type t )
+  | TFunDef (name, params, body, t) ->
+    TFunDef
+      ( name
+      , List.map (fun (p, t) -> p, resolve_type t) params
+      , simplify_types body
+      , resolve_type t )
+  | TApp (f, args, t) ->
+    TApp (simplify_types f, List.map simplify_types args, resolve_type t)
+  | TPrim (op, e1, e2, t) ->
+    TPrim (op, simplify_types e1, simplify_types e2, resolve_type t)
+  | TLet (name, t, e1, e2) ->
+    TLet (name, resolve_type t, simplify_types e1, simplify_types e2)
+  | TIfThenElse (cond, tc, t1, t2, t) ->
+    TIfThenElse
+      ( simplify_types cond
+      , resolve_type tc
+      , simplify_types t1
+      , simplify_types t2
+      , resolve_type t )
+;;
+
 (* Type inference on all exprs (which are essentially only FunDefs here *)
 let infer_all exprs =
   reset_tv_counter ();
@@ -295,5 +337,6 @@ let infer_all exprs =
       let inner = get_fundef_name expr, TypeScheme ([], t) in
       aux (inner :: env) (typed_expr :: acc) rest
   in
-  aux [] [] exprs
+  let inferred = aux [] [] exprs in
+  List.map simplify_types inferred
 ;;
