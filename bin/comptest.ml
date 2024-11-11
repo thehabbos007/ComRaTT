@@ -1,6 +1,8 @@
 open ComRaTTlib.Preprocess
 open ComRaTTlib.Ast_of_text
-open ComRaTTlib.Compile
+open ComRaTTlib.Infer
+
+(* open ComRaTTlib.Compile*)
 
 let _toplevel = ast_of_text "def add x y = x + y;"
 
@@ -108,12 +110,36 @@ let _frub = ast_of_text "def fib x = if x = 2 then 8 else fib (x + 1); def main 
    |> ignore
    ;;
 *)
+
+let show_funtable table =
+  FunTable.iter
+    (fun idx (args, typ) ->
+      print_endline
+        ("Function with index "
+         ^ string_of_int idx
+         ^ " and type: "
+         ^ string_of_type typ
+         ^ " has args: ");
+      List.iter
+        (fun (name, ty) ->
+          print_endline ("  arg_name: " ^ name ^ " ty: " ^ string_of_type ty))
+        args)
+    table
+;;
+
 let () =
   Result.map
     (fun annot_exprs ->
       let defs, lifted = optimize_program annot_exprs in
-      let compiled = init_wat (defs @ lifted) [] in
-      print_endline compiled)
+      let nidx, signature = generate_function_tables defs lifted in
+      print_endline "name to id table";
+      Environment.iter
+        (fun name value -> print_endline (name ^ ": " ^ string_of_int value))
+        nidx
+      |> ignore;
+      show_funtable signature)
+    (* let compiled = init_wat (defs @ lifted) [] in
+      print_endline compiled)*)
     (*
        List.iter
        (fun annot ->
@@ -123,9 +149,11 @@ let () =
        annot_exprs)
     *)
     (* (ast_of_text "def main = let x = delay 42 in advance x;")*)
-    (ast_of_text
+    (* (ast_of_text
        "def add x y = x+y; def main = let x = 40 in let y = 2 in let delayed = delay \
-        (add x y) in  advance delayed;")
-  (* (ast_of_text "def add x y = x+y; def main = let x = 40 in let y = 2 in add x y;")*)
+       (add x y) in  advance delayed;")*)
+    (* (ast_of_text "def add x y = x+y; def main = let x = 40 in let y = 2 in add x y;")*)
+    (* (ast_of_text "def add x y = x+y; def main = let x = 40 in let y = 2 in add x y;")*)
+    (ast_of_text "def main = let hanzo = fun x y -> x+y in hanzo 40 2;")
   |> ignore
 ;;
