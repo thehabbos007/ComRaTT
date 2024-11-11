@@ -35,7 +35,8 @@ let rec interp (x : typed_expr) env =
         | Lte -> VBool (x <= y)
         | Gt -> VBool (x > y)
         | Gte -> VBool (x >= y)
-        | Neq -> VBool (x <> y))
+        | Neq -> VBool (x <> y)
+        | Cons -> failwith "did not implement interpreter for lists")
      | _, VClosure _ ->
        failwith "cannot do primitive operations on anything and a closure"
      | VClosure _, _ -> failwith "cannot do primitive operations on closure and anything"
