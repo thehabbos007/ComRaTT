@@ -258,11 +258,11 @@ module FunTable = Map.Make (struct
 *)
 let expr_to_tables expr name_idx idx_args_signature counter =
   match expr with
-  | AFunDef (name, args, _, typ) ->
+  | TFunDef (name, args, _, typ) ->
     ( Environment.add name counter name_idx
     , FunTable.add counter (args, typ) idx_args_signature
     , counter + 1 )
-  | AConst _ | AVar _ | ALam _ | AApp _ | APrim _ | ALet _ | AIfThenElse _ ->
+  | TConst _ | TName _ | TLam _ | TApp _ | TPrim _ | TLet _ | TIfThenElse _ ->
     name_idx, idx_args_signature, counter
 ;;
 
@@ -285,10 +285,10 @@ let optimize defs expr =
   let expr = ConstantFold.constant_fold_expr expr in
   let eliminated = EliminatePartialApp.eliminate_partial expr in
   let lifted, globals = Lambda_lift.lambda_lift defs eliminated in
-  print_endline (show_annot_expr lifted);
+  print_endline (show_typed_expr lifted);
   if List.length globals == 0
   then print_endline ">>no globals<<"
-  else List.iter (fun x -> show_annot_expr x |> print_endline) globals;
+  else List.iter (fun x -> show_typed_expr x |> print_endline) globals;
   lifted, globals
 ;;
 
