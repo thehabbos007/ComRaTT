@@ -26,7 +26,7 @@ type expr =
   | FunDef of string * string list * expr
   | IfThenElse of expr * expr * expr
   | Delay of expr
-  | Advance of expr
+  | Advance of string
 [@@deriving show, eq]
 
 (* Pretty printing *)

@@ -68,6 +68,7 @@ let _constant_ret = ast_of_text "def main = let y = 42 in 42;"
 let _add1 = ast_of_text "def main = let y = 41 in y+1;"
 let _advanced = ast_of_text "def main = let x = 1 in let y = 42 in x+y;"
 let _shadow = ast_of_text "def main = let x = 1 in let x = 42 in x;"
+let _leq = ast_of_text "def main = let x = 5 < 2 in x;"
 
 (* TODO: this is not handled properly *)
 let _twofunctions =
@@ -99,7 +100,7 @@ let _closures =
 
    h w = 42
 *)
-let _frub = ast_of_text "def main = let y = 5 in let frub = fun x -> 10 + y in frub ();"
+let _frub = ast_of_text "def fib x = if x = 2 then 8 else fib (x + 1); def main = fib 2;"
 
 (*
    let () =

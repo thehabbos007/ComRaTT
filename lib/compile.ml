@@ -1,5 +1,5 @@
 open Source
-open Annotate
+open Infer
 open Preprocess
 
 (* Comparison operators are signed for now *)
@@ -22,7 +22,7 @@ let wasm_type_of_type ty =
   | TInt -> "i64"
   | TBool -> "i32"
   | TUnit -> "i32"
-  | TVar index -> failwith ("error: TVar found with index " ^ string_of_int index)
+  | TVar tv -> failwith ("error: TVar found with index " ^ string_of_type_var_kind tv)
   | TArrow (_t1, _t2) -> "arrow"
 ;;
 
@@ -47,11 +47,11 @@ let rec generate_local_vars vars =
 (* TODO: this is not entirely complete as the "_twofunctions" example that binds x, uses it and then rebinds it for new use, does not compile correctly *)
 let rec get_names_for_forward_declaration expr map =
   match expr with
-  | ALet (name, ty, _, body) ->
+  | TLet (name, ty, _, body) ->
     get_names_for_forward_declaration body (Environment.add name ty map)
-  | ALam _ -> failwith "no lambdas allowed"
-  | AFunDef _ -> failwith "no fundefs allowed"
-  | AConst _ | AVar _ | APrim _ | AApp _ | AIfThenElse _ -> map
+  | TLam _ -> failwith "no lambdas allowed"
+  | TFunDef _ -> failwith "no fundefs allowed"
+  | TConst _ | TName _ | TPrim _ | TApp _ | TIfThenElse _ -> map
 ;;
 
 let unfold_forward_decs decs =
@@ -64,16 +64,16 @@ let unfold_forward_decs decs =
 
 let rec comp expr =
   match expr with
-  | AVar (name, _) -> var_str name
+  | TName (name, _) -> var_str name
   (* type of ACstI is always int, discard for now *)
-  | AConst (CInt num, _) -> "(i64.const " ^ string_of_int num ^ ")"
-  | AConst (CBool b, _) -> "(i32.const " ^ if b then "1" else "0" ^ ")"
-  | AConst (CUnit, _) -> "(i32.const " ^ "-1)"
-  | APrim (op, e1, e2, ty) ->
+  | TConst (CInt num, _) -> "(i64.const " ^ string_of_int num ^ ")"
+  | TConst (CBool b, _) -> "(i32.const " ^ if b then "1" else "0" ^ ")"
+  | TConst (CUnit, _) -> "(i32.const " ^ "-1)"
+  | TPrim (op, e1, e2, ty) ->
     let e1_comp = comp e1 in
     let e2_comp = comp e2 in
     e1_comp ^ "\n" ^ e2_comp ^ "\n" ^ binop_to_wasm op ty
-  | AFunDef (name, args, body, ret_ty) ->
+  | TFunDef (name, args, body, ret_ty) ->
     let forward_dec =
       unfold_forward_decs (get_names_for_forward_declaration body Environment.empty)
     in
@@ -84,25 +84,25 @@ let rec comp expr =
       (wasm_type_of_type (EliminatePartialApp.final_type ret_ty))
       forward_dec
       (comp body)
-  | ALam _ -> failwith "lambda should have been lifted :("
-  | ALet (name, _ty, rhs, AVar (name', _ty')) when name = name' ->
+  | TLam _ -> failwith "lambda should have been lifted :("
+  | TLet (name, _ty, rhs, TName (name', _ty')) when name = name' ->
     let comp_rhs = comp rhs in
     Printf.sprintf "%s \n local.tee $%s" comp_rhs name
-  | ALet (name, _ty, rhs, body) ->
+  | TLet (name, _ty, rhs, body) ->
     let comp_rhs = comp rhs in
     let set_name_to_rhs = Printf.sprintf "%s (local.set $%s)" comp_rhs name in
     let comp_body = comp body in
     Printf.sprintf "%s\n %s" set_name_to_rhs comp_body
-  | AApp (func, args, _ty) ->
+  | TApp (func, args, _ty) ->
     (* Assume that calling a function is done with a valid function name *)
     (match func with
-     | AVar (name, _) ->
+     | TName (name, _) ->
        Printf.sprintf
          "%s\ncall $%s"
          (List.fold_left (fun acc arg -> acc ^ comp arg ^ "\n") "" args)
          name
      | _ -> failwith "attempted calling a function that was not a valid AVar")
-  | AIfThenElse (guard, _guard_typ, then_branch, else_branch, branch_type) ->
+  | TIfThenElse (guard, _guard_typ, then_branch, else_branch, branch_type) ->
     (* The result part of the if should be left out if void, but we do not support that *)
     Printf.sprintf
       "%s (if (result %s) (then %s) (else %s))"
@@ -115,7 +115,7 @@ let rec comp expr =
 let comp_global_defs (globals : Preprocess.global_def list) =
   List.fold_left
     (fun acc ({ name; fundef; ret_type; _ } : Preprocess.global_def) ->
-      acc ^ comp (ALet (name, ret_type, fundef, AConst (CInt 0, TInt))) ^ "\n")
+      acc ^ comp (TLet (name, ret_type, fundef, TConst (CInt 0, TInt))) ^ "\n")
     ""
     globals
 ;;
@@ -134,7 +134,7 @@ let add_mem_region name memsize =
   Printf.sprintf "\n(memory $%s %s)" name (string_of_int memsize)
 ;;
 
-let init_wat (annot_exprs : annot_expr list) (globals : Preprocess.global_def list) =
+let init_wat (annot_exprs : typed_expr list) (globals : Preprocess.global_def list) =
   Printf.sprintf
     "(module %s %s %s %s \n %s\n %s\n (export \"main\" (func $main)))"
     (add_mem_region "stable" 1)

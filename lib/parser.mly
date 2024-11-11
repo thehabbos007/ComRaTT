@@ -42,7 +42,7 @@ expr:
 
 app_expr:
   | DELAY e = simple_expr { Delay (e) }
-  | ADVANCE e = simple_expr { Advance (e) }
+  | ADVANCE x = IDENT { Advance (x) }
   | app_expr simple_expr { App ($1, $2) }
   | arith_expr { $1 }
 

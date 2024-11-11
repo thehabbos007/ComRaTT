@@ -36,14 +36,13 @@ let process_stdin () =
 let ( let* ) = Result.bind
 
 let print_global ({ name; fundef; _ } : Preprocess.global_def) =
-  Printf.fprintf stdout "%s = %s\n" name (Annotate.show_annot_expr fundef) |> ignore
+  Printf.fprintf stdout "%s = %s\n" name (Infer.show_typed_expr fundef) |> ignore
 ;;
 
 let ast_of_text text =
   (let lexbuf = Lexing.from_string text in
    let* processed = parse_and_print lexbuf in
-   let _, _, annotated = Annotate.annotate_all processed in
-   (* let lifted, globals = Preprocess.optimize annotated in*)
+   let annotated = Infer.infer_all processed in
    Result.ok annotated)
   |> Result.map_error (fun x ->
     print_endline x;
