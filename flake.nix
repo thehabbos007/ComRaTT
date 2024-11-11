@@ -3,12 +3,14 @@
     opam-nix.url = "github:tweag/opam-nix";
     flake-utils.url = "github:numtide/flake-utils";
     nixpkgs.follows = "opam-nix/nixpkgs";
+    unstable.url = "nixpkgs/nixos-unstable";
   };
   outputs = {
     self,
     flake-utils,
     opam-nix,
     nixpkgs,
+    unstable,
   } @ inputs:
   # Don't forget to put the package name instead of `throw':
   let
@@ -16,6 +18,7 @@
   in
     flake-utils.lib.eachDefaultSystem (system: let
       pkgs = nixpkgs.legacyPackages.${system};
+      upkgs = unstable.legacyPackages.${system};
       on = opam-nix.lib.${system};
       localPackagesQuery =
         builtins.mapAttrs (_: pkgs.lib.last)
@@ -70,10 +73,9 @@
           devPackages
           ++ [
             pkgs.wasmer
-	    pkgs.python311
-	    pkgs.wabt
-            # You can add packages from nixpkgs here
-	    pkgs.wabt
+            upkgs.wasmtime
+    	    pkgs.python311
+    	    pkgs.wabt
           ];
       };
     });
