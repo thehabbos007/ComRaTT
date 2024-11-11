@@ -285,10 +285,10 @@ let optimize defs expr =
   let expr = ConstantFold.constant_fold_expr expr in
   let eliminated = EliminatePartialApp.eliminate_partial expr in
   let lifted, globals = Lambda_lift.lambda_lift defs eliminated in
-  print_endline (show_typed_expr lifted);
-  if List.length globals == 0
-  then print_endline ">>no globals<<"
-  else List.iter (fun x -> show_typed_expr x |> print_endline) globals;
+  (* print_endline (show_typed_expr lifted);
+     if List.length globals == 0
+     then print_endline ">>no globals<<"
+     else List.iter (fun x -> show_typed_expr x |> print_endline) globals;*)
   lifted, globals
 ;;
 
