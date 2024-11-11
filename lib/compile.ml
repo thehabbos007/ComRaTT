@@ -171,7 +171,14 @@ let add_functions_to_table name_idx =
     ""
 ;;
 
-(* Ville det være federe bare at have alt informationen om funktioner i en stor bunke og så splitte det op her i stedet?*)
+(*
+   TODO: the tables name_idx and funtable are currently inconvenient to use
+   for e.g. "call_indirect" as that requires the wasm signature, which is not
+   kept atm.
+   Also: the values of arguments are not kept around (only name*type tuples), and they
+   are also going to be needed for call_indirect. We might be able to extract
+   that from the
+*)
 let init_wat
   (annot_exprs : typed_expr list)
   (globals : Preprocess.global_def list)
