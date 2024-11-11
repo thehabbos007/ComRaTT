@@ -1,7 +1,7 @@
-open Annotate
+open Infer
 
 type global_def =
-  { fundef : annot_expr
+  { fundef : typed_expr
   ; name : sym
   ; ret_type : typ
   }
@@ -17,42 +17,38 @@ open struct
   ;;
 
   let rec free_vars = function
-    | AConst _ -> []
-    | AVar (x, t) -> [ x, t ]
-    | AFunDef (name, params, body, _) ->
+    | TConst _ -> []
+    | TName (x, t) -> [ x, t ]
+    | TFunDef (name, params, body, _) ->
       let param_names = name :: List.map fst params in
       List.filter (fun (x, _) -> not (List.mem x param_names)) (free_vars body)
-    | ALam (params, body, _) ->
+    | TLam (params, body, _) ->
       let param_names = List.map fst params in
       List.filter (fun (x, _) -> not (List.mem x param_names)) (free_vars body)
-    | AApp (e1, e2, _) ->
+    | TApp (e1, e2, _) ->
       List.sort_uniq compare (free_vars e1 @ (List.map free_vars e2 |> List.concat))
-    | APrim (_, e1, e2, _) -> List.sort_uniq compare (free_vars e1 @ free_vars e2)
-    | ALet (x, t, e1, e2) ->
+    | TPrim (_, e1, e2, _) -> List.sort_uniq compare (free_vars e1 @ free_vars e2)
+    | TLet (x, t, e1, e2) ->
       let fv1 = free_vars e1 in
       let fv2 = List.filter (( <> ) (x, t)) (free_vars e2) in
       List.sort_uniq compare (fv1 @ fv2)
     | _ -> failwith "ifthenelse"
   ;;
 
-  let convert_params_to_arrow params ret_type =
-    List.fold_right (fun (_, t) acc -> TArrow (t, acc)) params ret_type
-  ;;
-
   let rec closure_convert expr =
     match expr with
-    | AFunDef (name, params, body, t) -> AFunDef (name, params, closure_convert body, t)
-    | ALam (params, body, t) ->
+    | TFunDef (name, params, body, t) -> TFunDef (name, params, closure_convert body, t)
+    | TLam (params, body, t) ->
       let free_vars = free_vars expr in
       let new_params = free_vars @ params in
       let converted_body = closure_convert body in
-      let lambda = ALam (new_params, converted_body, t) in
-      let substitute_type = convert_params_to_arrow params t in
-      AApp (lambda, List.map (fun (x, t) -> AVar (x, t)) free_vars, substitute_type)
-    | AApp (e1, e2, t) -> AApp (closure_convert e1, List.map closure_convert e2, t)
-    | APrim (op, e1, e2, t) -> APrim (op, closure_convert e1, closure_convert e2, t)
-    | ALet (x, t, e1, e2) -> ALet (x, t, closure_convert e1, closure_convert e2)
-    | AConst _ | AVar _ -> expr
+      let lambda = TLam (new_params, converted_body, t) in
+      let substitute_type = Infer.convert_params_to_arrow params t in
+      TApp (lambda, List.map (fun (x, t) -> TName (x, t)) free_vars, substitute_type)
+    | TApp (e1, e2, t) -> TApp (closure_convert e1, List.map closure_convert e2, t)
+    | TPrim (op, e1, e2, t) -> TPrim (op, closure_convert e1, closure_convert e2, t)
+    | TLet (x, t, e1, e2) -> TLet (x, t, closure_convert e1, closure_convert e2)
+    | TConst _ | TName _ -> expr
     | _ -> failwith "ifthenelse"
   ;;
 
@@ -60,18 +56,18 @@ open struct
     let definitions = ref [] in
     let rec lift expr =
       match expr with
-      | ALam (params, body, ret_type) ->
+      | TLam (params, body, ret_type) ->
         let lifted_body = lift body in
         let name = unique_name "global_lam" in
         definitions
-        := { name; fundef = AFunDef (name, params, lifted_body, ret_type); ret_type }
+        := { name; fundef = TFunDef (name, params, lifted_body, ret_type); ret_type }
            :: !definitions;
-        AVar (name, ret_type)
-      | AFunDef (name, params, body, t) -> AFunDef (name, params, lift body, t)
-      | AApp (e1, e2, t) -> AApp (lift e1, List.map lift e2, t)
-      | APrim (op, e1, e2, t) -> APrim (op, lift e1, lift e2, t)
-      | ALet (x, t, e1, e2) -> ALet (x, t, lift e1, lift e2)
-      | AConst _ | AVar _ -> expr
+        TName (name, ret_type)
+      | TFunDef (name, params, body, t) -> TFunDef (name, params, lift body, t)
+      | TApp (e1, e2, t) -> TApp (lift e1, List.map lift e2, t)
+      | TPrim (op, e1, e2, t) -> TPrim (op, lift e1, lift e2, t)
+      | TLet (x, t, e1, e2) -> TLet (x, t, lift e1, lift e2)
+      | TConst _ | TName _ -> expr
       | _ -> failwith "ifthenelse"
     in
     let lifted_expr = lift expr in
@@ -90,21 +86,21 @@ module ConstantFold = struct
   (* Fold constants into expression that can be eliminated *)
   let rec constant_fold_expr expr =
     match expr with
-    | AConst _ -> expr
-    | AVar _ -> expr
-    | APrim (Add, AConst (CInt n1, TInt), AConst (CInt n2, TInt), TInt) ->
-      AConst (CInt (n1 + n2), TInt)
-    | APrim (Sub, AConst (CInt n1, TInt), AConst (CInt n2, TInt), TInt) ->
-      AConst (CInt (n1 - n2), TInt)
-    | APrim (Mul, AConst (CInt n1, TInt), AConst (CInt n2, TInt), TInt) ->
-      AConst (CInt (n1 * n2), TInt)
-    | APrim (op, e1, e2, t) -> APrim (op, constant_fold_expr e1, constant_fold_expr e2, t)
-    | ALet (x, t, e1, e2) -> ALet (x, t, constant_fold_expr e1, constant_fold_expr e2)
-    | AApp (e1, e2, t) -> AApp (constant_fold_expr e1, List.map constant_fold_expr e2, t)
-    | AFunDef (name, args, body, t) -> AFunDef (name, args, constant_fold_expr body, t)
-    | ALam (params, body, t) -> ALam (params, constant_fold_expr body, t)
-    | AIfThenElse (guard, guard_typ, then_branch, else_branch, typ) ->
-      AIfThenElse
+    | TConst _ -> expr
+    | TName _ -> expr
+    | TPrim (Add, TConst (CInt n1, TInt), TConst (CInt n2, TInt), TInt) ->
+      TConst (CInt (n1 + n2), TInt)
+    | TPrim (Sub, TConst (CInt n1, TInt), TConst (CInt n2, TInt), TInt) ->
+      TConst (CInt (n1 - n2), TInt)
+    | TPrim (Mul, TConst (CInt n1, TInt), TConst (CInt n2, TInt), TInt) ->
+      TConst (CInt (n1 * n2), TInt)
+    | TPrim (op, e1, e2, t) -> TPrim (op, constant_fold_expr e1, constant_fold_expr e2, t)
+    | TLet (x, t, e1, e2) -> TLet (x, t, constant_fold_expr e1, constant_fold_expr e2)
+    | TApp (e1, e2, t) -> TApp (constant_fold_expr e1, List.map constant_fold_expr e2, t)
+    | TFunDef (name, args, body, t) -> TFunDef (name, args, constant_fold_expr body, t)
+    | TLam (params, body, t) -> TLam (params, constant_fold_expr body, t)
+    | TIfThenElse (guard, guard_typ, then_branch, else_branch, typ) ->
+      TIfThenElse
         ( constant_fold_expr guard
         , guard_typ
         , constant_fold_expr then_branch
@@ -135,15 +131,15 @@ module EliminatePartialApp = struct
   let rec substitute_binding bind_old bind_new aexpr =
     let subst = substitute_binding bind_old bind_new in
     match aexpr with
-    | AVar (binding, ty) when binding = bind_old -> AVar (bind_new, ty)
-    | APrim (op, e1, e2, ty) -> APrim (op, subst e1, subst e2, ty)
-    | ALam (args, body, ty) -> ALam (args, subst body, ty)
-    | AApp (func, args, ty) -> AApp (subst func, List.map subst args, ty)
-    | ALet (name, ty, rhs, body) when name <> bind_old ->
-      ALet (name, ty, subst rhs, subst body)
-    | AIfThenElse (guard, guard_typ, then_branch, else_branch, typ) ->
-      AIfThenElse (subst guard, guard_typ, subst then_branch, subst else_branch, typ)
-    | AConst _ | ALet _ | AVar _ | AFunDef _ -> aexpr
+    | TName (binding, ty) when binding = bind_old -> TName (bind_new, ty)
+    | TPrim (op, e1, e2, ty) -> TPrim (op, subst e1, subst e2, ty)
+    | TLam (args, body, ty) -> TLam (args, subst body, ty)
+    | TApp (func, args, ty) -> TApp (subst func, List.map subst args, ty)
+    | TLet (name, ty, rhs, body) when name <> bind_old ->
+      TLet (name, ty, subst rhs, subst body)
+    | TIfThenElse (guard, guard_typ, then_branch, else_branch, typ) ->
+      TIfThenElse (subst guard, guard_typ, subst then_branch, subst else_branch, typ)
+    | TConst _ | TLet _ | TName _ | TFunDef _ -> aexpr
   ;;
 
   let rec unpack_type ty =
@@ -174,42 +170,42 @@ module EliminatePartialApp = struct
     | [] -> [], []
     | typ :: types ->
       let name = unique_var_name "part_elim_lam" in
-      let var = AVar (name, typ) in
+      let var = TName (name, typ) in
       let lambda, app = generate_lambda_vars_and_app_vars_no_tail types in
       (name, typ) :: lambda, var :: app
   ;;
 
   let rec eliminate_partial aexpr =
     match aexpr with
-    | AConst _ -> aexpr
-    | AVar (_name, TArrow (_t1, _t2)) -> aexpr
-    | AVar _ -> aexpr
-    | APrim (op, e1, e2, ty) -> APrim (op, eliminate_partial e1, eliminate_partial e2, ty)
-    | AFunDef (name, args, body, ty) -> AFunDef (name, args, eliminate_partial body, ty)
-    | ALam (args, body, ty) -> ALam (args, eliminate_partial body, ty)
+    | TConst _ -> aexpr
+    | TName (_name, TArrow (_t1, _t2)) -> aexpr
+    | TName _ -> aexpr
+    | TPrim (op, e1, e2, ty) -> TPrim (op, eliminate_partial e1, eliminate_partial e2, ty)
+    | TFunDef (name, args, body, ty) -> TFunDef (name, args, eliminate_partial body, ty)
+    | TLam (args, body, ty) -> TLam (args, eliminate_partial body, ty)
     (* An application where the "body" is itself an application *)
-    | AApp (AApp (f', args', ty'), args, _) ->
+    | TApp (TApp (f', args', ty'), args, _) ->
       let combined_args = args' @ args in
-      let resulting_expr = AApp (f', combined_args, final_type ty') in
+      let resulting_expr = TApp (f', combined_args, final_type ty') in
       eliminate_partial resulting_expr
-    | AApp (func, args, ty) ->
+    | TApp (func, args, ty) ->
       let transformed_func = eliminate_partial func in
       let transformed_args = List.map eliminate_partial args in
-      AApp (transformed_func, transformed_args, ty)
-    | ALet (bind_old, _ty, AVar (bind_new, _), body) ->
+      TApp (transformed_func, transformed_args, ty)
+    | TLet (bind_old, _ty, TName (bind_new, _), body) ->
       substitute_binding bind_old bind_new body
     (* A let binding where the right hand side is a partial application *)
-    | ALet (name, ty, AApp (lam, args, (TArrow (_t1, _t2) as app_ty)), body) ->
+    | TLet (name, ty, TApp (lam, args, (TArrow (_t1, _t2) as app_ty)), body) ->
       let eta_args = unpack_type app_ty in
       let lambda_args, app_args = generate_lambda_vars_and_app_vars_no_tail eta_args in
       let new_lam =
-        ALam (lambda_args, AApp (lam, List.append args app_args, final_type app_ty), ty)
+        TLam (lambda_args, TApp (lam, List.append args app_args, final_type app_ty), ty)
       in
-      ALet (name, ty, new_lam, eliminate_partial body)
-    | ALet (name, ty, rhs, body) ->
-      ALet (name, ty, eliminate_partial rhs, eliminate_partial body)
-    | AIfThenElse (guard, guard_typ, then_branch, else_branch, typ) ->
-      AIfThenElse
+      TLet (name, ty, new_lam, eliminate_partial body)
+    | TLet (name, ty, rhs, body) ->
+      TLet (name, ty, eliminate_partial rhs, eliminate_partial body)
+    | TIfThenElse (guard, guard_typ, then_branch, else_branch, typ) ->
+      TIfThenElse
         ( eliminate_partial guard
         , guard_typ
         , eliminate_partial then_branch
@@ -222,7 +218,7 @@ let list_defs exprs =
   List.map
     (fun expr ->
       match expr with
-      | AFunDef (name, _, _, t) -> name, t
+      | TFunDef (name, _, _, t) -> name, t
       | _ -> failwith "Top level defs should be top level defs..")
     exprs
 ;;
@@ -231,8 +227,8 @@ let optimize defs expr =
   let expr = ConstantFold.constant_fold_expr expr in
   let eliminated = EliminatePartialApp.eliminate_partial expr in
   let lifted, globals = Lambda_lift.lambda_lift defs eliminated in
-  (* print_endline (show_annot_expr lifted);
-     List.iter (fun x -> show_annot_expr x |> print_endline) globals;*)
+  print_endline (show_typed_expr lifted);
+  List.iter (fun x -> show_typed_expr x |> print_endline) globals;
   lifted, globals
 ;;
 
