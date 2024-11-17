@@ -1,8 +1,7 @@
 open ComRaTTlib.Preprocess
 open ComRaTTlib.Ast_of_text
 open ComRaTTlib.Infer
-
-(* open ComRaTTlib.Compile*)
+open ComRaTTlib.Compile
 
 let _toplevel = ast_of_text "def add x y = x + y;"
 
@@ -111,7 +110,7 @@ let _frub = ast_of_text "def fib x = if x = 2 then 8 else fib (x + 1); def main 
    ;;
 *)
 
-let show_funtable table =
+let _show_funtable table =
   FunTable.iter
     (fun idx (args, typ) ->
       print_endline
@@ -132,12 +131,8 @@ let () =
     (fun annot_exprs ->
       let defs, lifted = optimize_program annot_exprs in
       let nidx, signature = generate_function_tables defs lifted in
-      print_endline "name to id table";
-      Environment.iter
-        (fun name value -> print_endline (name ^ ": " ^ string_of_int value))
-        nidx
-      |> ignore;
-      show_funtable signature)
+      let compiled = init_wat (defs @ lifted) [] nidx signature in
+      print_endline compiled)
     (* let compiled = init_wat (defs @ lifted) [] in
       print_endline compiled)*)
     (*
@@ -154,6 +149,7 @@ let () =
        (add x y) in  advance delayed;")*)
     (* (ast_of_text "def add x y = x+y; def main = let x = 40 in let y = 2 in add x y;")*)
     (* (ast_of_text "def add x y = x+y; def main = let x = 40 in let y = 2 in add x y;")*)
-    (ast_of_text "def main = let hanzo = fun x y -> x+y in hanzo 40 2;")
+    (* (ast_of_text "def main = let hanzo = fun x y -> x+y in hanzo 40 2;")*)
+    _twofunctions
   |> ignore
 ;;
