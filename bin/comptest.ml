@@ -71,7 +71,6 @@ let _advanced = ast_of_text "def main = let x = 1 in let y = 42 in x+y;"
 let _shadow = ast_of_text "def main = let x = 1 in let x = 42 in x;"
 let _leq = ast_of_text "def main = let x = 5 < 2 in x;"
 
-(* TODO: this is not handled properly *)
 let _twofunctions =
   ast_of_text "def main = let x = 1 in let y = x+1 in let x = 40 in x+y;"
 ;;
