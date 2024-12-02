@@ -87,7 +87,7 @@ let rec comp expr name_idx funtable =
   | TLam _ -> failwith "lambda should have been lifted :("
   | TLet (name, _ty, rhs, TName (name', _ty')) when name = name' ->
     let comp_rhs = comp rhs name_idx funtable in
-    Printf.sprintf "%s \n local.tee $%s" comp_rhs name
+    Printf.sprintf "%s \n (local.tee $%s)" comp_rhs name
   | TLet (name, _ty, rhs, body) ->
     let comp_rhs = comp rhs name_idx funtable in
     let set_name_to_rhs = Printf.sprintf "%s (local.set $%s)" comp_rhs name in
@@ -98,7 +98,7 @@ let rec comp expr name_idx funtable =
     (match func with
      | TName (name, _) ->
        Printf.sprintf
-         "%s\ncall $%s"
+         "%s\n(call $%s)"
          (List.fold_left (fun acc arg -> acc ^ comp arg name_idx funtable ^ "\n") "" args)
          name
      | _ -> failwith "attempted calling a function that was not a valid AVar")
