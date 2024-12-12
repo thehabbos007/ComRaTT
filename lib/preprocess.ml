@@ -118,6 +118,13 @@ let list_take n list =
   aux n [] list
 ;;
 
+let rec final_type ty =
+  match ty with
+  | TInt | TBool | TUnit | TVar _ -> ty
+  | TArrow (_, t2) -> final_type t2
+  | TList t -> final_type t
+;;
+
 module EliminatePartialApp = struct
   let var_name_counter = ref 0
 
@@ -150,13 +157,6 @@ module EliminatePartialApp = struct
     | TList t -> unpack_type t
   ;;
 
-  let rec final_type ty =
-    match ty with
-    | TInt | TBool | TUnit | TVar _ -> ty
-    | TArrow (_, t2) -> final_type t2
-    | TList t -> final_type t
-  ;;
-
   let generate_names types =
     let rec aux types' acc =
       match types' with
@@ -185,11 +185,6 @@ module EliminatePartialApp = struct
     | TPrim (op, e1, e2, ty) -> TPrim (op, eliminate_partial e1, eliminate_partial e2, ty)
     | TFunDef (name, args, body, ty) -> TFunDef (name, args, eliminate_partial body, ty)
     | TLam (args, body, ty) -> TLam (args, eliminate_partial body, ty)
-    (* An application where the "body" is itself an application *)
-    | TApp (TApp (f', args', ty'), args, _) ->
-      let combined_args = args' @ args in
-      let resulting_expr = TApp (f', combined_args, final_type ty') in
-      eliminate_partial resulting_expr
     | TApp (func, args, ty) ->
       let transformed_func = eliminate_partial func in
       let transformed_args = List.map eliminate_partial args in
@@ -285,10 +280,36 @@ module ForwardDeclataion = struct
   ;;
 end
 
+module EliminateConsecApp = struct
+  let rec eliminate_consec expr =
+    match expr with
+    | TConst _ -> expr
+    | TName _ -> expr
+    | TPrim (op, e1, e2, t) -> TPrim (op, eliminate_consec e1, eliminate_consec e2, t)
+    | TLet (x, t, e1, e2) -> TLet (x, t, eliminate_consec e1, eliminate_consec e2)
+    (* An application where the "body" is itself an application *)
+    | TApp (TApp (f', args', ty'), args, _) ->
+      let combined_args = args' @ args in
+      let resulting_expr = TApp (f', combined_args, final_type ty') in
+      eliminate_consec resulting_expr
+    | TApp (e1, e2, t) -> TApp (eliminate_consec e1, List.map eliminate_consec e2, t)
+    | TFunDef (name, args, body, t) -> TFunDef (name, args, eliminate_consec body, t)
+    | TLam (params, body, t) -> TLam (params, eliminate_consec body, t)
+    | TIfThenElse (guard, guard_typ, then_branch, else_branch, typ) ->
+      TIfThenElse
+        ( eliminate_consec guard
+        , guard_typ
+        , eliminate_consec then_branch
+        , eliminate_consec else_branch
+        , typ )
+  ;;
+end
+
 let optimize defs expr =
   let expr = ConstantFold.constant_fold_expr expr in
-  let eliminated = EliminatePartialApp.eliminate_partial expr in
-  let lifted, globals = Lambda_lift.lambda_lift defs eliminated in
+  let expr = EliminatePartialApp.eliminate_partial expr in
+  let expr = EliminateConsecApp.eliminate_consec expr in
+  let lifted, globals = Lambda_lift.lambda_lift defs expr in
   (* print_endline (show_typed_expr lifted);
      if List.length globals == 0
      then print_endline ">>no globals<<"

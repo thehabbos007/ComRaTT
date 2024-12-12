@@ -1,6 +1,6 @@
 open Source
 open Infer
-open Preprocess.EliminatePartialApp
+open Preprocess
 open Preprocess.ForwardDeclataion
 
 (* Comparison operators are signed for now *)
