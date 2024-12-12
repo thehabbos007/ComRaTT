@@ -1,6 +1,7 @@
 open Source
 open Infer
-open Preprocess
+open Preprocess.EliminatePartialApp
+open Preprocess.ForwardDeclataion
 
 (* Comparison operators are signed for now *)
 let binop_to_wasm op ty =
@@ -81,7 +82,7 @@ let rec comp expr name_idx funtable =
       "(func $%s %s (result %s)\n %s \n %s \n)"
       name
       (args_to_str args)
-      (wasm_type_of_type (EliminatePartialApp.final_type ret_ty))
+      (wasm_type_of_type (final_type ret_ty))
       forward_dec
       (comp body name_idx funtable)
   | TLam _ -> failwith "lambda should have been lifted :("
@@ -153,7 +154,7 @@ let generate_signature idx args typ =
     "(type $gentypesig%s (func%s(result %s)))\n"
     (string_of_int idx)
     (generate_arg_string args)
-    (wasm_type_of_type (EliminatePartialApp.final_type typ))
+    (wasm_type_of_type (final_type typ))
 ;;
 
 let forward_declare_funtion_signatures signatures =

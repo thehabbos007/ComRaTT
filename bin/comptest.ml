@@ -1,4 +1,5 @@
 open ComRaTTlib.Preprocess
+open ComRaTTlib.Preprocess.ForwardDeclataion
 open ComRaTTlib.Ast_of_text
 open ComRaTTlib.Infer
 open ComRaTTlib.Compile

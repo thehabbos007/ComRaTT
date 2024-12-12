@@ -225,63 +225,65 @@ let list_defs exprs =
     exprs
 ;;
 
-(* let expr_to_funtable expr table =
-   match expr with
-   | AFunDef (name, args, body, typ) -> failwith ""
-   | AConst _ | AVar _ | ALam _ | AApp _ | APrim _ | ALet _ | AIfThenElse _ -> table
-   ;;
-*)
-(*
-   Hvis noget er en funktion, så skal vi lagre dens navn sammen med index.
-   Hvis noget er en app med et funktionsnavn, skal vi erstatte med noget der
-   angiver funktionens index. Right?
-*)
-(* let expr_to_name_idx_table expr table counter =
-   match expr with
-   | AFunDef (name, args, body, typ) -> (, counter+1)
-   | AConst _ | AVar _ | ALam _ | AApp _ | APrim _ | ALet _ | AIfThenElse _ -> (table, counter)
+module ForwardDeclataion = struct
+  module FunTable = Map.Make (struct
+      type t = int
 
-   let generate_function_table lifted globals =
-   (* let lifted' = List.fold_left (fun acc expr -> expr_to_funtable expr acc) [] lifted in
-   List.fold_left (fun acc expr -> expr_to_funtable expr acc) lifted' globals*)
-   let global_name_idx = List.fold_left (fun (name_table, counter, final_table) expr -> ) (Int Environment, 0, []) globals in 42
-   ;;*)
+      let compare = compare
+    end)
 
-module FunTable = Map.Make (struct
-    type t = int
+  (* let expr_to_funtable expr table =
+     match expr with
+     | AFunDef (name, args, body, typ) -> failwith ""
+     | AConst _ | AVar _ | ALam _ | AApp _ | APrim _ | ALet _ | AIfThenElse _ -> table
+     ;;
+  *)
+  (*
+     Hvis noget er en funktion, så skal vi lagre dens navn sammen med index.
+     Hvis noget er en app med et funktionsnavn, skal vi erstatte med noget der
+     angiver funktionens index. Right?
+  *)
+  (* let expr_to_name_idx_table expr table counter =
+     match expr with
+     | AFunDef (name, args, body, typ) -> (, counter+1)
+     | AConst _ | AVar _ | ALam _ | AApp _ | APrim _ | ALet _ | AIfThenElse _ -> (table, counter)
 
-    let compare = compare
-  end)
+     let generate_function_table lifted globals =
+     (* let lifted' = List.fold_left (fun acc expr -> expr_to_funtable expr acc) [] lifted in
+     List.fold_left (fun acc expr -> expr_to_funtable expr acc) lifted' globals*)
+     let global_name_idx = List.fold_left (fun (name_table, counter, final_table) expr -> ) (Int Environment, 0, []) globals in 42
+     ;;*)
 
-(*
-   Hvis noget er en funktion, så skal vi lagre i tabellerne.
-   Hvis noget er en app (app foregår altid med funktionsnavn), så skal vi ikke gøre noget vel?
-   det er jo først på compile-tid at vi vil lave erstatningerne? eller er det egentlig ligegyldigt?
-*)
-let expr_to_tables expr name_idx idx_args_signature counter =
-  match expr with
-  | TFunDef (name, args, _, typ) ->
-    ( Environment.add name counter name_idx
-    , FunTable.add counter (args, typ) idx_args_signature
-    , counter + 1 )
-  | TConst _ | TName _ | TLam _ | TApp _ | TPrim _ | TLet _ | TIfThenElse _ ->
-    name_idx, idx_args_signature, counter
-;;
+  (*
+     Hvis noget er en funktion, så skal vi lagre i tabellerne.
+     Hvis noget er en app (app foregår altid med funktionsnavn), så skal vi ikke gøre noget vel?
+     det er jo først på compile-tid at vi vil lave erstatningerne? eller er det egentlig ligegyldigt?
+  *)
+  let expr_to_tables expr name_idx idx_args_signature counter =
+    match expr with
+    | TFunDef (name, args, _, typ) ->
+      ( Environment.add name counter name_idx
+      , FunTable.add counter (args, typ) idx_args_signature
+      , counter + 1 )
+    | TConst _ | TName _ | TLam _ | TApp _ | TPrim _ | TLet _ | TIfThenElse _ ->
+      name_idx, idx_args_signature, counter
+  ;;
 
-let generate_function_tables lifted globals =
-  let name_idx = Environment.empty in
-  let idx_args_signature = FunTable.empty in
-  let nidx, sigtable, _ =
-    List.fold_left
-      (fun (nid, res, counter) expr -> expr_to_tables expr nid res counter)
-      (List.fold_left
-         (fun (nid, res, counter) expr -> expr_to_tables expr nid res counter)
-         (name_idx, idx_args_signature, 0)
-         globals)
-      lifted
-  in
-  nidx, sigtable
-;;
+  let generate_function_tables lifted globals =
+    let name_idx = Environment.empty in
+    let idx_args_signature = FunTable.empty in
+    let nidx, sigtable, _ =
+      List.fold_left
+        (fun (nid, res, counter) expr -> expr_to_tables expr nid res counter)
+        (List.fold_left
+           (fun (nid, res, counter) expr -> expr_to_tables expr nid res counter)
+           (name_idx, idx_args_signature, 0)
+           globals)
+        lifted
+    in
+    nidx, sigtable
+  ;;
+end
 
 let optimize defs expr =
   let expr = ConstantFold.constant_fold_expr expr in
