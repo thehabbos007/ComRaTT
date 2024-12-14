@@ -24,7 +24,7 @@ let wasm_type_of_type ty =
   | TBool -> "i32"
   | TUnit -> "i32"
   | TVar tv -> failwith ("error: TVar found with index " ^ string_of_type_var_kind tv)
-  | TArrow (_t1, _t2) -> "arrow"
+  | TArrow (_t1, _t2) -> failwith "arrow type"
   | TList _ -> failwith "TODO: wasm type of list"
 ;;
 
