@@ -43,7 +43,6 @@
           ppx_deriving = "*";
           ounit2 = "*";
           menhir = "*";
-          monads = "*";
           base = "*";
         };
       scope = on.buildDuneProject {} "ComRaTT" ./. query;

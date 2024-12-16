@@ -21,7 +21,7 @@
  (name ComRaTT)
  (synopsis "A compiled Async RaTT implementation")
  (description "A longer description")
- (depends ocaml dune ppx_deriving ounit2 menhir monads base)
+ (depends ocaml dune ppx_deriving ounit2 menhir base)
  (tags
   (topics "to describe" your project)))
 
