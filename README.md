@@ -4,6 +4,7 @@ If you use nix, `nix develop` or nix-direnv is enough to install all dependencie
 
 ## Docker
 `docker build -t comratt .`
+
 `docker run --rm comratt /bin/bash -c "./run_ratt.sh 1 < examples/is_prime.cml"` (replace examples according to the instructions below)
 
 It is also possible to just `docker run -it comratt` directly and then interact with the container manually.
