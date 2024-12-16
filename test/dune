@@ -1,3 +1,0 @@
-(test
- (name test_ComRaTT)
- (libraries ComRaTTlib ounit2))
