@@ -29,6 +29,7 @@ let rec interp (x : typed_expr) env =
        (match op with
         | Add -> VInt (x + y)
         | Mul -> VInt (x * y)
+        | Div -> VInt (x / y)
         | Sub -> VInt (x - y)
         | Eq -> VBool (x = y)
         | Lt -> VBool (x < y)

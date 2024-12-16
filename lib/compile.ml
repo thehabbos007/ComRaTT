@@ -9,6 +9,7 @@ let binop_to_wasm op ty =
   | Add, TInt -> "(i64.add)"
   | Sub, TInt -> "(i64.sub)"
   | Mul, TInt -> "(i64.mul)"
+  | Div, TInt -> "(i64.div_s)"
   | Eq, TBool -> "(i64.eq)"
   | Lt, TBool -> "(i64.lt_s)"
   | Lte, TBool -> "(i64.le_s)"
@@ -50,9 +51,15 @@ let rec get_names_for_forward_declaration expr map =
   match expr with
   | TLet (name, ty, _, body) ->
     get_names_for_forward_declaration body (Environment.add name ty map)
+  | TIfThenElse (b, _, e1, e2, _) ->
+    get_names_for_forward_declaration
+      b
+      (get_names_for_forward_declaration e1 (get_names_for_forward_declaration e2 map))
+  | TPrim (_, e1, e2, _) ->
+    get_names_for_forward_declaration e1 (get_names_for_forward_declaration e2 map)
   | TLam _ -> failwith "no lambdas allowed"
   | TFunDef _ -> failwith "no fundefs allowed"
-  | TConst _ | TName _ | TPrim _ | TApp _ | TIfThenElse _ -> map
+  | TConst _ | TName _ | TApp _ -> map
 ;;
 
 let unfold_forward_decs decs =
@@ -67,7 +74,7 @@ let rec comp expr name_idx funtable =
   match expr with
   | TName (name, _) -> var_str name
   | TConst (CInt num, _) -> "(i64.const " ^ string_of_int num ^ ")"
-  | TConst (CBool b, _) -> "(i32.const " ^ if b then "1" else "0" ^ ")"
+  | TConst (CBool b, _) -> "(i32.const " ^ (if b then "1" else "0") ^ ")"
   | TConst (CUnit, _) -> "(i32.const " ^ "-1)"
   | TConst (CNil, _) -> failwith "TODO: compilation of NIL"
   | TPrim (op, e1, e2, ty) ->

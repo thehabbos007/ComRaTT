@@ -226,7 +226,7 @@ let rec typ (level : int) (env : tenv) (e : expr) : typed_expr * typ =
     let e2, t2 = typ level env e2 in
     let typ =
       match op with
-      | Mul | Add | Sub ->
+      | Mul | Add | Sub | Div ->
         unify TInt t2;
         unify t1 t2;
         TInt

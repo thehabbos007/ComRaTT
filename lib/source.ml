@@ -1,6 +1,7 @@
 type binop =
   | Add
   | Mul
+  | Div
   | Sub
   | Eq
   | Lt
@@ -36,6 +37,7 @@ type expr =
 let string_of_binop = function
   | Add -> "+"
   | Mul -> "*"
+  | Div -> "/"
   | Sub -> "-"
   | Eq -> "="
   | Lt -> "<"

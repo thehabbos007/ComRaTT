@@ -5,7 +5,7 @@ open Source
 %token <int> INT
 %token <string> IDENT
 %token LAMBDA IN LET DEF SARROW SEMI IF THEN ELSE ADVANCE DELAY
-%token PLUS TIMES MINUS TRUE FALSE UNIT
+%token PLUS TIMES MINUS DIV TRUE FALSE UNIT
 %token LT LTE GT GTE NEQ
 %token LPAREN RPAREN
 %token EQUALS
@@ -16,7 +16,7 @@ open Source
 %left LT LTE GT GTE NEQ
 %left PLUS MINUS
 %left EQUALS
-%left TIMES
+%left TIMES DIV
 
 %%
 
@@ -65,6 +65,7 @@ bool:
 %inline binop:
   | PLUS { Add }
   | TIMES { Mul }
+  | DIV { Div }
   | MINUS { Sub }
 
 %inline compare:

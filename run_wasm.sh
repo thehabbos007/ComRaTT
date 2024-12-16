@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Usage:   ./run.sh <args> < [wasm-file]
-# or pipe: dune exec -- comptest | ./run_wasm.sh
+# Usage:   ./run_wasm.sh <args> < [wasm-file]
+# or pipe: dune exec -- comptest | ./run_wasm.sh <args>
 
-wasmtime run -W tail-call=y,multi-memory=y,all-proposals=y --invoke main - $@
+wasmtime run -W tail-call=y,multi-memory=y --invoke main - $@

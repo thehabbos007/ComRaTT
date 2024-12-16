@@ -25,6 +25,7 @@ rule token = parse
   | "advance" { ADVANCE }
   | "()"     { UNIT }
   | "+"      { PLUS }
+  | "/"      { DIV }
   | "*"      { TIMES }
   | "-"      { MINUS }
   | "("      { LPAREN }
