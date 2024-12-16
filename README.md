@@ -1,6 +1,13 @@
 # Dependencies
+## With Nix
 If you use nix, `nix develop` or nix-direnv is enough to install all dependencies.
 
+## Docker
+`docker build -t comratt .`
+`docker run --rm comratt /bin/bash -c "./run_ratt.sh 1 < examples/is_prime.cml"` (replace examples according to the instructions below)
+
+
+## Bare metal
 Otherwise you need
 - OCaml (tested with version 5.1.1~rc1)
 - opam
