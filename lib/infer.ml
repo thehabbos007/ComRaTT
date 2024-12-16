@@ -288,9 +288,9 @@ let rec typ (level : int) (env : tenv) (e : expr) : typed_expr * typ =
     let ret_typ = TArrow (TUnit, t) in
     TLam ([ "#advance_unit", TUnit ], e, ret_typ), ret_typ
   | Advance name ->
-    let typ = specialize level (List.assoc name env) in
-    let ret_typ = TArrow (TUnit, typ) in
-    TApp (TName (name, typ), [ TConst (CUnit, TUnit) ], ret_typ), typ
+    let delayed_typ = specialize level (List.assoc name env) in
+    let ret_type = pop_n_tarrow 1 delayed_typ in
+    TApp (TName (name, delayed_typ), [ TConst (CUnit, TUnit) ], ret_type), ret_type
 ;;
 
 let reset_tv_counter () = next_type_var := 0

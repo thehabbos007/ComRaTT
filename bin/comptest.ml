@@ -85,7 +85,8 @@ let _delay_adv =
 ;;
 
 let _closures =
-  ast_of_text "def main = let y = 5 in let x = fun x z -> x + y + z in x 5 7;"
+  ast_of_text
+    "def add x y = x + y; def main = let x = 4 in let b = delay (add x 3) in advance b;"
 ;;
 
 (*

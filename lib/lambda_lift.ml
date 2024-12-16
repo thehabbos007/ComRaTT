@@ -57,38 +57,6 @@ let push_ts_tarrow typs tarrow =
   List.fold_right (fun x acc -> TArrow (x, acc)) typs tarrow
 ;;
 
-(* Helper to count number of arguments expected by a type *)
-let rec count_arrows = function
-  | TArrow (_, ret) -> 1 + count_arrows ret
-  | _ -> 0
-;;
-
-(* Helper to create a fully applied function call *)
-let make_full_app f args ret_type = TApp (f, args, ret_type)
-
-(* Create a wrapper function that ensures full application *)
-let create_full_app_wrapper name args body typ =
-  let expected_args = count_arrows typ in
-  if List.length args = expected_args
-  then TFunDef (name, args, body, typ)
-  else (
-    let missing = expected_args - List.length args in
-    let new_args =
-      List.init missing (fun i ->
-        let arg_name = Printf.sprintf "arg_%d" i in
-        arg_name, TInt
-        (* Replace with proper type inference *))
-    in
-    let full_args = args @ new_args in
-    let new_body =
-      make_full_app
-        (TName (name, typ))
-        (List.map (fun (x, t) -> TName (x, t)) full_args)
-        (pop_n_tarrow expected_args typ)
-    in
-    TFunDef (name ^ "_full", full_args, new_body, typ))
-;;
-
 let rec lift (defs : (sym * typ) list) expr =
   match expr with
   | TConst _ | TName _ -> expr, [], None
