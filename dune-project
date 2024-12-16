@@ -7,9 +7,15 @@
 (source
  (github username/reponame))
 
-(authors "Author Name")
+(authors 
+  "Ahmad Sattar Atta"
+  "Marcus Sebastian Emil Homgaard"
+)
 
-(maintainers "Maintainer Name")
+(maintainers
+  "Ahmad Sattar Atta"
+  "Marcus Sebastian Emil Homgaard"
+)
 
 (license LICENSE)
 
@@ -19,7 +25,7 @@
 
 (package
  (name ComRaTT)
- (synopsis "A compiled Async RaTT implementation")
+ (synopsis "A preliminary compiled Async RaTT implementation")
  (description "A longer description")
  (depends ocaml dune ppx_deriving ounit2 menhir base)
  (tags
