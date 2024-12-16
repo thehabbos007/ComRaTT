@@ -3,11 +3,12 @@
 If you use nix, `nix develop` or nix-direnv is enough to install all dependencies.
 
 ## Docker
+
+The provided Dockerfile creates an image with everything in place.
+
+Build the image with
+
 `docker build -t comratt .`
-
-`docker run --rm comratt /bin/bash -c "./run_ratt.sh 1 < examples/is_prime.cml"` (replace examples according to the instructions below)
-
-It is also possible to just `docker run -it comratt` directly and then interact with the container manually.
 
 ## Bare metal
 Otherwise you need
@@ -34,3 +35,12 @@ $ ./run_ratt.sh < examples/frp.cml
 This should compile the ComRaTT snippets to WAT and pipe the WAT code into wasmtime.
 Any arguments passed into the shell script is passed directly as parameters to the exported `main` functions
 of the ComRaTT programs.
+
+## With Docker
+Use the following command to execute examples in the container directly from your host shell.
+
+`docker run --rm comratt /bin/bash -c "./run_ratt.sh 1 < examples/is_prime.cml"` 
+
+Replace examples and arguments according to the instructions above.
+
+It is also possible to use `docker run -it comratt` to enter the containers shell and interact with it manually.
