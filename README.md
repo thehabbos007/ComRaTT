@@ -29,6 +29,8 @@ $ ./run_ratt.sh 1 < examples/is_prime.cml
 $ ./run_ratt.sh 3 < examples/collatz.cml
 $ ./run_ratt.sh 3 < examples/factorial.cml
 $ ./run_ratt.sh 7 < examples/fib.cml
+# Returns number of steps to find x in 0..100
+$ ./run_ratt.sh 51 < examples/bin_search.cml
 $ ./run_ratt.sh < examples/frp.cml
 ```
 
