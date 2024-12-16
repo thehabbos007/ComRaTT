@@ -1,0 +1,14 @@
+def is_even n =
+  (n - ((n / 2) * 2)) = 0;
+
+def collatz_next n =
+  if (is_even n)
+  then (n / 2)
+  else ((3 * n) + 1);
+
+def collatz_steps n =
+  if n <= 1
+  then 0
+  else 1 + (collatz_steps (collatz_next n));
+
+def main x = collatz_steps x;

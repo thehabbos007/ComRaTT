@@ -1,0 +1,5 @@
+def add x y = x + y;
+def main =
+  let x = 4 in
+  let b = delay (add x 3) in
+  advance b;

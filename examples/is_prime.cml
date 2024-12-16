@@ -1,0 +1,17 @@
+def mod_op n m =
+  n - ((n / m) * m);
+
+def check_prime_helper n divisor =
+  if (divisor * divisor > n)
+  then true
+  else
+    (if ((mod_op n divisor) = 0)
+     then false
+     else (check_prime_helper n (divisor + 1)));
+
+def is_prime n =
+  if (n <= 1)
+  then false
+  else (check_prime_helper n 2);
+
+def main x = is_prime x;
