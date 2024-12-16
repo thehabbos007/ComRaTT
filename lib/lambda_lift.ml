@@ -117,23 +117,7 @@ let rec lift (defs : (sym * typ) list) expr =
     , None )
 ;;
 
-let rec flatten_apps expr =
-  match expr with
-  | TConst _ | TName _ -> expr
-  | TLam (args, body, t) -> TLam (args, flatten_apps body, t)
-  | TFunDef (name, args, body, typ) -> TFunDef (name, args, flatten_apps body, typ)
-  | TApp (TApp (any, args, _), args', typ') ->
-    TApp (flatten_apps any, List.map flatten_apps args @ List.map flatten_apps args', typ')
-  | TApp (f, args, typ) -> TApp (flatten_apps f, List.map flatten_apps args, typ)
-  | TPrim (op, e1, e2, typ) -> TPrim (op, flatten_apps e1, flatten_apps e2, typ)
-  | TLet (x, t, e1, e2) -> TLet (x, t, flatten_apps e1, flatten_apps e2)
-  | TIfThenElse (cond, t1, e1, e2, t2) ->
-    TIfThenElse (flatten_apps cond, t1, flatten_apps e1, flatten_apps e2, t2)
-;;
-
 let lambda_lift defs expr =
   let lifted, globals, _ = lift defs expr in
-  let lifted = flatten_apps lifted in
-  let globals = List.map flatten_apps globals in
   lifted, globals
 ;;

@@ -233,8 +233,9 @@ end
 let optimize defs expr =
   let expr = ConstantFold.constant_fold_expr expr in
   let expr = EliminatePartialApp.eliminate_partial expr in
-  let expr = EliminateConsecApp.eliminate_consec expr in
   let lifted, globals = Lambda_lift.lambda_lift defs expr in
+  let lifted = EliminateConsecApp.eliminate_consec lifted in
+  let globals = List.map EliminateConsecApp.eliminate_consec globals in
   (* print_endline (show_typed_expr lifted);
      if List.length globals == 0
      then print_endline ">>no globals<<"

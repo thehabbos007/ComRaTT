@@ -151,6 +151,6 @@ let () =
     (* (ast_of_text "def add x y = x+y; def main = let x = 40 in let y = 2 in add x y;")*)
     (* (ast_of_text "def add x y = x+y; def main = let x = 40 in let y = 2 in add x y;")*)
     (* (ast_of_text "def main = let hanzo = fun x y -> x+y in hanzo 40 2;")*)
-    _twofunctions
+    _closures
   |> ignore
 ;;
