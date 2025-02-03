@@ -7,7 +7,7 @@
 (source
  (github username/reponame))
 
-(authors 
+(authors
   "Ahmad Sattar Atta"
   "Marcus Sebastian Emil Homgaard"
 )
@@ -27,7 +27,7 @@
  (name ComRaTT)
  (synopsis "A preliminary compiled Async RaTT implementation")
  (description "A longer description")
- (depends ocaml dune ppx_deriving ounit2 menhir base)
+ (depends ocaml dune ppx_inline_test ppx_deriving ounit2 menhir base)
  (tags
   (topics "to describe" your project)))
 
