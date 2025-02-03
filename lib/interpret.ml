@@ -74,5 +74,6 @@ let rec interp (x : typed_expr) env =
   | _ -> failwith "Oops, unhandled or invalid annot_expr in interp"
 ;;
 
-let%test_unit "bois" =
-  [%test_eq: (int list)] (List.rev [1;2;3]) [3;2;1]
+open Base
+
+let%test_unit "bois" = [%test_eq: int list] (List.rev [ 1; 2; 3 ]) [ 3; 2; 1 ]
