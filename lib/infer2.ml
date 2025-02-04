@@ -95,6 +95,12 @@ let rec tarrow_len_n_rec counter ty types n =
   | _ -> counter, ty, List.rev types
 ;;
 
+let rec build_lambda_type args ret_ty =
+  match args with
+  | [] -> ret_ty
+  | ty :: tys -> TArrow (ty, build_lambda_type tys ret_ty)
+;;
+
 let tarrow_len_n ty n =
   match ty with
   | TArrow _ when n = 0 -> 0, ty, []
@@ -215,6 +221,7 @@ and check ctx expr ty =
   unify length of tarrow with length of args
   add args to ctx
   check return type of tarrow against body
+  if that goes well, build the type of the lambda from the arguments and the return.
   TODO: support nested lambdas? (the len <> List.len args check. could we do like with fundef instead?)
   *)
   | Lam (args, body), TArrow _ ->
@@ -223,7 +230,9 @@ and check ctx expr ty =
     then None (* Error: lambda args too few/too many *)
     else (
       let ctx_addition = List.combine args types in
-      check (ctx_addition @ ctx) body ret_ty)
+      match check (ctx_addition @ ctx) body ret_ty with
+      | Some _ -> Some (build_lambda_type types ret_ty)
+      | None -> None)
   | Lam _, _ -> None (* Error: lambda type mismatch *)
   | expr, _ ->
     (match infer ctx expr with
@@ -243,6 +252,94 @@ and check ctx expr ty =
 
   Also, the failure strings used in assert_bool with true constant are redundant.
 *)
+
+let%test_unit "build_lambda_type returns correct type" =
+  let expected_type = TArrow (TInt, TArrow (TBool, TBool)) in
+  let arg_types = [ TInt; TBool ] in
+  let ret_ty = TBool in
+  let actual_type = build_lambda_type arg_types ret_ty in
+  OUnit2.assert_equal expected_type actual_type
+;;
+
+let%test_unit "Valid function with shadowing should type check correctly" =
+  let fn_type = TArrow (TInt, TInt) in
+  let fn_args = [ "x" ] in
+  let fn_body = Let ("x", Const (CInt 40), Prim (Add, Var "x", Const (CInt 2))) in
+  let fn =
+    FunDef { annotation = fn_type; name = "test"; args = fn_args; body = fn_body }
+  in
+  match check [] fn fn_type with
+  | Some ty -> OUnit2.assert_equal ~printer:show_typ fn_type ty
+  | None -> OUnit2.assert_bool "Failed to check valid function with shadowing" false
+;;
+
+let%test_unit
+    "Valid function with shadowing where types change should type check correctly"
+  =
+  let fn_type = TArrow (TInt, TBool) in
+  let fn_args = [ "x" ] in
+  let fn_body = Let ("x", Const (CBool true), Var "x") in
+  let fn =
+    FunDef { annotation = fn_type; name = "test"; args = fn_args; body = fn_body }
+  in
+  match check [] fn fn_type with
+  | Some ty -> OUnit2.assert_equal ~printer:show_typ fn_type ty
+  | None ->
+    OUnit2.assert_bool
+      "Failed to check valid function with shadowing where types change"
+      false
+;;
+
+let%test_unit "Complex, valid function should type check correctly" =
+  let fn_type = TArrow (TInt, TInt) in
+  let fn_args = [ "x" ] in
+  let fn_body =
+    IfThenElse
+      ( Prim (Eq, Var "x", Const (CInt 2))
+      , Let ("del", Delay (Prim (Mul, Var "x", Const (CInt 2))), Advance "del")
+      , Prim (Add, Var "x", Const (CInt 40)) )
+  in
+  let fn =
+    FunDef { annotation = fn_type; name = "test"; args = fn_args; body = fn_body }
+  in
+  match check [] fn fn_type with
+  | Some ty -> OUnit2.assert_equal ~printer:show_typ fn_type ty
+  | None -> OUnit2.assert_bool "Failed to check complex, valid function" false
+;;
+
+let%test_unit "Checking a lambda against non-TArrow type should fail" =
+  let lam = Lam ([ "x" ], Const (CInt 2)) in
+  match check [] lam TInt with
+  | Some _ ->
+    OUnit2.assert_bool
+      "Should have failed to check type of lambda against non-TArrow"
+      false
+  | None ->
+    OUnit2.assert_bool "Correctly failed to check type of lambda against non-TArrow" true
+;;
+
+let%test_unit "Checking a valid lambda should not fail" =
+  let lam = Lam ([ "x" ], Prim (Add, Var "x", Const (CInt 2))) in
+  match check [] lam (TArrow (TInt, TInt)) with
+  | Some ty -> OUnit2.assert_equal ~printer:show_typ (TArrow (TInt, TInt)) ty
+  | None -> OUnit2.assert_bool "Failed to check valid lambda" false
+;;
+
+let%test_unit "Invalid application should fail type checking" =
+  let app = App (Var "f", Const (CBool true)) in
+  match infer [ "f", TArrow (TInt, TInt) ] app with
+  | Some _ ->
+    OUnit2.assert_bool "Should have failed to infer type of invalid application" false
+  | None ->
+    OUnit2.assert_bool "Correctly failed to infer type of invalid application" true
+;;
+
+let%test_unit "Valid application should type check correctly" =
+  let app = App (Var "f", Const (CInt 2)) in
+  match infer [ "f", TArrow (TInt, TInt) ] app with
+  | Some ty -> OUnit2.assert_equal ~printer:show_typ TInt ty
+  | None -> OUnit2.assert_bool "Failed to check valid application" false
+;;
 
 let%test_unit "Infer Delay should produce a thunk" =
   let delayed = Delay (Const (CInt 2)) in
