@@ -14,6 +14,7 @@
         in
         pkgs.mkShell {
           buildInputs = [
+	    pkgs.wasmtime
             pkgs.ocaml
             pkgs.ocamlPackages.findlib
             pkgs.dune_3
