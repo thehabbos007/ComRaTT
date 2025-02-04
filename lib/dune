@@ -5,6 +5,7 @@
 
 (library
  (name ComRaTTlib)
+ (libraries ounit2)
  (preprocess
   (pps ppx_inline_test ppx_assert ppx_deriving.show ppx_deriving.eq ppx_deriving.ord))
   (inline_tests)
