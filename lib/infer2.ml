@@ -169,8 +169,8 @@ let%test_unit "tarrow_len_n given non TArrow type raises Failure" =
 let%test_unit
     "tarrow_len_n given TArrow type and n larger than amount of arguments raises Failure"
   =
-  OUnit2.assert_raises (Failure "Attempted to traverse a non-tarrow type") (fun () ->
-    tarrow_len_n (TArrow (TInt, TArrow (TInt, TBool))) 1)
+  OUnit2.assert_raises (Failure "Too many arguments for function") (fun () ->
+    tarrow_len_n (TArrow (TInt, TArrow (TInt, TBool))) 3)
 ;;
 
 let%test_unit "tarrow_len_n given TArrow and n=0 returns type unmodified" =
