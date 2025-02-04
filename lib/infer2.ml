@@ -9,7 +9,6 @@ type binop =
   | Gt
   | Gte
   | Neq
-  | Cons
 [@@deriving show, eq]
 
 type const =
@@ -105,6 +104,48 @@ let tarrow_len_n ty n =
 
 let rec infer ctx expr =
   match expr with
+  | Prim (op, e1, e2) ->
+    (match op with
+     (*
+        For arith operators we want to check both sides against int (which defaults to infer).
+        Given two Somes, everything is good and TInt is the result.
+     *)
+     | Add | Mul | Div | Sub ->
+       (match check ctx e1 TInt, check ctx e2 TInt with
+        | Some _, Some _ -> Some TInt
+        | _ -> None)
+     (*
+        For non eq comparison operators we want to check both sides against int (which defaults to infer).
+        Given two Somes, everything is good and TBool is the result.
+     *)
+     | Lt | Lte | Gt | Gte ->
+       (match check ctx e1 TInt, check ctx e2 TInt with
+        | Some _, Some _ -> Some TBool
+        | _ -> None)
+     (*
+        For eq and neq there are two valid cases: both operands are TInt or both are TBool.
+        In either case, the result is TBool.
+        For that reason, we infer directly and check equality.
+     *)
+     | Eq | Neq ->
+       (match infer ctx e1, infer ctx e2 with
+        | Some TInt, Some TInt -> Some TBool
+        | Some TBool, Some TBool -> Some TBool
+        | _ -> None))
+  | App (fn, arg) ->
+    (* Infer the type of the function, which should be known.
+       That type will be an arrow type giving us something to
+       check the argument against, by popping the first type of the TArrow.
+       If the function is somehow not a TArrow, that is a failure.
+       If check returns some, then we we are good.
+    *)
+    (match infer ctx fn with
+     | Some (TArrow (ty, _)) ->
+       (match check ctx arg ty with
+        | Some ty' -> Some ty' (* The same as ty *)
+        | None -> None)
+     | Some _ -> failwith "Type of function was not TArrow"
+     | None -> None)
   | Var x -> List.assoc_opt x ctx
   | Const c ->
     (match c with
@@ -126,11 +167,15 @@ and check ctx expr ty =
      (to be checked in next step).
      Pop annotation till we reach the return type. check that against body, which
      will initiate infer mode.
+     If all that goes well, return the functions type as given by the annotation.
+     Misuse of arguments is handled when checking the body.
   *)
-  | FunDef { annotation = TArrow _; name; args; body }, _ ->
+  | FunDef { annotation = TArrow _ as fun_type; name; args; body }, _ ->
     let _, ret_ty, types = tarrow_len_n ty (List.length args) in
     let ctx_addition = (name, ty) :: List.combine args types in
-    check (ctx_addition @ ctx) body ret_ty
+    (match check (ctx_addition @ ctx) body ret_ty with
+     | Some _ -> Some fun_type
+     | None -> None)
   (*
      A function with no arguments. Check the (constant) body against the type.
      Dont add name to context as we dont want a recursive constant function.
@@ -161,6 +206,45 @@ and check ctx expr ty =
      | _ -> None (* Error: type inference doesn't unify *))
 ;;
 
+(*
+   int
+def test = 2
+*)
+let fn_example_type = TInt
+
+let fn_example =
+  FunDef { annotation = fn_example_type; name = "test"; args = []; body = Const (CInt 2) }
+;;
+
+let%test_unit "Checking constant function should return correct type" =
+  let checked_type = check [] fn_example fn_example_type in
+  match checked_type with
+  | Some ty -> OUnit2.assert_equal TInt ty
+  | None -> OUnit2.assert_bool "Failed to check function" false
+;;
+
+(*
+   int -> int
+def test x = x+2
+*)
+let fn_example2_type = TArrow (TInt, TInt)
+
+let fn_example2 =
+  FunDef
+    { annotation = fn_example2_type
+    ; name = "test"
+    ; args = [ "x" ]
+    ; body = Prim (Add, Var "x", Const (CInt 2))
+    }
+;;
+
+let%test_unit "check function test" =
+  let checked_type = check [] fn_example2 fn_example2_type in
+  match checked_type with
+  | Some ty -> OUnit2.assert_equal ~printer:show_typ (TArrow (TInt, TInt)) ty
+  | None -> failwith "failed to check"
+;;
+
 let%test_unit "tarrow_len_n given non TArrow type raises Failure" =
   OUnit2.assert_raises (Failure "Attempted to traverse a non-tarrow type") (fun () ->
     tarrow_len_n TBool 1)
@@ -176,25 +260,25 @@ let%test_unit
 let%test_unit "tarrow_len_n given TArrow and n=0 returns type unmodified" =
   let arrow = TArrow (TInt, TBool) in
   let counter, ret_ty, types = tarrow_len_n arrow 0 in
-  OUnit2.assert_equal counter 0;
-  OUnit2.assert_equal ret_ty arrow;
-  OUnit2.assert_equal types []
+  OUnit2.assert_equal 0 counter;
+  OUnit2.assert_equal arrow ret_ty;
+  OUnit2.assert_equal [] types
 ;;
 
 (* int -> bool *)
 let%test_unit "tarrow_len_n given TArrow and n = args length returns correct result" =
   let arrow = TArrow (TInt, TBool) in
   let counter, ret_ty, types = tarrow_len_n arrow 1 in
-  OUnit2.assert_equal counter 1;
-  OUnit2.assert_equal ret_ty TBool;
-  OUnit2.assert_equal types [ TInt ]
+  OUnit2.assert_equal 1 counter;
+  OUnit2.assert_equal TBool ret_ty;
+  OUnit2.assert_equal [ TInt ] types
 ;;
 
 (* int -> int -> bool *)
 let%test_unit "tarrow_len_n given TArrow and n = args length returns correct result" =
   let arrow = TArrow (TInt, TArrow (TInt, TBool)) in
   let counter, ret_ty, types = tarrow_len_n arrow 2 in
-  OUnit2.assert_equal counter 2;
-  OUnit2.assert_equal ret_ty TBool;
-  OUnit2.assert_equal types [ TInt; TInt ]
+  OUnit2.assert_equal 2 counter;
+  OUnit2.assert_equal TBool ret_ty;
+  OUnit2.assert_equal [ TInt; TInt ] types
 ;;
