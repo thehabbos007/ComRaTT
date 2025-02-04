@@ -224,6 +224,30 @@ and check ctx expr ty =
   None for everything.
 *)
 
+let%test_unit "Check conditional expression" =
+  let conditional = IfThenElse (Const (CBool true), Const (CInt 42), Const (CInt 0)) in
+  match check [] conditional TInt with
+  | Some ty -> OUnit2.assert_equal ~printer:show_typ TInt ty
+  | None -> OUnit2.assert_bool "Failed to infer let binding" false
+;;
+
+let%test_unit
+    "Check conditional expression should fail when branches have different types"
+  =
+  let conditional =
+    IfThenElse (Const (CBool true), Const (CInt 42), Const (CBool false))
+  in
+  match check [] conditional TInt with
+  | Some _ ->
+    OUnit2.assert_bool
+      "Checking conditional with different branch types should fail"
+      false
+  | None ->
+    OUnit2.assert_bool
+      "Correctly failed to check conditional with different branch types"
+      true
+;;
+
 let%test_unit "Infer let-binding: let x = 2 in x" =
   let binding = Let ("x", Const (CInt 2), Var "x") in
   let checked_binding = infer [] binding in
