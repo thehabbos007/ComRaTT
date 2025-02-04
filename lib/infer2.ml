@@ -103,17 +103,6 @@ let tarrow_len_n ty n =
   | _ -> failwith "Attempted to traverse a non-tarrow type"
 ;;
 
-let rec tarrow_len ty =
-  match ty with
-  | TArrow (ty, next_ty) -> tarrow_len_rec 1 next_ty [ ty ]
-  | _ -> failwith ""
-
-and tarrow_len_rec counter ty types =
-  match ty with
-  | TArrow (ty, next_ty) -> tarrow_len_rec (counter + 1) next_ty (ty :: types)
-  | _ -> counter + 1, ty, List.rev (ty :: types)
-;;
-
 let rec infer ctx expr =
   match expr with
   | Var x -> List.assoc_opt x ctx
@@ -171,3 +160,7 @@ and check ctx expr ty =
      | Some ty' when ty = ty' -> Some ty
      | _ -> None (* Error: type inference doesn't unify *))
 ;;
+
+open Base
+
+let%test_unit "test" = [%test_eq: int list] (List.rev [ 1; 2; 3 ]) [ 3; 2; 1 ]
