@@ -104,11 +104,18 @@ let tarrow_len_n ty n =
 
 let rec infer ctx expr =
   match expr with
+  | Let (name, rhs, body) ->
+    (match infer ctx rhs with
+     | Some rhs_ty ->
+       (match infer ((name, rhs_ty) :: ctx) body with
+        | Some body_ty -> Some body_ty
+        | None -> None)
+     | None -> None)
   | Prim (op, e1, e2) ->
     (match op with
      (*
         For arith operators we want to check both sides against int (which defaults to infer).
-        Given two Somes, everything is good and TInt is the result.
+      Given two Somes, everything is good and TInt is the result.
      *)
      | Add | Mul | Div | Sub ->
        (match check ctx e1 TInt, check ctx e2 TInt with
@@ -116,7 +123,7 @@ let rec infer ctx expr =
         | _ -> None)
      (*
         For non eq comparison operators we want to check both sides against int (which defaults to infer).
-        Given two Somes, everything is good and TBool is the result.
+      Given two Somes, everything is good and TBool is the result.
      *)
      | Lt | Lte | Gt | Gte ->
        (match check ctx e1 TInt, check ctx e2 TInt with
@@ -124,8 +131,8 @@ let rec infer ctx expr =
         | _ -> None)
      (*
         For eq and neq there are two valid cases: both operands are TInt or both are TBool.
-        In either case, the result is TBool.
-        For that reason, we infer directly and check equality.
+      In either case, the result is TBool.
+      For that reason, we infer directly and check equality.
      *)
      | Eq | Neq ->
        (match infer ctx e1, infer ctx e2 with
@@ -134,10 +141,10 @@ let rec infer ctx expr =
         | _ -> None))
   | App (fn, arg) ->
     (* Infer the type of the function, which should be known.
-       That type will be an arrow type giving us something to
-       check the argument against, by popping the first type of the TArrow.
-       If the function is somehow not a TArrow, that is a failure.
-       If check returns some, then we we are good.
+    That type will be an arrow type giving us something to
+    check the argument against, by popping the first type of the TArrow.
+    If the function is somehow not a TArrow, that is a failure.
+    If check returns some, then we we are good.
     *)
     (match infer ctx fn with
      | Some (TArrow (ty, _)) ->
@@ -162,13 +169,13 @@ and check ctx expr ty =
      | _ -> None)
   (*
      A function with arguments. It can call itself so add name to ctx.
-     Check length of "signature" against args list. Fail if too many
-     arguments are provided. Too few will make the return value a function type
-     (to be checked in next step).
-     Pop annotation till we reach the return type. check that against body, which
-     will initiate infer mode.
-     If all that goes well, return the functions type as given by the annotation.
-     Misuse of arguments is handled when checking the body.
+  Check length of "signature" against args list. Fail if too many
+  arguments are provided. Too few will make the return value a function type
+  (to be checked in next step).
+  Pop annotation till we reach the return type. check that against body, which
+  will initiate infer mode.
+  If all that goes well, return the functions type as given by the annotation.
+  Misuse of arguments is handled when checking the body.
   *)
   | FunDef { annotation = TArrow _ as fun_type; name; args; body }, _ ->
     let _, ret_ty, types = tarrow_len_n ty (List.length args) in
@@ -178,7 +185,7 @@ and check ctx expr ty =
      | None -> None)
   (*
      A function with no arguments. Check the (constant) body against the type.
-     Dont add name to context as we dont want a recursive constant function.
+  Dont add name to context as we dont want a recursive constant function.
   *)
   | FunDef { annotation = typ; args = []; body; _ }, _ -> check ctx body typ
   (*
@@ -187,10 +194,10 @@ and check ctx expr ty =
   | FunDef _, _ -> None (* Error: non-annotated fundef *)
   (*
      A lambda checked against TArrow.
-     unify length of tarrow with length of args
-     add args to ctx
-     check return type of tarrow against body
-     TODO: support nested lambdas? (the len <> List.len args check. could we do like with fundef instead?)
+  unify length of tarrow with length of args
+  add args to ctx
+  check return type of tarrow against body
+  TODO: support nested lambdas? (the len <> List.len args check. could we do like with fundef instead?)
   *)
   | Lam (args, body), TArrow _ ->
     let len, ret_ty, types = tarrow_len_n ty (List.length args) in
@@ -207,39 +214,90 @@ and check ctx expr ty =
 ;;
 
 (*
-   int
-def test = 2
-*)
-let fn_example_type = TInt
+   TODO
+  It feels wierd that the function-related tests just assert on the
+  type from the annotation (which is also returned by check).
+  The output should be None if the type checking fails, so a Some case
+  should always be correct. Using "assert true" could also work.
 
-let fn_example =
-  FunDef { annotation = fn_example_type; name = "test"; args = []; body = Const (CInt 2) }
+  Also, tests will be more precise when we have refactored to use clear error types instead of
+  None for everything.
+*)
+
+let%test_unit "Infer let-binding: let x = 2 in x" =
+  let binding = Let ("x", Const (CInt 2), Var "x") in
+  let checked_binding = infer [] binding in
+  match checked_binding with
+  | Some ty -> OUnit2.assert_equal ~printer:show_typ TInt ty
+  | None -> OUnit2.assert_bool "Failed to infer let binding" false
 ;;
 
+let%test_unit "Infer let-binding: let x = 2 in x+x" =
+  let binding = Let ("x", Const (CInt 2), Prim (Add, Var "x", Var "x")) in
+  let checked_binding = infer [] binding in
+  match checked_binding with
+  | Some ty -> OUnit2.assert_equal ~printer:show_typ TInt ty
+  | None -> OUnit2.assert_bool "Failed to infer let binding" false
+;;
+
+let%test_unit "Function with let-binding" =
+  let fn_type = TArrow (TInt, TBool) in
+  let fn_args = [ "x" ] in
+  let fn_body = Let ("y", Const (CInt 2), Prim (Eq, Var "x", Var "y")) in
+  let fn =
+    FunDef { annotation = fn_type; name = "test"; args = fn_args; body = fn_body }
+  in
+  match check [] fn fn_type with
+  | Some ty -> OUnit2.assert_equal ~printer:show_typ fn_type ty
+  | None -> OUnit2.assert_bool "Failed to check function with let binding" false
+;;
+
+let%test_unit "Function with incorrect signature fails type checking" =
+  let fn_type = TArrow (TInt, TBool) in
+  let fn_args = [ "x" ] in
+  let fn_body = Let ("y", Const (CInt 2), Prim (Add, Var "x", Var "y")) in
+  let fn =
+    FunDef { annotation = fn_type; name = "test"; args = fn_args; body = fn_body }
+  in
+  match check [] fn fn_type with
+  | Some _ ->
+    OUnit2.assert_bool
+      "Type checking a function with incorrect signature should fail!"
+      false
+  | None ->
+    OUnit2.assert_bool "Correctly failed to check function with incorrect signature" true
+;;
+
+(*
+   Type: int
+def test = 2
+*)
 let%test_unit "Checking constant function should return correct type" =
-  let checked_type = check [] fn_example fn_example_type in
+  let fn_type = TInt in
+  let fn =
+    FunDef { annotation = fn_type; name = "test"; args = []; body = Const (CInt 2) }
+  in
+  let checked_type = check [] fn fn_type in
   match checked_type with
   | Some ty -> OUnit2.assert_equal TInt ty
   | None -> OUnit2.assert_bool "Failed to check function" false
 ;;
 
 (*
-   int -> int
+   Type int -> int
 def test x = x+2
 *)
-let fn_example2_type = TArrow (TInt, TInt)
-
-let fn_example2 =
-  FunDef
-    { annotation = fn_example2_type
-    ; name = "test"
-    ; args = [ "x" ]
-    ; body = Prim (Add, Var "x", Const (CInt 2))
-    }
-;;
-
-let%test_unit "check function test" =
-  let checked_type = check [] fn_example2 fn_example2_type in
+let%test_unit "Check function that adds variable to constant should return correct type" =
+  let fn_type = TArrow (TInt, TInt) in
+  let fn =
+    FunDef
+      { annotation = fn_type
+      ; name = "test"
+      ; args = [ "x" ]
+      ; body = Prim (Add, Var "x", Const (CInt 2))
+      }
+  in
+  let checked_type = check [] fn fn_type in
   match checked_type with
   | Some ty -> OUnit2.assert_equal ~printer:show_typ (TArrow (TInt, TInt)) ty
   | None -> failwith "failed to check"
