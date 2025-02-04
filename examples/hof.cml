@@ -1,0 +1,3 @@
+def add_hof n = fun m -> n + m;
+
+def main x y = add_hof x y;

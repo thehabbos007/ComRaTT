@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
 
-# Usage:   ./run_ratt.sh <args> < [comratt-file]
+# Usage:   ./run_ratt.sh <comratt-file> [args]
 
-dune exec -- ComRaTT $1 | wasmtime run -W tail-call=y,multi-memory=y --invoke main - ${@:2}
+dune exec -- ComRaTT $1 | wasmtime run -W tail-call=y,function-references=y,multi-memory=y --invoke main - ${@:2}
