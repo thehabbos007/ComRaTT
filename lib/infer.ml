@@ -215,9 +215,6 @@ let rec typ (level : int) (env : tenv) (e : expr) : typed_expr * typ =
   | Const (CInt v) -> TConst (CInt v, TInt), TInt
   | Const (CBool v) -> TConst (CBool v, TBool), TBool
   | Const CUnit -> TConst (CUnit, TUnit), TUnit
-  | Const CNil ->
-    let list_typ = TList (TVar (fresh_type_var level)) in
-    TConst (CNil, list_typ), list_typ
   | Var x ->
     let typ = specialize level (List.assoc x env) in
     TName (x, typ), typ
@@ -255,19 +252,6 @@ let rec typ (level : int) (env : tenv) (e : expr) : typed_expr * typ =
     unify TBool tc;
     unify tt tf;
     TIfThenElse (ec, tc, et, ef, tt), tt
-  | FunDef (name, args, body) ->
-    let level' = level + 1 in
-    let fun_typ = TVar (fresh_type_var level') in
-    let arg_typs = List.map (fun arg -> arg, TVar (fresh_type_var level')) args in
-    let body_env =
-      ((name, TypeScheme ([], fun_typ))
-       :: List.map (fun (arg, arg_typ) -> arg, TypeScheme ([], arg_typ)) arg_typs)
-      @ env
-    in
-    let body, body_typ = typ level' body_env body in
-    let expanded_fun_typ = convert_params_to_arrow arg_typs body_typ in
-    unify fun_typ expanded_fun_typ;
-    TFunDef (name, arg_typs, body, expanded_fun_typ), expanded_fun_typ
   | App (f, arg) ->
     let f, tf = typ level env f in
     let arg, targ = typ level env arg in
@@ -294,11 +278,6 @@ let rec typ (level : int) (env : tenv) (e : expr) : typed_expr * typ =
 ;;
 
 let reset_tv_counter () = next_type_var := 0
-
-let get_fundef_name = function
-  | FunDef (name, _, _) -> name
-  | _ -> failwith "expected FunDef"
-;;
 
 let rec resolve_type t =
   match t with
@@ -344,10 +323,25 @@ let infer_all exprs =
   reset_tv_counter ();
   let rec aux env acc = function
     | [] -> List.rev acc
-    | expr :: rest ->
-      let typed_expr, t = typ 0 env expr in
-      let inner = get_fundef_name expr, TypeScheme ([], t) in
-      aux (inner :: env) (typed_expr :: acc) rest
+    | fexpr :: rest ->
+      (match fexpr with
+       | FunDef (name, _typ, args, body) ->
+         let level = 1 in
+         let fun_typ = TVar (fresh_type_var level) in
+         let arg_typs = List.map (fun arg -> arg, TVar (fresh_type_var level)) args in
+         let body_env =
+           ((name, TypeScheme ([], fun_typ))
+            :: List.map (fun (arg, arg_typ) -> arg, TypeScheme ([], arg_typ)) arg_typs)
+           @ env
+         in
+         let body, body_typ = typ level body_env body in
+         let expanded_fun_typ = convert_params_to_arrow arg_typs body_typ in
+         unify fun_typ expanded_fun_typ;
+         let typed_expr, t =
+           TFunDef (name, arg_typs, body, expanded_fun_typ), expanded_fun_typ
+         in
+         let inner = name, TypeScheme ([], t) in
+         aux (inner :: env) (typed_expr :: acc) rest)
   in
   let inferred = aux [] [] exprs in
   List.map simplify_types inferred
