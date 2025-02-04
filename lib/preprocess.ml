@@ -177,15 +177,17 @@ let list_defs exprs =
 ;;
 
 module ForwardDeclaration = struct
-  let expr_to_tables name_sig expr =
+  let expr_to_tables (name_sig, count) expr =
     match expr with
-    | TFunDef (name, args, _, typ) -> Environment.add name (args, typ) name_sig
-    | TConst _ | TName _ | TLam _ | TApp _ | TPrim _ | TLet _ | TIfThenElse _ -> name_sig
+    | TFunDef (name, args, _, typ) ->
+      Environment.add name (args, typ, count) name_sig, count + 1
+    | TConst _ | TName _ | TLam _ | TApp _ | TPrim _ | TLet _ | TIfThenElse _ ->
+      name_sig, count
   ;;
 
   let generate_function_tables lifted globals =
-    let table = List.fold_left expr_to_tables Environment.empty lifted in
-    let table = List.fold_left expr_to_tables table globals in
+    let table, count = List.fold_left expr_to_tables (Environment.empty, 0) lifted in
+    let table, _ = List.fold_left expr_to_tables (table, count) globals in
     table
   ;;
 end

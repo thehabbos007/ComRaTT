@@ -1,9 +1,33 @@
 open Source
 open Infer
 open Preprocess
-open Preprocess.ForwardDeclataion
 
-(* Comparison operators are signed for now *)
+module WasmPrinter = struct
+  let indent_level = ref 0
+  let indent () = String.make (!indent_level * 2) ' '
+  let newline () = "\n" ^ indent ()
+
+  let with_indent f =
+    incr indent_level;
+    let result = f () in
+    decr indent_level;
+    result
+  ;;
+end
+
+let gen_param ?(print_argument_name = true) name ty =
+  if print_argument_name
+  then Printf.sprintf "(param $%s %s)" name ty
+  else Printf.sprintf "(param %s)" ty
+;;
+
+let gen_local name ty = Printf.sprintf "(local $%s %s)" name ty
+let gen_result ty = Printf.sprintf "(result %s)" ty
+let gen_const ty value = Printf.sprintf "(%s.const %s)" ty value
+let gen_local_get name = Printf.sprintf "(local.get $%s)" name
+let gen_local_set name = Printf.sprintf "(local.set $%s)" name
+let gen_typeof_name name = Printf.sprintf "$type_of#%s" name
+
 let binop_to_wasm op ty =
   match op, ty with
   | Add, TInt -> "(i64.add)"
@@ -27,21 +51,30 @@ let wasm_type_of_type ty =
   | TFun (_t1, _t2) -> failwith "arrow type"
 ;;
 
-let rec args_to_str (arg_list : (sym * typ) list) =
+let rec args_to_str ?(print_argument_name = true) (arg_list : (sym * typ) list) =
   match arg_list with
   | [] -> ""
   | (name, typ) :: tail ->
-    Printf.sprintf "(param $%s %s) %s" name (wasm_type_of_type typ) (args_to_str tail)
+    gen_param ~print_argument_name name (wasm_type_of_type typ)
+    ^ " "
+    ^ args_to_str ~print_argument_name tail
 ;;
 
-let var_str name = "(local.get $" ^ name ^ ")"
+let generate_function_type ?(print_argument_name = true) args ret_ty =
+  Printf.sprintf
+    "%s%s"
+    (args_to_str ~print_argument_name args)
+    (gen_result (wasm_type_of_type (final_type ret_ty)))
+;;
+
+let var_str name = gen_local_get name
 
 let rec generate_local_vars vars =
   match vars with
   | [] -> ""
   | (name, ty, _) :: vars ->
-    Printf.sprintf "(local $%s %s)" name (wasm_type_of_type ty)
-    ^ "\n"
+    gen_local name (wasm_type_of_type ty)
+    ^ WasmPrinter.newline ()
     ^ generate_local_vars vars
 ;;
 
@@ -65,120 +98,142 @@ let rec get_names_for_forward_declaration expr map =
 let unfold_forward_decs decs =
   Environment.fold
     (fun name ty acc ->
-       Printf.sprintf "(local $%s %s)\n" name (wasm_type_of_type ty) ^ acc)
+       gen_local name (wasm_type_of_type ty) ^ WasmPrinter.newline () ^ acc)
     decs
     ""
 ;;
 
-let rec comp expr name_idx funtable =
+let gen_func_type name args typ =
+  Printf.sprintf
+    "(type %s (func %s))%s"
+    (gen_typeof_name name)
+    (generate_function_type ~print_argument_name:false args typ)
+    (WasmPrinter.newline ())
+;;
+
+let rec comp expr name_sig_table =
   match expr with
   | TName (name, _) -> var_str name
-  | TConst (CInt num, _) -> "(i64.const " ^ string_of_int num ^ ")"
-  | TConst (CBool b, _) -> "(i32.const " ^ (if b then "1" else "0") ^ ")"
-  | TConst (CUnit, _) -> "(i32.const " ^ "-1)"
+  | TConst (CInt num, _) -> gen_const "i64" (string_of_int num)
+  | TConst (CBool b, _) -> gen_const "i32" (if b then "1" else "0")
+  | TConst (CUnit, _) -> gen_const "i32" "-1"
   | TPrim { op; left; right; typ } ->
-    let e1_comp = comp left name_idx funtable in
-    let e2_comp = comp right name_idx funtable in
-    e1_comp ^ "\n" ^ e2_comp ^ "\n" ^ binop_to_wasm op typ
+    let e1_comp = WasmPrinter.with_indent (fun () -> comp left name_sig_table) in
+    let e2_comp = WasmPrinter.with_indent (fun () -> comp right name_sig_table) in
+    e1_comp
+    ^ WasmPrinter.newline ()
+    ^ e2_comp
+    ^ WasmPrinter.newline ()
+    ^ binop_to_wasm op typ
   | TFunDef (name, args, body, ret_ty) ->
     let forward_dec =
       unfold_forward_decs (get_names_for_forward_declaration body Environment.empty)
     in
     Printf.sprintf
-      "(func $%s %s (result %s)\n %s \n %s \n)"
+      "%s%s(func $%s %s%s%s%s%s)%s"
+      (WasmPrinter.newline ())
+      (gen_func_type name args ret_ty)
       name
-      (args_to_str args)
-      (wasm_type_of_type (final_type ret_ty))
+      (generate_function_type args ret_ty)
+      (WasmPrinter.newline ())
       forward_dec
-      (comp body name_idx funtable)
+      (WasmPrinter.with_indent (fun () -> comp body name_sig_table))
+      (WasmPrinter.newline ())
+      (WasmPrinter.newline ())
   | TLam _ -> failwith "lambda should have been lifted :("
   | TLet { name; rhs; body = TName (name', _ty'); _ } when name = name' ->
-    let comp_rhs = comp rhs name_idx funtable in
-    Printf.sprintf "%s \n (local.tee $%s)" comp_rhs name
+    let comp_rhs = WasmPrinter.with_indent (fun () -> comp rhs name_sig_table) in
+    Printf.sprintf "%s%s(local.tee $%s)" comp_rhs (WasmPrinter.newline ()) name
   | TLet { name; rhs; body; _ } ->
-    let comp_rhs = comp rhs name_idx funtable in
-    let set_name_to_rhs = Printf.sprintf "%s (local.set $%s)" comp_rhs name in
-    let comp_body = comp body name_idx funtable in
-    Printf.sprintf "%s\n %s" set_name_to_rhs comp_body
+    let comp_rhs = WasmPrinter.with_indent (fun () -> comp rhs name_sig_table) in
+    let set_name_to_rhs =
+      Printf.sprintf "%s%s%s" comp_rhs (WasmPrinter.newline ()) (gen_local_set name)
+    in
+    let comp_body = WasmPrinter.with_indent (fun () -> comp body name_sig_table) in
+    Printf.sprintf "%s%s%s" set_name_to_rhs (WasmPrinter.newline ()) comp_body
   | TApp { fn; args; _ } ->
     (* Assume that calling a function is done with a valid function name *)
     (match fn with
      | TName (name, _) ->
        Printf.sprintf
-         "%s\n(call $%s)"
-         (List.fold_left (fun acc arg -> acc ^ comp arg name_idx funtable ^ "\n") "" args)
+         "%s%s(call $%s)"
+         (List.fold_left
+            (fun acc arg ->
+               acc
+               ^ WasmPrinter.with_indent (fun () -> comp arg name_sig_table)
+               ^ WasmPrinter.newline ())
+            ""
+            args)
+         (WasmPrinter.newline ())
          name
      | _ -> failwith "attempted calling a function that was not a valid AVar")
   | TIfThenElse { condition; then_branch; else_branch; typ } ->
     (* The result part of the if should be left out if void, but we do not support that *)
     Printf.sprintf
-      "%s (if (result %s) (then %s) (else %s))"
-      (comp condition name_idx funtable)
-      (wasm_type_of_type typ)
-      (comp then_branch name_idx funtable)
-      (comp else_branch name_idx funtable)
+      "(if %s%s%s%s(then%s%s)%s(else%s%s))"
+      (gen_result (wasm_type_of_type typ))
+      (WasmPrinter.newline ())
+      (WasmPrinter.with_indent (fun () -> comp condition name_sig_table))
+      (WasmPrinter.newline ())
+      (WasmPrinter.newline ())
+      (WasmPrinter.with_indent (fun () -> comp then_branch name_sig_table))
+      (WasmPrinter.newline ())
+      (WasmPrinter.newline ())
+      (WasmPrinter.with_indent (fun () -> comp else_branch name_sig_table))
 ;;
 
-let comp_global_defs (globals : Preprocess.global_def list) name_idx funtable =
+let comp_global_defs (globals : Preprocess.global_def list) name_sig_table =
   List.fold_left
     (fun acc ({ name; fundef; ret_type; _ } : Preprocess.global_def) ->
        acc
        ^ comp
            (TLet { name; typ = ret_type; rhs = fundef; body = TConst (CInt 0, TInt) })
-           name_idx
-           funtable
-       ^ "\n")
+           name_sig_table
+       ^ WasmPrinter.newline ())
     ""
     globals
 ;;
 
-let rec comp_and_unfold_defs defs name_idx funtable =
+let rec comp_and_unfold_defs defs name_sig_table =
   match defs with
   | [] -> ""
-  | def :: defs ->
-    comp def name_idx funtable ^ comp_and_unfold_defs defs name_idx funtable
-;;
-
-let add_function_table name size =
-  Printf.sprintf "\n(table $%s %s funcref)" name (string_of_int size)
+  | def :: defs -> comp def name_sig_table ^ comp_and_unfold_defs defs name_sig_table
 ;;
 
 let add_mem_region name memsize =
-  Printf.sprintf "\n(memory $%s %s)" name (string_of_int memsize)
+  Printf.sprintf "(memory $%s %s)%s" name (string_of_int memsize) (WasmPrinter.newline ())
 ;;
 
 let rec args_to_sig_str (arg_list : (sym * typ) list) =
   match arg_list with
   | [] -> ")"
   | (_, typ) :: tail ->
-    Printf.sprintf " %s%s" (wasm_type_of_type typ) (args_to_sig_str tail)
+    Printf.sprintf " %s %s" (wasm_type_of_type typ) (args_to_sig_str tail)
 ;;
 
-let generate_arg_string args =
-  if List.length args = 0 then " " else Printf.sprintf " (param%s" (args_to_sig_str args)
+let gen_func_table_entry count name =
+  Printf.sprintf "(elem (i32.const %d) $%s)%s" count name (WasmPrinter.newline ())
 ;;
 
-let generate_signature idx args typ =
-  Printf.sprintf
-    "(type $gentypesig%s (func%s(result %s)))\n"
-    (string_of_int idx)
-    (generate_arg_string args)
-    (wasm_type_of_type (final_type typ))
-;;
-
-let forward_declare_funtion_signatures signatures =
-  FunTable.fold
-    (fun idx (args, typ) output -> generate_signature idx args typ ^ output)
-    signatures
-    "\n"
-;;
-
-let add_functions_to_table name_idx =
-  Environment.fold
-    (fun name idx acc ->
-       Printf.sprintf "\n(elem (i32.const %s) $%s)" (string_of_int idx) name ^ acc)
-    name_idx
-    ""
+let forward_declare_func_table signatures =
+  let table_def = Printf.sprintf "(table %d funcref)" (Environment.cardinal signatures) in
+  (* We don't need this right now *)
+  (*
+  let gen_funcref_elem name =
+    Printf.sprintf "(elem declare funcref (ref.func $%s))%s" name (WasmPrinter.newline ()) in
+  let elem_declares =
+    Environment.fold
+      (fun name _ output -> gen_funcref_elem name ^ output)
+      signatures
+      (WasmPrinter.newline ())
+  in *)
+  let table_entries =
+    Environment.fold
+      (fun name (_, _, c) output -> gen_func_table_entry c name ^ output)
+      signatures
+      (WasmPrinter.newline ())
+  in
+  Printf.sprintf "%s%s%s" table_def (WasmPrinter.newline ()) table_entries
 ;;
 
 (*
@@ -192,22 +247,17 @@ let add_functions_to_table name_idx =
 let init_wat
       (annot_exprs : typed_expr list)
       (globals : Preprocess.global_def list)
-      name_idx
-      funtable
+      name_sig_table
   =
   Printf.sprintf
-    "(module %s %s %s %s %s %s \n %s\n %s\n (export \"main\" (func $main)))"
+    "(module%s%s%s%s%s%s%s%s%s(export \"main\" (func $main)))"
+    (WasmPrinter.newline ())
     (add_mem_region "stable" 1)
     (add_mem_region "h1" 1)
     (add_mem_region "h2" 1)
-    (* TODO
-       - we need to do the size bookkeeping as well as shrinking/growing tables
-       - max size?
-    *)
-    (add_function_table "funcs" (FunTable.cardinal funtable))
-    (* Initial size is just the amount of functions we have *)
-    ("\n" ^ forward_declare_funtion_signatures funtable)
-    (add_functions_to_table name_idx)
-    (comp_global_defs globals name_idx funtable)
-    (comp_and_unfold_defs annot_exprs name_idx funtable)
+    (WasmPrinter.newline ())
+    (forward_declare_func_table name_sig_table)
+    (comp_global_defs globals name_sig_table)
+    (comp_and_unfold_defs annot_exprs name_sig_table)
+    (WasmPrinter.newline ())
 ;;

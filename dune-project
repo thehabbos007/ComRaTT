@@ -28,7 +28,6 @@
  (synopsis "A preliminary compiled Async RaTT implementation")
  (description "A longer description")
  (depends ocaml dune ppx_inline_test ppx_deriving ounit2 menhir base asai)
- (depends ocaml dune ppx_inline_test ppx_deriving ounit2 menhir base)
  (tags
   (topics "to describe" your project)))
 
