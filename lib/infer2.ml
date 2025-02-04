@@ -161,6 +161,40 @@ and check ctx expr ty =
      | _ -> None (* Error: type inference doesn't unify *))
 ;;
 
-open Base
+let%test_unit "tarrow_len_n given non TArrow type raises Failure" =
+  OUnit2.assert_raises (Failure "Attempted to traverse a non-tarrow type") (fun () ->
+    tarrow_len_n TBool 1)
+;;
 
-let%test_unit "test" = [%test_eq: int list] (List.rev [ 1; 2; 3 ]) [ 3; 2; 1 ]
+let%test_unit
+    "tarrow_len_n given TArrow type and n larger than amount of arguments raises Failure"
+  =
+  OUnit2.assert_raises (Failure "Attempted to traverse a non-tarrow type") (fun () ->
+    tarrow_len_n (TArrow (TInt, TArrow (TInt, TBool))) 1)
+;;
+
+let%test_unit "tarrow_len_n given TArrow and n=0 returns type unmodified" =
+  let arrow = TArrow (TInt, TBool) in
+  let counter, ret_ty, types = tarrow_len_n arrow 0 in
+  OUnit2.assert_equal counter 0;
+  OUnit2.assert_equal ret_ty arrow;
+  OUnit2.assert_equal types []
+;;
+
+(* int -> bool *)
+let%test_unit "tarrow_len_n given TArrow and n = args length returns correct result" =
+  let arrow = TArrow (TInt, TBool) in
+  let counter, ret_ty, types = tarrow_len_n arrow 1 in
+  OUnit2.assert_equal counter 1;
+  OUnit2.assert_equal ret_ty TBool;
+  OUnit2.assert_equal types [ TInt ]
+;;
+
+(* int -> int -> bool *)
+let%test_unit "tarrow_len_n given TArrow and n = args length returns correct result" =
+  let arrow = TArrow (TInt, TArrow (TInt, TBool)) in
+  let counter, ret_ty, types = tarrow_len_n arrow 2 in
+  OUnit2.assert_equal counter 2;
+  OUnit2.assert_equal ret_ty TBool;
+  OUnit2.assert_equal types [ TInt; TInt ]
+;;
