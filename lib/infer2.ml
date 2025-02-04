@@ -104,6 +104,24 @@ let tarrow_len_n ty n =
 
 let rec infer ctx expr =
   match expr with
+  (*
+     For Advance, look up the type of the name being advanced
+    which should result in a thunk. Produce the return type of the thunk.
+    Fail if not a thunk.
+  *)
+  | Advance name ->
+    (match List.assoc_opt name ctx with
+     | Some (TArrow (TUnit, ty)) -> Some ty
+     | Some _ -> None
+     | None -> None)
+  (*
+     For Delay, infer the type of the expression and
+    produce a thunk with that type: () -> ty
+  *)
+  | Delay e ->
+    (match infer ctx e with
+     | Some ty -> Some (TArrow (TUnit, ty))
+     | None -> None)
   | Let (name, rhs, body) ->
     (match infer ctx rhs with
      | Some rhs_ty ->
@@ -222,7 +240,47 @@ and check ctx expr ty =
 
   Also, tests will be more precise when we have refactored to use clear error types instead of
   None for everything.
+
+  Also, the failure strings used in assert_bool with true constant are redundant.
 *)
+
+let%test_unit "Infer Delay should produce a thunk" =
+  let delayed = Delay (Const (CInt 2)) in
+  match infer [] delayed with
+  | Some ty -> OUnit2.assert_equal ~printer:show_typ (TArrow (TUnit, TInt)) ty
+  | None -> OUnit2.assert_bool "Failed to infer type of delay" false
+;;
+
+let%test_unit "Infer Advance should not fail when name is bound to a thunk" =
+  let adv = Advance "x" in
+  match infer [ "x", TArrow (TUnit, TInt) ] adv with
+  | Some ty -> OUnit2.assert_equal ~printer:show_typ TInt ty
+  | None -> OUnit2.assert_bool "Failed to infer type of advance" false
+;;
+
+let%test_unit "Infer Advance should fail when name is not bound to a thunk" =
+  let adv = Advance "x" in
+  match infer [ "x", TArrow (TInt, TInt) ] adv with
+  | Some _ ->
+    OUnit2.assert_bool
+      "Should have failed to infer type of advance on name bound to non-thunk"
+      false
+  | None ->
+    OUnit2.assert_bool
+      "Correctly failed to infer type of advance on name bound to non-thunk"
+      true
+;;
+
+let%test_unit "Infer Advance should fail when name is not bound" =
+  let adv = Advance "x" in
+  match infer [] adv with
+  | Some _ ->
+    OUnit2.assert_bool
+      "Should have failed to infer type of advance on name not bound"
+      false
+  | None ->
+    OUnit2.assert_bool "Correctly failed to infer type of advance on name not bound" true
+;;
 
 let%test_unit "Check conditional expression" =
   let conditional = IfThenElse (Const (CBool true), Const (CInt 42), Const (CInt 0)) in
