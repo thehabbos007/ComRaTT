@@ -108,7 +108,7 @@ let tarrow_len_n ty n =
   | _ -> failwith "Attempted to traverse a non-tarrow type"
 ;;
 
-let rec infer ctx expr =
+let rec infer ctx expr : (typ * typed_expr) option =
   match expr with
   (*
      For Advance, look up the type of the name being advanced
@@ -117,7 +117,9 @@ let rec infer ctx expr =
   *)
   | Advance name ->
     (match List.assoc_opt name ctx with
-     | Some (TArrow (TUnit, ty)) -> Some ty
+     | Some (TArrow (TUnit, ty)) ->
+       Some
+         (ty, TApp { fn = TName (name, ty); args = [ TConst (CUnit, TUnit) ]; typ = ty })
      | Some _ -> None
      | None -> None)
   (*
@@ -126,13 +128,17 @@ let rec infer ctx expr =
   *)
   | Delay e ->
     (match infer ctx e with
-     | Some ty -> Some (TArrow (TUnit, ty))
+     | Some (ty, texp) ->
+       Some
+         ( TArrow (TUnit, ty)
+         , TLam { args = [ "#advance_unit", TUnit ]; body = texp; typ = ty } )
      | None -> None)
   | Let (name, rhs, body) ->
     (match infer ctx rhs with
-     | Some rhs_ty ->
+     | Some (rhs_ty, rhs_texp) ->
        (match infer ((name, rhs_ty) :: ctx) body with
-        | Some body_ty -> Some body_ty
+        | Some (body_ty, body_texp) ->
+          Some (body_ty, TLet { name; typ = body_ty; rhs = rhs_texp; body = body_texp })
         | None -> None)
      | None -> None)
   | Prim (op, e1, e2) ->
@@ -143,7 +149,8 @@ let rec infer ctx expr =
      *)
      | Add | Mul | Div | Sub ->
        (match check ctx e1 TInt, check ctx e2 TInt with
-        | Some _, Some _ -> Some TInt
+        | Some (_, te1), Some (_, te2) ->
+          Some (TInt, TPrim { op; left = te1; right = te2; typ = TInt })
         | _ -> None)
      (*
         For non eq comparison operators we want to check both sides against int (which defaults to infer).
@@ -151,7 +158,8 @@ let rec infer ctx expr =
      *)
      | Lt | Lte | Gt | Gte ->
        (match check ctx e1 TInt, check ctx e2 TInt with
-        | Some _, Some _ -> Some TBool
+        | Some (_, te1), Some (_, te2) ->
+          Some (TBool, TPrim { op; left = te1; right = te2; typ = TBool })
         | _ -> None)
      (*
         For eq and neq there are two valid cases: both operands are TInt or both are TBool.
@@ -160,8 +168,10 @@ let rec infer ctx expr =
      *)
      | Eq | Neq ->
        (match infer ctx e1, infer ctx e2 with
-        | Some TInt, Some TInt -> Some TBool
-        | Some TBool, Some TBool -> Some TBool
+        | Some (TInt, te1), Some (TInt, te2) ->
+          Some (TBool, TPrim { op; typ = TBool; left = te1; right = te2 })
+        | Some (TBool, te1), Some (TBool, te2) ->
+          Some (TBool, TPrim { op; typ = TBool; left = te1; right = te2 })
         | _ -> None))
   | App (fn, arg) ->
     (* Infer the type of the function, which should be known.
@@ -171,25 +181,32 @@ let rec infer ctx expr =
     If check returns some, then we we are good.
     *)
     (match infer ctx fn with
-     | Some (TArrow (ty, _)) ->
+     | Some (TArrow (ty, _), _) ->
        (match check ctx arg ty with
-        | Some ty' -> Some ty' (* The same as ty *)
+        | Some (ty', texp) -> Some (ty', texp) (* The same as ty *)
         | None -> None)
      | Some _ -> failwith "Type of function was not TArrow"
      | None -> None)
-  | Var x -> List.assoc_opt x ctx
+  | Var x ->
+    (match List.assoc_opt x ctx with
+     | Some ty -> Some (ty, TName (x, ty))
+     | None -> None)
   | Const c ->
     (match c with
-     | CInt _ -> Some TInt
-     | CBool _ -> Some TBool
-     | CUnit -> Some TUnit)
+     | CInt _ -> Some (TInt, TConst (c, TInt))
+     | CBool _ -> Some (TBool, TConst (c, TBool))
+     | CUnit -> Some (TUnit, TConst (c, TUnit)))
   | _ -> failwith "Not implemented"
 
-and check ctx expr ty =
+and check ctx expr ty : (typ * typed_expr) option =
   match expr, ty with
   | IfThenElse (cond, thenb, elseb), _ ->
     (match check ctx cond TBool, check ctx thenb ty, check ctx elseb ty with
-     | Some TBool, Some _, Some _ -> Some ty
+     | Some (TBool, tcond), Some (_, tthen), Some (_, telse) ->
+       Some
+         ( ty
+         , TIfThenElse
+             { condition = tcond; typ = ty; then_branch = tthen; else_branch = telse } )
      | _ -> None)
   (*
      A function with arguments. It can call itself so add name to ctx.
@@ -203,9 +220,11 @@ and check ctx expr ty =
   *)
   | FunDef { annotation = TArrow _ as fun_type; name; args; body }, _ ->
     let _, ret_ty, types = tarrow_len_n ty (List.length args) in
-    let ctx_addition = (name, ty) :: List.combine args types in
+    let args_with_types = List.combine args types in
+    let ctx_addition = (name, ty) :: args_with_types in
     (match check (ctx_addition @ ctx) body ret_ty with
-     | Some _ -> Some fun_type
+     | Some (ty, typed_fun) ->
+       Some (fun_type, TFunDef (name, args_with_types, typed_fun, ty))
      | None -> None)
   (*
      A function with no arguments. Check the (constant) body against the type.
@@ -231,12 +250,15 @@ and check ctx expr ty =
     else (
       let ctx_addition = List.combine args types in
       match check (ctx_addition @ ctx) body ret_ty with
-      | Some _ -> Some (build_lambda_type types ret_ty)
+      | Some (ty, texp) ->
+        Some
+          ( build_lambda_type types ret_ty
+          , TLam { args = ctx_addition; body = texp; typ = ty } )
       | None -> None)
   | Lam _, _ -> None (* Error: lambda type mismatch *)
   | expr, _ ->
     (match infer ctx expr with
-     | Some ty' when ty = ty' -> Some ty
+     | Some (ty', texp) when ty = ty' -> Some (ty, texp)
      | _ -> None (* Error: type inference doesn't unify *))
 ;;
 
@@ -269,7 +291,7 @@ let%test_unit "Valid function with shadowing should type check correctly" =
     FunDef { annotation = fn_type; name = "test"; args = fn_args; body = fn_body }
   in
   match check [] fn fn_type with
-  | Some ty -> OUnit2.assert_equal ~printer:show_typ fn_type ty
+  | Some (ty, _) -> OUnit2.assert_equal ~printer:show_typ fn_type ty
   | None -> OUnit2.assert_bool "Failed to check valid function with shadowing" false
 ;;
 
@@ -283,7 +305,7 @@ let%test_unit
     FunDef { annotation = fn_type; name = "test"; args = fn_args; body = fn_body }
   in
   match check [] fn fn_type with
-  | Some ty -> OUnit2.assert_equal ~printer:show_typ fn_type ty
+  | Some (ty, _) -> OUnit2.assert_equal ~printer:show_typ fn_type ty
   | None ->
     OUnit2.assert_bool
       "Failed to check valid function with shadowing where types change"
@@ -303,7 +325,7 @@ let%test_unit "Complex, valid function should type check correctly" =
     FunDef { annotation = fn_type; name = "test"; args = fn_args; body = fn_body }
   in
   match check [] fn fn_type with
-  | Some ty -> OUnit2.assert_equal ~printer:show_typ fn_type ty
+  | Some (ty, _) -> OUnit2.assert_equal ~printer:show_typ fn_type ty
   | None -> OUnit2.assert_bool "Failed to check complex, valid function" false
 ;;
 
@@ -321,7 +343,7 @@ let%test_unit "Checking a lambda against non-TArrow type should fail" =
 let%test_unit "Checking a valid lambda should not fail" =
   let lam = Lam ([ "x" ], Prim (Add, Var "x", Const (CInt 2))) in
   match check [] lam (TArrow (TInt, TInt)) with
-  | Some ty -> OUnit2.assert_equal ~printer:show_typ (TArrow (TInt, TInt)) ty
+  | Some (ty, _) -> OUnit2.assert_equal ~printer:show_typ (TArrow (TInt, TInt)) ty
   | None -> OUnit2.assert_bool "Failed to check valid lambda" false
 ;;
 
@@ -337,21 +359,21 @@ let%test_unit "Invalid application should fail type checking" =
 let%test_unit "Valid application should type check correctly" =
   let app = App (Var "f", Const (CInt 2)) in
   match infer [ "f", TArrow (TInt, TInt) ] app with
-  | Some ty -> OUnit2.assert_equal ~printer:show_typ TInt ty
+  | Some (ty, _) -> OUnit2.assert_equal ~printer:show_typ TInt ty
   | None -> OUnit2.assert_bool "Failed to check valid application" false
 ;;
 
 let%test_unit "Infer Delay should produce a thunk" =
   let delayed = Delay (Const (CInt 2)) in
   match infer [] delayed with
-  | Some ty -> OUnit2.assert_equal ~printer:show_typ (TArrow (TUnit, TInt)) ty
+  | Some (ty, _) -> OUnit2.assert_equal ~printer:show_typ (TArrow (TUnit, TInt)) ty
   | None -> OUnit2.assert_bool "Failed to infer type of delay" false
 ;;
 
 let%test_unit "Infer Advance should not fail when name is bound to a thunk" =
   let adv = Advance "x" in
   match infer [ "x", TArrow (TUnit, TInt) ] adv with
-  | Some ty -> OUnit2.assert_equal ~printer:show_typ TInt ty
+  | Some (ty, _) -> OUnit2.assert_equal ~printer:show_typ TInt ty
   | None -> OUnit2.assert_bool "Failed to infer type of advance" false
 ;;
 
@@ -382,7 +404,7 @@ let%test_unit "Infer Advance should fail when name is not bound" =
 let%test_unit "Check conditional expression" =
   let conditional = IfThenElse (Const (CBool true), Const (CInt 42), Const (CInt 0)) in
   match check [] conditional TInt with
-  | Some ty -> OUnit2.assert_equal ~printer:show_typ TInt ty
+  | Some (ty, _) -> OUnit2.assert_equal ~printer:show_typ TInt ty
   | None -> OUnit2.assert_bool "Failed to infer let binding" false
 ;;
 
@@ -407,7 +429,7 @@ let%test_unit "Infer let-binding: let x = 2 in x" =
   let binding = Let ("x", Const (CInt 2), Var "x") in
   let checked_binding = infer [] binding in
   match checked_binding with
-  | Some ty -> OUnit2.assert_equal ~printer:show_typ TInt ty
+  | Some (ty, _) -> OUnit2.assert_equal ~printer:show_typ TInt ty
   | None -> OUnit2.assert_bool "Failed to infer let binding" false
 ;;
 
@@ -415,7 +437,7 @@ let%test_unit "Infer let-binding: let x = 2 in x+x" =
   let binding = Let ("x", Const (CInt 2), Prim (Add, Var "x", Var "x")) in
   let checked_binding = infer [] binding in
   match checked_binding with
-  | Some ty -> OUnit2.assert_equal ~printer:show_typ TInt ty
+  | Some (ty, _) -> OUnit2.assert_equal ~printer:show_typ TInt ty
   | None -> OUnit2.assert_bool "Failed to infer let binding" false
 ;;
 
@@ -427,7 +449,7 @@ let%test_unit "Function with let-binding" =
     FunDef { annotation = fn_type; name = "test"; args = fn_args; body = fn_body }
   in
   match check [] fn fn_type with
-  | Some ty -> OUnit2.assert_equal ~printer:show_typ fn_type ty
+  | Some (ty, _) -> OUnit2.assert_equal ~printer:show_typ fn_type ty
   | None -> OUnit2.assert_bool "Failed to check function with let binding" false
 ;;
 
@@ -458,7 +480,7 @@ let%test_unit "Checking constant function should return correct type" =
   in
   let checked_type = check [] fn fn_type in
   match checked_type with
-  | Some ty -> OUnit2.assert_equal TInt ty
+  | Some (ty, _) -> OUnit2.assert_equal TInt ty
   | None -> OUnit2.assert_bool "Failed to check function" false
 ;;
 
@@ -478,7 +500,7 @@ let%test_unit "Check function that adds variable to constant should return corre
   in
   let checked_type = check [] fn fn_type in
   match checked_type with
-  | Some ty -> OUnit2.assert_equal ~printer:show_typ (TArrow (TInt, TInt)) ty
+  | Some (ty, _) -> OUnit2.assert_equal ~printer:show_typ (TArrow (TInt, TInt)) ty
   | None -> failwith "failed to check"
 ;;
 
