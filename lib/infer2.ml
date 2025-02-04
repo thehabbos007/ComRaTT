@@ -93,13 +93,13 @@ let rec tarrow_len_n_rec counter ty types n =
   | TArrow (ty, next_ty) when n = 0 -> counter, next_ty, ty :: types
   | TArrow (ty, next_ty) -> tarrow_len_n_rec (counter + 1) next_ty (ty :: types) (n - 1)
   | _ when n > 0 -> failwith "Too many arguments for function"
-  | _ -> counter + 1, ty, List.rev types
+  | _ -> counter, ty, List.rev types
 ;;
 
 let tarrow_len_n ty n =
   match ty with
   | TArrow _ when n = 0 -> 0, ty, []
-  | TArrow (ty, next_ty) -> tarrow_len_n_rec 1 next_ty [ ty ] n
+  | TArrow (ty, next_ty) -> tarrow_len_n_rec 1 next_ty [ ty ] (n - 1)
   | _ -> failwith "Attempted to traverse a non-tarrow type"
 ;;
 
