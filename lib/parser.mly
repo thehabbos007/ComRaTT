@@ -4,14 +4,13 @@ open Source
 
 %token <int> INT
 %token <string> IDENT
-%token LAMBDA IN LET DEF SARROW SEMI IF THEN ELSE ADVANCE DELAY
+%token LAMBDA IN LET SEMI IF THEN ELSE ADVANCE DELAY
 %token PLUS TIMES MINUS DIV TRUE FALSE UNIT
-%token LT LTE GT GTE NEQ
-%token LPAREN RPAREN
-%token EQUALS
-%token EOF
+%token LT LTE GT GTE NEQ COLON ARROW
+%token LPAREN RPAREN EQUALS EOF
+%token TINT TBOOL TUNIT
 
-%start <expr list> prog
+%start <prog> prog
 
 %left LT LTE GT GTE NEQ
 %left PLUS MINUS
@@ -20,29 +19,43 @@ open Source
 
 %%
 
-let optarg(x) :=
-  | { [] }
-  | x=x ; { [x] }
-
 prog:
-  | fs = fundefs* EOF { fs }
+  | fs = fundef* EOF { fs }
+
+fundef:
+  | name = IDENT COLON t = typ LET IDENT args = optargs EQUALS e = expr SEMI
+    {
+        FunDef (name, t, args, e)
+    }
 
 optargs:
-    | { [] }
-    | args = IDENT+ { args }
+  | { [] }
+  | args = IDENT+ { args }
 
-fundefs:
-  | DEF x = IDENT args = optargs EQUALS e = expr SEMI { FunDef (x, args, e) }
+typ:
+  | t = arrow_typ { t }
+
+arrow_typ:
+  | t1 = atomic_typ ARROW t2 = arrow_typ { TFun (t1, t2) }
+  | t = atomic_typ { t }
+
+atomic_typ:
+  | TINT { TInt }
+  | TBOOL { TBool }
+  | TUNIT { TUnit }
+  | LPAREN t = typ RPAREN { t }
+  | id = IDENT { TVar id }
 
 expr:
   | LET x = IDENT EQUALS e1 = expr IN e2 = expr { Let (x, e1, e2) }
-  | LAMBDA x = IDENT* SARROW e = expr { Lam (x, e) }
+  | LAMBDA xs = IDENT* ARROW e = expr { Lam (xs, e) }
   | app_expr { $1 }
-  | IF guard = app_expr THEN then_branch = app_expr ELSE else_branch = app_expr { IfThenElse(guard, then_branch, else_branch) }
+  | IF guard = app_expr THEN then_branch = app_expr ELSE else_branch = app_expr
+    { IfThenElse(guard, then_branch, else_branch) }
 
 app_expr:
-  | DELAY e = simple_expr { Delay (e) }
-  | ADVANCE x = IDENT { Advance (x) }
+  | DELAY e = simple_expr { Delay e }
+  | ADVANCE x = IDENT { Advance x }
   | app_expr simple_expr { App ($1, $2) }
   | arith_expr { $1 }
 
@@ -54,7 +67,7 @@ arith_expr:
 simple_expr:
   | x = IDENT { Var x }
   | i = INT { Const (CInt i) }
-  | b = bool { Const (b) }
+  | b = bool { Const b }
   | UNIT { Const CUnit }
   | LPAREN e = expr RPAREN { e }
 
@@ -69,9 +82,9 @@ bool:
   | MINUS { Sub }
 
 %inline compare:
-    | EQUALS { Eq }
-    | LT { Lt }
-    | LTE { Lte }
-    | GT { Gt }
-    | GTE { Gte }
-    | NEQ { Neq }
+  | EQUALS { Eq }
+  | LT { Lt }
+  | LTE { Lte }
+  | GT { Gt }
+  | GTE { Gte }
+  | NEQ { Neq }

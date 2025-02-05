@@ -12,7 +12,6 @@ rule token = parse
   | white    { token lexbuf }
   | "fun"    { LAMBDA }
   | "let"    { LET }
-  | "def"    { DEF }
   | "in"     { IN }
   | "true"   { TRUE }
   | "false"  { FALSE }
@@ -31,7 +30,8 @@ rule token = parse
   | "("      { LPAREN }
   | ")"      { RPAREN }
   | "="      { EQUALS }
-  | "->"     { SARROW }
+  | "->"     { ARROW }
+  | ":"      { COLON }
   | ";"      { SEMI }
   | "<"      { LT }
   | "<="     { LTE }

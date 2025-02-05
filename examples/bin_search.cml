@@ -1,7 +1,9 @@
-def get_mid low high =
+get_mid : int -> int -> int
+let get_mid low high =
   ((low + high) / 2);
 
-def binary_search_steps target low high steps =
+binary_search_steps : int -> int -> int -> int -> int
+let binary_search_steps target low high steps =
   if (low > high)
   then (0 - 1)
   else
@@ -13,4 +15,5 @@ def binary_search_steps target low high steps =
        then (binary_search_steps target low (mid - 1) (steps + 1))
        else (binary_search_steps target (mid + 1) high (steps + 1))));
 
-def main x = binary_search_steps x 0 100 1;
+main : int -> int
+let main x = binary_search_steps x 0 100 1;

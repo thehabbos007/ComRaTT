@@ -65,7 +65,7 @@ let rec get_names_for_forward_declaration expr map =
 let unfold_forward_decs decs =
   Environment.fold
     (fun name ty acc ->
-      Printf.sprintf "(local $%s %s)\n" name (wasm_type_of_type ty) ^ acc)
+       Printf.sprintf "(local $%s %s)\n" name (wasm_type_of_type ty) ^ acc)
     decs
     ""
 ;;
@@ -76,7 +76,6 @@ let rec comp expr name_idx funtable =
   | TConst (CInt num, _) -> "(i64.const " ^ string_of_int num ^ ")"
   | TConst (CBool b, _) -> "(i32.const " ^ (if b then "1" else "0") ^ ")"
   | TConst (CUnit, _) -> "(i32.const " ^ "-1)"
-  | TConst (CNil, _) -> failwith "TODO: compilation of NIL"
   | TPrim (op, e1, e2, ty) ->
     let e1_comp = comp e1 name_idx funtable in
     let e2_comp = comp e2 name_idx funtable in
@@ -123,9 +122,9 @@ let rec comp expr name_idx funtable =
 let comp_global_defs (globals : Preprocess.global_def list) name_idx funtable =
   List.fold_left
     (fun acc ({ name; fundef; ret_type; _ } : Preprocess.global_def) ->
-      acc
-      ^ comp (TLet (name, ret_type, fundef, TConst (CInt 0, TInt))) name_idx funtable
-      ^ "\n")
+       acc
+       ^ comp (TLet (name, ret_type, fundef, TConst (CInt 0, TInt))) name_idx funtable
+       ^ "\n")
     ""
     globals
 ;;
@@ -174,7 +173,7 @@ let forward_declare_funtion_signatures signatures =
 let add_functions_to_table name_idx =
   Environment.fold
     (fun name idx acc ->
-      Printf.sprintf "\n(elem (i32.const %s) $%s)" (string_of_int idx) name ^ acc)
+       Printf.sprintf "\n(elem (i32.const %s) $%s)" (string_of_int idx) name ^ acc)
     name_idx
     ""
 ;;
@@ -188,10 +187,10 @@ let add_functions_to_table name_idx =
    that from the
 *)
 let init_wat
-  (annot_exprs : typed_expr list)
-  (globals : Preprocess.global_def list)
-  name_idx
-  funtable
+      (annot_exprs : typed_expr list)
+      (globals : Preprocess.global_def list)
+      name_idx
+      funtable
   =
   Printf.sprintf
     "(module %s %s %s %s %s %s \n %s\n %s\n (export \"main\" (func $main)))"
