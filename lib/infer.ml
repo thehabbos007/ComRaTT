@@ -222,7 +222,7 @@ let infer_all exprs =
             let fn_ty = build_fn_type types body_ty in
             let typed_fun = TFunDef (name, args_with_types, typed_body, fn_ty) in
             aux expanded_ctx (typed_fun :: acc) rest
-          | None -> [])
+          | None -> failwith ("Error type checking function" ^ " " ^ name))
        (*
           A function with no arguments. Check the (constant) body against the type.
        Dont add name to context as we dont want a recursive constant function.
@@ -237,11 +237,12 @@ let infer_all exprs =
           | Some (fun_ty, typed_body) ->
             let typed_fun = TFunDef (name, [], typed_body, fun_ty) in
             aux ((name, fun_ty) :: ctx) (typed_fun :: acc) rest
-          | None -> [])
+          | None ->
+            failwith ("Error type checking function with no arguments" ^ " " ^ name))
        (*
           A non-annotated fundef is illegal.
        *)
-       | FunDef _ -> [])
+       | FunDef _ -> failwith "Error: Non-annotated function")
   in
   let inferred = aux [] [] exprs in
   inferred
