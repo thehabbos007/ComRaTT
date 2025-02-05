@@ -14,7 +14,7 @@
         in
         pkgs.mkShell {
           buildInputs = [
-	    pkgs.wasmtime
+	          pkgs.wasmtime
             pkgs.ocaml
             pkgs.ocamlPackages.findlib
             pkgs.dune_3
@@ -27,7 +27,9 @@
             pkgs.ocamlPackages.ppx_deriving
             pkgs.ocamlPackages.ppx_inline_test
             pkgs.ocamlPackages.menhir
+            pkgs.ocamlPackages.menhirLib
             pkgs.ocamlPackages.base
+            pkgs.ocamlPackages.asai
             pkgs.ocamlPackages.ounit2
           ];
         };

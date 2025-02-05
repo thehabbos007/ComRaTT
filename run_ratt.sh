@@ -2,4 +2,4 @@
 
 # Usage:   ./run_ratt.sh <args> < [comratt-file]
 
-dune exec -- ComRaTT | wasmtime run -W tail-call=y,multi-memory=y --invoke main - $@
+dune exec -- ComRaTT $1 | wasmtime run -W tail-call=y,multi-memory=y --invoke main - ${@:2}

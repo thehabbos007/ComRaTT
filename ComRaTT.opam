@@ -17,6 +17,7 @@ depends: [
   "ounit2"
   "menhir"
   "base"
+  "asai"
   "odoc" {with-doc}
 ]
 build: [

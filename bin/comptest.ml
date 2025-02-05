@@ -1,9 +1,9 @@
 open ComRaTTlib.Preprocess
 open ComRaTTlib.Preprocess.ForwardDeclataion
-open ComRaTTlib.Ast_of_text
 open ComRaTTlib.Infer
 open ComRaTTlib.Compile
 
+let ast_of_text _s = failwith ""
 let _toplevel = ast_of_text "def add x y = x + y;"
 
 let _toplevel_eta =

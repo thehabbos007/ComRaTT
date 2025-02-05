@@ -8,7 +8,7 @@ open Source
 %token PLUS TIMES MINUS DIV TRUE FALSE UNIT
 %token LT LTE GT GTE NEQ COLON ARROW
 %token LPAREN RPAREN EQUALS EOF
-%token TINT TBOOL TUNIT
+%token TINT TBOOL
 
 %start <prog> prog
 
@@ -23,8 +23,12 @@ prog:
   | fs = fundef* EOF { fs }
 
 fundef:
-  | name = IDENT COLON t = typ LET IDENT args = optargs EQUALS e = expr SEMI
+  | name = IDENT COLON t = typ LET _def_name = IDENT args = optargs EQUALS e = expr SEMI
     {
+      (*if name <> def_name then
+        let msg = Printf.sprintf "Function name mismatch: %s vs %s" name def_name in
+        raise (Parsing.Parse_error (Parsing.symbol_start_pos (), Parsing.symbol_end_pos ()) msg)
+      else*)
         FunDef (name, t, args, e)
     }
 
@@ -42,7 +46,7 @@ arrow_typ:
 atomic_typ:
   | TINT { TInt }
   | TBOOL { TBool }
-  | TUNIT { TUnit }
+  | UNIT { TUnit }
   | LPAREN t = typ RPAREN { t }
 
 expr:

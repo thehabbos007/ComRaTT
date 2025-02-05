@@ -1,15 +1,32 @@
 {
 open Parser
-exception LexError of string
+exception SyntaxError of string
+
+
 }
 
-let white = [' ' '\t' '\n']+
+let line_ending
+  = '\r'
+  | '\n'
+  | "\r\n"
+let whitespace =
+  [' ' '\t']+
+
 let letter = ['a'-'z' 'A'-'Z']
 let digit = ['0'-'9']
 let ident = letter (letter | digit | '_')*
 
-rule token = parse
-  | white    { token lexbuf }
+rule skip_whitespace kont = parse
+  | line_ending
+    { Lexing.new_line lexbuf; (skip_whitespace kont) lexbuf }
+  | whitespace
+    { skip_whitespace kont lexbuf }
+  | ""
+    { kont lexbuf }
+
+and token = parse "" { skip_whitespace actual_token lexbuf }
+
+and actual_token = parse
   | "fun"    { LAMBDA }
   | "let"    { LET }
   | "in"     { IN }
@@ -22,6 +39,8 @@ rule token = parse
   | "else"   { ELSE }
   | "delay"  { DELAY }
   | "advance" { ADVANCE }
+  | "int"    { TINT }
+  | "bool"   { TBOOL }
   | "()"     { UNIT }
   | "+"      { PLUS }
   | "/"      { DIV }
@@ -41,4 +60,4 @@ rule token = parse
   | ident as id { IDENT id }
   | digit+ as d { INT (int_of_string d) }
   | eof      { EOF }
-  | _ as c   { raise (LexError ("Unexpected character: " ^ String.make 1 c)) }
+  | _  { raise @@ SyntaxError (Lexing.lexeme lexbuf) }
