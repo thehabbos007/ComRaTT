@@ -339,37 +339,34 @@ let%test_unit "build_lambda_type returns correct type" =
   OUnit2.assert_equal expected_type actual_type
 ;;
 
-(*
-   let%test_unit "Valid function with shadowing should type check correctly" =
+let%test_unit "Valid function with shadowing should type check correctly" =
   let fn_type = TFun (TInt, TInt) in
   let fn_args = [ "x" ] in
   let fn_body = Let ("x", Const (CInt 40), Prim (Add, Var "x", Const (CInt 2))) in
-  let fn =
-    FunDef { annotation = fn_type; name = "test"; args = fn_args; body = fn_body }
-  in
-  match check [] fn fn_type with
-  | Some (ty, texp) ->
-    OUnit2.assert_equal ~printer:show_typ fn_type ty;
+  let fn = FunDef ("test", fn_type, fn_args, fn_body) in
+  let inferred = infer_all [ fn ] in
+  OUnit2.assert_equal 1 (List.length inferred);
+  match List.nth inferred 0 with
+  | TFunDef (name, args, body, ty) ->
+    OUnit2.assert_equal "test" name;
+    OUnit2.assert_equal [ "x", TInt ] args;
     OUnit2.assert_equal
-      (TFunDef
-         ( "test"
-         , [ "x", TInt ]
-         , TLet
-             { name = "x"
-             ; typ = TInt
-             ; rhs = TConst (CInt 40, TInt)
-             ; body =
-                 TPrim
-                   { op = Add
-                   ; left = TName ("x", TInt)
-                   ; right = TConst (CInt 2, TInt)
-                   ; typ = TInt
-                   }
-             }
-         , TInt ))
-      texp
-      ~printer:show_typed_expr
-  | None -> OUnit2.assert_bool "Failed to check valid function with shadowing" false
+      (TLet
+         { name = "x"
+         ; typ = TInt
+         ; rhs = TConst (CInt 40, TInt)
+         ; body =
+             TPrim
+               { op = Add
+               ; left = TName ("x", TInt)
+               ; right = TConst (CInt 2, TInt)
+               ; typ = TInt
+               }
+         })
+      body
+      ~printer:show_typed_expr;
+    OUnit2.assert_equal (TFun (TInt, TInt)) ty ~printer:show_typ
+  | _ -> OUnit2.assert_failure "Failed to check valid function with shadowing"
 ;;
 
 let%test_unit
@@ -378,29 +375,26 @@ let%test_unit
   let fn_type = TFun (TInt, TBool) in
   let fn_args = [ "x" ] in
   let fn_body = Let ("x", Const (CBool true), Var "x") in
-  let fn =
-    FunDef { annotation = fn_type; name = "test"; args = fn_args; body = fn_body }
-  in
-  match check [] fn fn_type with
-  | Some (ty, texp) ->
-    OUnit2.assert_equal ~printer:show_typ fn_type ty;
+  let fn = FunDef ("test", fn_type, fn_args, fn_body) in
+  let inferred = infer_all [ fn ] in
+  OUnit2.assert_equal 1 (List.length inferred);
+  match List.nth inferred 0 with
+  | TFunDef (name, args, body, ty) ->
+    OUnit2.assert_equal "test" name;
+    OUnit2.assert_equal [ "x", TInt ] args;
     OUnit2.assert_equal
-      (TFunDef
-         ( "test"
-         , [ "x", TInt ]
-         , TLet
-             { name = "x"
-             ; typ = TBool
-             ; rhs = TConst (CBool true, TBool)
-             ; body = TName ("x", TBool)
-             }
-         , TBool ))
-      texp
-      ~printer:show_typed_expr
-  | None ->
-    OUnit2.assert_bool
+      (TLet
+         { name = "x"
+         ; typ = TBool
+         ; rhs = TConst (CBool true, TBool)
+         ; body = TName ("x", TBool)
+         })
+      body
+      ~printer:show_typed_expr;
+    OUnit2.assert_equal (TFun (TInt, TBool)) ty ~printer:show_typ
+  | _ ->
+    OUnit2.assert_failure
       "Failed to check valid function with shadowing where types change"
-      false
 ;;
 
 let%test_unit "Complex, valid function should type check correctly" =
@@ -412,62 +406,59 @@ let%test_unit "Complex, valid function should type check correctly" =
       , Let ("del", Delay (Prim (Mul, Var "x", Const (CInt 2))), Advance "del")
       , Prim (Add, Var "x", Const (CInt 40)) )
   in
-  let fn =
-    FunDef { annotation = fn_type; name = "test"; args = fn_args; body = fn_body }
-  in
-  match check [] fn fn_type with
-  | Some (ty, texp) ->
-    OUnit2.assert_equal ~printer:show_typ fn_type ty;
+  let fn = FunDef ("test", fn_type, fn_args, fn_body) in
+  let inferred = infer_all [ fn ] in
+  OUnit2.assert_equal 1 (List.length inferred);
+  match List.nth inferred 0 with
+  | TFunDef (name, args, body, ty) ->
+    OUnit2.assert_equal "test" name;
+    OUnit2.assert_equal [ "x", TInt ] args;
     OUnit2.assert_equal
-      (TFunDef
-         ( "test"
-         , [ "x", TInt ]
-         , TIfThenElse
-             { condition =
-                 TPrim
-                   { op = Eq
-                   ; left = TName ("x", TInt)
-                   ; right = TConst (CInt 2, TInt)
-                   ; typ = TBool
-                   }
-             ; then_branch =
-                 TLet
-                   { name = "del"
-                   ; typ = TInt
-                   ; rhs =
-                       TLam
-                         { args = [ "#advance_unit", TUnit ]
-                         ; body =
-                             TPrim
-                               { op = Mul
-                               ; left = TName ("x", TInt)
-                               ; right = TConst (CInt 2, TInt)
-                               ; typ = TInt
-                               }
-                         ; typ = TFun (TUnit, TInt)
-                         }
-                   ; body =
-                       TApp
-                         { fn = TName ("del", TFun (TUnit, TInt))
-                         ; args = [ TConst (CUnit, TUnit) ]
-                         ; typ = TInt
-                         }
-                   }
-             ; else_branch =
-                 TPrim
-                   { op = Add
-                   ; left = TName ("x", TInt)
-                   ; right = TConst (CInt 40, TInt)
-                   ; typ = TInt
-                   }
-             ; typ = TInt
-             }
-         , TInt ))
-      texp
-      ~printer:show_typed_expr
-  | None -> OUnit2.assert_bool "Failed to check complex, valid function" false
+      (TIfThenElse
+         { condition =
+             TPrim
+               { op = Eq
+               ; left = TName ("x", TInt)
+               ; right = TConst (CInt 2, TInt)
+               ; typ = TBool
+               }
+         ; then_branch =
+             TLet
+               { name = "del"
+               ; typ = TInt
+               ; rhs =
+                   TLam
+                     { args = [ "#advance_unit", TUnit ]
+                     ; body =
+                         TPrim
+                           { op = Mul
+                           ; left = TName ("x", TInt)
+                           ; right = TConst (CInt 2, TInt)
+                           ; typ = TInt
+                           }
+                     ; typ = TFun (TUnit, TInt)
+                     }
+               ; body =
+                   TApp
+                     { fn = TName ("del", TFun (TUnit, TInt))
+                     ; args = [ TConst (CUnit, TUnit) ]
+                     ; typ = TInt
+                     }
+               }
+         ; else_branch =
+             TPrim
+               { op = Add
+               ; left = TName ("x", TInt)
+               ; right = TConst (CInt 40, TInt)
+               ; typ = TInt
+               }
+         ; typ = TInt
+         })
+      body
+      ~printer:show_typed_expr;
+    OUnit2.assert_equal (TFun (TInt, TInt)) ty ~printer:show_typ
+  | _ -> OUnit2.assert_failure "Failed to check complex, valid function"
 ;;
-*)
 
 let%test_unit "Checking a lambda against non-TFun type should fail" =
   let lam = Lam ([ "x" ], Const (CInt 2)) in
