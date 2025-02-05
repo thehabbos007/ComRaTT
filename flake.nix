@@ -25,7 +25,7 @@
 
             pkgs.ocamlPackages.ppx_assert
             pkgs.ocamlPackages.ppx_deriving
-            pkgs.ocamlPackages.ppx_inline_test
+            pkgs.ocamlPackages.ppx_expect
             pkgs.ocamlPackages.menhir
             pkgs.ocamlPackages.menhirLib
             pkgs.ocamlPackages.base

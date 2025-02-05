@@ -42,14 +42,6 @@ type typed_expr =
       }
 [@@deriving show, eq]
 
-let rec tfun_len_n_rec counter ty types n =
-  match ty with
-  | TFun (ty, next_ty) when n = 0 -> counter, next_ty, ty :: types
-  | TFun (ty, next_ty) -> tfun_len_n_rec (counter + 1) next_ty (ty :: types) (n - 1)
-  | _ when n > 0 -> failwith "Too many arguments for function"
-  | _ -> counter, ty, List.rev types
-;;
-
 let rec build_fn_type args ret_ty =
   match args with
   | [] -> ret_ty
@@ -57,10 +49,15 @@ let rec build_fn_type args ret_ty =
 ;;
 
 let tfun_len_n ty n =
-  match ty with
-  | TFun _ when n = 0 -> 0, ty, []
-  | TFun (ty, next_ty) -> tfun_len_n_rec 1 next_ty [ ty ] (n - 1)
-  | _ -> failwith "Attempted to traverse a non-TFun type"
+  let rec n_tfuns_to_list_rec ty n acc =
+    match ty with
+    | TFun (ty, next_ty) when n > 0 -> n_tfuns_to_list_rec next_ty (n - 1) (ty :: acc)
+    | t when n = 0 -> t, List.rev acc
+    | TInt | TBool | TUnit ->
+      failwith @@ Printf.sprintf "Attempted to traverse a non-TFun type at n = %d" n
+    | _ -> failwith "Too many arguments for function"
+  in
+  n_tfuns_to_list_rec ty n []
 ;;
 
 let rec infer ctx expr : (typ * typed_expr) option =
@@ -180,16 +177,13 @@ and check ctx expr ty : (typ * typed_expr) option =
   TODO: support nested lambdas? (the len <> List.len args check. could we do like with fundef instead?)
   *)
   | Lam (args, body), TFun _ ->
-    let len, ret_ty, types = tfun_len_n ty (List.length args) in
-    if len <> List.length args
-    then None (* Error: lambda args too few/too many *)
-    else (
-      let ctx_addition = List.combine args types in
-      match check (ctx_addition @ ctx) body ret_ty with
-      | Some (_, texp) ->
-        let lambda_type = build_fn_type types ret_ty in
-        Some (lambda_type, TLam { args = ctx_addition; body = texp; typ = lambda_type })
-      | None -> None)
+    let ret_ty, types = tfun_len_n ty (List.length args) in
+    let ctx_addition = List.combine args types in
+    (match check (ctx_addition @ ctx) body ret_ty with
+     | Some (_, texp) ->
+       let lambda_type = build_fn_type types ret_ty in
+       Some (lambda_type, TLam { args = ctx_addition; body = texp; typ = lambda_type })
+     | None -> None)
   | Lam _, _ -> None (* Error: lambda type mismatch *)
   | expr, _ ->
     (match infer ctx expr with
@@ -213,7 +207,7 @@ let infer_all exprs =
         Misuse of arguments is handled when checking the body.
        *)
        | FunDef (name, (TFun _ as ty), args, body) ->
-         let _, ret_ty, types = tfun_len_n ty (List.length args) in
+         let ret_ty, types = tfun_len_n ty (List.length args) in
          let args_with_types = List.combine args types in
          let ctx_addition = (name, ty) :: args_with_types in
          let expanded_ctx = ctx_addition @ ctx in
@@ -761,21 +755,22 @@ let%test_unit "Check function that adds variable to constant should return corre
 *)
 
 let%test_unit "TFun_len_n given non TFun type raises Failure" =
-  OUnit2.assert_raises (Failure "Attempted to traverse a non-TFun type") (fun () ->
-    tfun_len_n TBool 1)
+  OUnit2.assert_raises
+    (Failure "Attempted to traverse a non-TFun type at n = 1")
+    (fun () -> tfun_len_n TBool 1)
 ;;
 
 let%test_unit
     "TFun_len_n given TFun type and n larger than amount of arguments raises Failure"
   =
-  OUnit2.assert_raises (Failure "Too many arguments for function") (fun () ->
-    tfun_len_n (TFun (TInt, TFun (TInt, TBool))) 3)
+  OUnit2.assert_raises
+    (Failure "Attempted to traverse a non-TFun type at n = 1")
+    (fun () -> tfun_len_n (TFun (TInt, TFun (TInt, TBool))) 3)
 ;;
 
 let%test_unit "tfun_len_n given TFun and n=0 returns type unmodified" =
   let arrow = TFun (TInt, TBool) in
-  let counter, ret_ty, types = tfun_len_n arrow 0 in
-  OUnit2.assert_equal 0 counter;
+  let ret_ty, types = tfun_len_n arrow 0 in
   OUnit2.assert_equal arrow ret_ty;
   OUnit2.assert_equal [] types
 ;;
@@ -783,8 +778,7 @@ let%test_unit "tfun_len_n given TFun and n=0 returns type unmodified" =
 (* int -> bool *)
 let%test_unit "TFun_len_n given TFun and n = args length returns correct result" =
   let arrow = TFun (TInt, TBool) in
-  let counter, ret_ty, types = tfun_len_n arrow 1 in
-  OUnit2.assert_equal 1 counter;
+  let ret_ty, types = tfun_len_n arrow 1 in
   OUnit2.assert_equal TBool ret_ty;
   OUnit2.assert_equal [ TInt ] types
 ;;
@@ -792,10 +786,25 @@ let%test_unit "TFun_len_n given TFun and n = args length returns correct result"
 (* int -> int -> bool *)
 let%test_unit "TFun_len_n given TFun and n = args length returns correct result" =
   let arrow = TFun (TInt, TFun (TInt, TBool)) in
-  let counter, ret_ty, types = tfun_len_n arrow 2 in
-  OUnit2.assert_equal 2 counter;
+  let ret_ty, types = tfun_len_n arrow 2 in
   OUnit2.assert_equal TBool ret_ty;
   OUnit2.assert_equal [ TInt; TInt ] types
+;;
+
+let rec print_list fn (v : 'a list) =
+  match v with
+  | [] -> ()
+  | e :: l ->
+    print_string @@ fn e;
+    print_string " ";
+    print_list fn l
+;;
+
+let%expect_test "TFun_len_n provides corect amount of arguments in the right order" =
+  let typ, typs = tfun_len_n (TFun (TBool, TFun (TInt, TBool))) 2 in
+  print_string @@ show_typ typ ^ ", ";
+  print_list show_typ typs;
+  [%expect {| Source.TBool, Source.TBool Source.TInt |}]
 ;;
 
 let rec string_of_type = function

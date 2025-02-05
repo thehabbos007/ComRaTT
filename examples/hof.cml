@@ -1,0 +1,5 @@
+add_hof : int -> (int -> int)
+let add_hof n = fun m -> n + m;
+
+main : int -> int -> int
+let main x y = add_hof x y;

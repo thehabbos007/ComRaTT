@@ -11,11 +11,10 @@
  (deps parser.messages parser.mly)
  (action  (with-stdout-to %{targets} (run menhir --compile-errors %{deps}))))
 
-
 (library
  (name ComRaTTlib)
  (libraries menhirLib asai ounit2)
  (preprocess
-  (pps ppx_inline_test ppx_assert ppx_deriving.show ppx_deriving.eq ppx_deriving.ord))
-  (inline_tests)
+  (pps ppx_expect ppx_assert ppx_deriving.show ppx_deriving.eq ppx_deriving.ord))
+ (expect_test)
 )
