@@ -1,0 +1,778 @@
+prog: UNIT
+##
+## Ends in an error in state: 0.
+##
+## prog' -> . prog [ # ]
+##
+## The known suffix of the stack is as follows:
+##
+##
+
+Expected an identifier for function definition
+
+prog: IDENT UNIT
+##
+## Ends in an error in state: 1.
+##
+## fundef -> IDENT . COLON typ LET IDENT optargs EQUALS expr SEMI [ IDENT EOF ]
+##
+## The known suffix of the stack is as follows:
+## IDENT
+##
+
+Expected ':' after identifier
+
+prog: IDENT COLON TRUE
+##
+## Ends in an error in state: 2.
+##
+## fundef -> IDENT COLON . typ LET IDENT optargs EQUALS expr SEMI [ IDENT EOF ]
+##
+## The known suffix of the stack is as follows:
+## IDENT COLON
+##
+
+Expected a type after colon
+
+prog: IDENT COLON LPAREN TRUE
+##
+## Ends in an error in state: 6.
+##
+## atomic_typ -> LPAREN . typ RPAREN [ RPAREN LET ARROW ]
+##
+## The known suffix of the stack is as follows:
+## LPAREN
+##
+
+Expected a type after left parenthesis
+
+prog: IDENT COLON LPAREN IDENT LET
+##
+## Ends in an error in state: 8.
+##
+## atomic_typ -> LPAREN typ . RPAREN [ RPAREN LET ARROW ]
+##
+## The known suffix of the stack is as follows:
+## LPAREN typ
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 10, spurious reduction of production arrow_typ -> atomic_typ
+## In state 13, spurious reduction of production typ -> arrow_typ
+##
+
+Expected right parenthesis after type
+
+prog: IDENT COLON IDENT UNIT
+##
+## Ends in an error in state: 10.
+##
+## arrow_typ -> atomic_typ . ARROW arrow_typ [ RPAREN LET ]
+## arrow_typ -> atomic_typ . [ RPAREN LET ]
+##
+## The known suffix of the stack is as follows:
+## atomic_typ
+##
+
+Expected 'let' after type. Did you forget to add an arrow?
+
+prog: IDENT COLON IDENT ARROW TRUE
+##
+## Ends in an error in state: 11.
+##
+## arrow_typ -> atomic_typ ARROW . arrow_typ [ RPAREN LET ]
+##
+## The known suffix of the stack is as follows:
+## atomic_typ ARROW
+##
+
+Expected a type after arrow.
+
+prog: IDENT COLON IDENT RPAREN
+##
+## Ends in an error in state: 14.
+##
+## fundef -> IDENT COLON typ . LET IDENT optargs EQUALS expr SEMI [ IDENT EOF ]
+##
+## The known suffix of the stack is as follows:
+## IDENT COLON typ
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 10, spurious reduction of production arrow_typ -> atomic_typ
+## In state 13, spurious reduction of production typ -> arrow_typ
+##
+
+Expected 'let' after type
+
+prog: IDENT COLON IDENT LET UNIT
+##
+## Ends in an error in state: 15.
+##
+## fundef -> IDENT COLON typ LET . IDENT optargs EQUALS expr SEMI [ IDENT EOF ]
+##
+## The known suffix of the stack is as follows:
+## IDENT COLON typ LET
+##
+
+Expected an identifier after 'let'
+
+prog: IDENT COLON IDENT LET IDENT UNIT
+##
+## Ends in an error in state: 16.
+##
+## fundef -> IDENT COLON typ LET IDENT . optargs EQUALS expr SEMI [ IDENT EOF ]
+##
+## The known suffix of the stack is as follows:
+## IDENT COLON typ LET IDENT
+##
+
+Expected '=' after let-binding
+
+prog: IDENT COLON IDENT LET IDENT IDENT UNIT
+##
+## Ends in an error in state: 17.
+##
+## nonempty_list(IDENT) -> IDENT . [ EQUALS ]
+## nonempty_list(IDENT) -> IDENT . nonempty_list(IDENT) [ EQUALS ]
+##
+## The known suffix of the stack is as follows:
+## IDENT
+##
+
+Expected '=' after identifier
+
+prog: IDENT COLON IDENT LET IDENT EQUALS TINT
+##
+## Ends in an error in state: 20.
+##
+## fundef -> IDENT COLON typ LET IDENT optargs EQUALS . expr SEMI [ IDENT EOF ]
+##
+## The known suffix of the stack is as follows:
+## IDENT COLON typ LET IDENT optargs EQUALS
+##
+
+Expected an expression after '='
+
+prog: IDENT COLON IDENT LET IDENT EQUALS LPAREN TINT
+##
+## Ends in an error in state: 23.
+##
+## simple_expr -> LPAREN . expr RPAREN [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+##
+## The known suffix of the stack is as follows:
+## LPAREN
+##
+
+Expected an expression after left parenthesis
+
+prog: IDENT COLON IDENT LET IDENT EQUALS LET UNIT
+##
+## Ends in an error in state: 24.
+##
+## expr -> LET . IDENT EQUALS expr IN expr [ SEMI RPAREN IN ]
+##
+## The known suffix of the stack is as follows:
+## LET
+##
+
+Expected an identifier after 'let'
+
+prog: IDENT COLON IDENT LET IDENT EQUALS LET IDENT UNIT
+##
+## Ends in an error in state: 25.
+##
+## expr -> LET IDENT . EQUALS expr IN expr [ SEMI RPAREN IN ]
+##
+## The known suffix of the stack is as follows:
+## LET IDENT
+##
+
+Expected '=' after identifier in let binding
+
+prog: IDENT COLON IDENT LET IDENT EQUALS LET IDENT EQUALS TINT
+##
+## Ends in an error in state: 26.
+##
+## expr -> LET IDENT EQUALS . expr IN expr [ SEMI RPAREN IN ]
+##
+## The known suffix of the stack is as follows:
+## LET IDENT EQUALS
+##
+
+Expected an expression after '='
+
+prog: IDENT COLON IDENT LET IDENT EQUALS LAMBDA UNIT
+##
+## Ends in an error in state: 27.
+##
+## expr -> LAMBDA . list(IDENT) ARROW expr [ SEMI RPAREN IN ]
+##
+## The known suffix of the stack is as follows:
+## LAMBDA
+##
+
+Expected parameters after lambda
+
+prog: IDENT COLON IDENT LET IDENT EQUALS LAMBDA IDENT UNIT
+##
+## Ends in an error in state: 28.
+##
+## list(IDENT) -> IDENT . list(IDENT) [ ARROW ]
+##
+## The known suffix of the stack is as follows:
+## IDENT
+##
+
+Expected '->' after lambda parameters
+
+prog: IDENT COLON IDENT LET IDENT EQUALS LAMBDA ARROW TINT
+##
+## Ends in an error in state: 31.
+##
+## expr -> LAMBDA list(IDENT) ARROW . expr [ SEMI RPAREN IN ]
+##
+## The known suffix of the stack is as follows:
+## LAMBDA list(IDENT) ARROW
+##
+
+Expected an expression after lambda arrow
+
+prog: IDENT COLON IDENT LET IDENT EQUALS IF TINT
+##
+## Ends in an error in state: 33.
+##
+## expr -> IF . app_expr THEN app_expr ELSE app_expr [ SEMI RPAREN IN ]
+##
+## The known suffix of the stack is as follows:
+## IF
+##
+
+Expected a condition after 'if'
+
+prog: IDENT COLON IDENT LET IDENT EQUALS DELAY TINT
+##
+## Ends in an error in state: 36.
+##
+## app_expr -> DELAY . simple_expr [ UNIT TRUE THEN SEMI RPAREN LPAREN INT IN IDENT FALSE ELSE ]
+##
+## The known suffix of the stack is as follows:
+## DELAY
+##
+
+Expected an expression after 'delay'
+
+prog: IDENT COLON IDENT LET IDENT EQUALS ADVANCE UNIT
+##
+## Ends in an error in state: 39.
+##
+## app_expr -> ADVANCE . IDENT [ UNIT TRUE THEN SEMI RPAREN LPAREN INT IN IDENT FALSE ELSE ]
+##
+## The known suffix of the stack is as follows:
+## ADVANCE
+##
+
+Expected an identifier after 'advance'
+
+prog: IDENT COLON IDENT LET IDENT EQUALS FALSE TINT
+##
+## Ends in an error in state: 42.
+##
+## app_expr -> arith_expr . [ UNIT TRUE THEN SEMI RPAREN LPAREN INT IN IDENT FALSE ELSE ]
+## arith_expr -> arith_expr . PLUS arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . TIMES arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . DIV arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . MINUS arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . EQUALS arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . LT arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . LTE arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . GT arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . GTE arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . NEQ arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+##
+## The known suffix of the stack is as follows:
+## arith_expr
+##
+
+Unexpected token after expression
+
+prog: IDENT COLON IDENT LET IDENT EQUALS FALSE TIMES TINT
+##
+## Ends in an error in state: 43.
+##
+## arith_expr -> arith_expr TIMES . arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+##
+## The known suffix of the stack is as follows:
+## arith_expr TIMES
+##
+
+Expected an expression after '*' operator
+
+prog: IDENT COLON IDENT LET IDENT EQUALS FALSE PLUS TINT
+##
+## Ends in an error in state: 45.
+##
+## arith_expr -> arith_expr PLUS . arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+##
+## The known suffix of the stack is as follows:
+## arith_expr PLUS
+##
+
+Expected an expression after '+' operator
+
+prog: IDENT COLON IDENT LET IDENT EQUALS FALSE PLUS FALSE TINT
+##
+## Ends in an error in state: 46.
+##
+## arith_expr -> arith_expr . PLUS arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr PLUS arith_expr . [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . TIMES arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . DIV arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . MINUS arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . EQUALS arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . LT arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . LTE arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . GT arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . GTE arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . NEQ arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+##
+## The known suffix of the stack is as follows:
+## arith_expr PLUS arith_expr
+##
+
+Unexpected token in arithmetic expression
+
+prog: IDENT COLON IDENT LET IDENT EQUALS FALSE EQUALS TINT
+##
+## Ends in an error in state: 47.
+##
+## arith_expr -> arith_expr EQUALS . arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+##
+## The known suffix of the stack is as follows:
+## arith_expr EQUALS
+##
+
+Expected an expression after '=' operator
+
+prog: IDENT COLON IDENT LET IDENT EQUALS FALSE EQUALS FALSE TINT
+##
+## Ends in an error in state: 48.
+##
+## arith_expr -> arith_expr . PLUS arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . TIMES arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . DIV arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . MINUS arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . EQUALS arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr EQUALS arith_expr . [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . LT arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . LTE arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . GT arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . GTE arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . NEQ arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+##
+## The known suffix of the stack is as follows:
+## arith_expr EQUALS arith_expr
+##
+
+Unexpected token in equality expression
+
+prog: IDENT COLON IDENT LET IDENT EQUALS FALSE DIV TINT
+##
+## Ends in an error in state: 49.
+##
+## arith_expr -> arith_expr DIV . arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+##
+## The known suffix of the stack is as follows:
+## arith_expr DIV
+##
+
+Expected an expression after '/' operator
+
+prog: IDENT COLON IDENT LET IDENT EQUALS FALSE NEQ TINT
+##
+## Ends in an error in state: 51.
+##
+## arith_expr -> arith_expr NEQ . arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+##
+## The known suffix of the stack is as follows:
+## arith_expr NEQ
+##
+
+Expected an expression after '<>' operator
+
+prog: IDENT COLON IDENT LET IDENT EQUALS FALSE NEQ FALSE TINT
+##
+## Ends in an error in state: 52.
+##
+## arith_expr -> arith_expr . PLUS arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . TIMES arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . DIV arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . MINUS arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . EQUALS arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . LT arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . LTE arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . GT arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . GTE arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . NEQ arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr NEQ arith_expr . [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+##
+## The known suffix of the stack is as follows:
+## arith_expr NEQ arith_expr
+##
+
+Unexpected token in inequality expression
+
+prog: IDENT COLON IDENT LET IDENT EQUALS FALSE MINUS TINT
+##
+## Ends in an error in state: 53.
+##
+## arith_expr -> arith_expr MINUS . arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+##
+## The known suffix of the stack is as follows:
+## arith_expr MINUS
+##
+
+Expected an expression after '-' operator
+
+prog: IDENT COLON IDENT LET IDENT EQUALS FALSE MINUS FALSE TINT
+##
+## Ends in an error in state: 54.
+##
+## arith_expr -> arith_expr . PLUS arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . TIMES arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . DIV arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . MINUS arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr MINUS arith_expr . [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . EQUALS arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . LT arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . LTE arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . GT arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . GTE arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . NEQ arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+##
+## The known suffix of the stack is as follows:
+## arith_expr MINUS arith_expr
+##
+
+Unexpected token in subtraction expression
+
+prog: IDENT COLON IDENT LET IDENT EQUALS FALSE LTE TINT
+##
+## Ends in an error in state: 55.
+##
+## arith_expr -> arith_expr LTE . arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+##
+## The known suffix of the stack is as follows:
+## arith_expr LTE
+##
+
+Expected an expression after '<=' operator
+
+prog: IDENT COLON IDENT LET IDENT EQUALS FALSE LTE FALSE TINT
+##
+## Ends in an error in state: 56.
+##
+## arith_expr -> arith_expr . PLUS arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . TIMES arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . DIV arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . MINUS arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . EQUALS arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . LT arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . LTE arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr LTE arith_expr . [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . GT arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . GTE arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . NEQ arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+##
+## The known suffix of the stack is as follows:
+## arith_expr LTE arith_expr
+##
+
+Unexpected token in less-than-or-equal expression
+
+prog: IDENT COLON IDENT LET IDENT EQUALS FALSE LT TINT
+##
+## Ends in an error in state: 57.
+##
+## arith_expr -> arith_expr LT . arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+##
+## The known suffix of the stack is as follows:
+## arith_expr LT
+##
+
+Expected an expression after '<' operator
+
+prog: IDENT COLON IDENT LET IDENT EQUALS FALSE LT FALSE TINT
+##
+## Ends in an error in state: 58.
+##
+## arith_expr -> arith_expr . PLUS arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . TIMES arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . DIV arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . MINUS arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . EQUALS arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . LT arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr LT arith_expr . [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . LTE arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . GT arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . GTE arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . NEQ arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+##
+## The known suffix of the stack is as follows:
+## arith_expr LT arith_expr
+##
+
+Unexpected token in less-than expression
+
+prog: IDENT COLON IDENT LET IDENT EQUALS FALSE GTE TINT
+##
+## Ends in an error in state: 59.
+##
+## arith_expr -> arith_expr GTE . arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+##
+## The known suffix of the stack is as follows:
+## arith_expr GTE
+##
+
+Expected an expression after '>=' operator
+
+prog: IDENT COLON IDENT LET IDENT EQUALS FALSE GTE FALSE TINT
+##
+## Ends in an error in state: 60.
+##
+## arith_expr -> arith_expr . PLUS arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . TIMES arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . DIV arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . MINUS arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . EQUALS arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . LT arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . LTE arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . GT arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . GTE arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr GTE arith_expr . [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . NEQ arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+##
+## The known suffix of the stack is as follows:
+## arith_expr GTE arith_expr
+##
+
+Unexpected token in greater-than-or-equal expression
+
+prog: IDENT COLON IDENT LET IDENT EQUALS FALSE GT TINT
+##
+## Ends in an error in state: 61.
+##
+## arith_expr -> arith_expr GT . arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+##
+## The known suffix of the stack is as follows:
+## arith_expr GT
+##
+
+Expected an expression after '>' operator
+
+prog: IDENT COLON IDENT LET IDENT EQUALS FALSE GT FALSE TINT
+##
+## Ends in an error in state: 62.
+##
+## arith_expr -> arith_expr . PLUS arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . TIMES arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . DIV arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . MINUS arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . EQUALS arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . LT arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . LTE arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . GT arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr GT arith_expr . [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . GTE arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+## arith_expr -> arith_expr . NEQ arith_expr [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+##
+## The known suffix of the stack is as follows:
+## arith_expr GT arith_expr
+##
+
+Unexpected token in greater-than expression
+
+prog: IDENT COLON IDENT LET IDENT EQUALS IF FALSE SEMI
+##
+## Ends in an error in state: 63.
+##
+## app_expr -> app_expr . simple_expr [ UNIT TRUE THEN LPAREN INT IDENT FALSE ]
+## expr -> IF app_expr . THEN app_expr ELSE app_expr [ SEMI RPAREN IN ]
+##
+## The known suffix of the stack is as follows:
+## IF app_expr
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 42, spurious reduction of production app_expr -> arith_expr
+##
+
+Expected 'then' after if condition
+
+prog: IDENT COLON IDENT LET IDENT EQUALS IF FALSE THEN TINT
+##
+## Ends in an error in state: 64.
+##
+## expr -> IF app_expr THEN . app_expr ELSE app_expr [ SEMI RPAREN IN ]
+##
+## The known suffix of the stack is as follows:
+## IF app_expr THEN
+##
+
+Expected an expression after 'then'
+
+prog: IDENT COLON IDENT LET IDENT EQUALS IF FALSE THEN FALSE THEN
+##
+## Ends in an error in state: 65.
+##
+## app_expr -> app_expr . simple_expr [ UNIT TRUE LPAREN INT IDENT FALSE ELSE ]
+## expr -> IF app_expr THEN app_expr . ELSE app_expr [ SEMI RPAREN IN ]
+##
+## The known suffix of the stack is as follows:
+## IF app_expr THEN app_expr
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 42, spurious reduction of production app_expr -> arith_expr
+##
+
+Expected 'else' after then branch
+
+prog: IDENT COLON IDENT LET IDENT EQUALS IF FALSE THEN FALSE ELSE TINT
+##
+## Ends in an error in state: 66.
+##
+## expr -> IF app_expr THEN app_expr ELSE . app_expr [ SEMI RPAREN IN ]
+##
+## The known suffix of the stack is as follows:
+## IF app_expr THEN app_expr ELSE
+##
+
+Expected an expression after 'else'
+
+prog: IDENT COLON IDENT LET IDENT EQUALS IF FALSE THEN FALSE ELSE FALSE THEN
+##
+## Ends in an error in state: 67.
+##
+## app_expr -> app_expr . simple_expr [ UNIT TRUE SEMI RPAREN LPAREN INT IN IDENT FALSE ]
+## expr -> IF app_expr THEN app_expr ELSE app_expr . [ SEMI RPAREN IN ]
+##
+## The known suffix of the stack is as follows:
+## IF app_expr THEN app_expr ELSE app_expr
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 42, spurious reduction of production app_expr -> arith_expr
+##
+
+Unexpected token after if-then-else expression
+
+prog: IDENT COLON IDENT LET IDENT EQUALS FALSE THEN
+##
+## Ends in an error in state: 70.
+##
+## app_expr -> app_expr . simple_expr [ UNIT TRUE SEMI RPAREN LPAREN INT IN IDENT FALSE ]
+## expr -> app_expr . [ SEMI RPAREN IN ]
+##
+## The known suffix of the stack is as follows:
+## app_expr
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 42, spurious reduction of production app_expr -> arith_expr
+##
+
+Unexpected token after expression
+
+prog: IDENT COLON IDENT LET IDENT EQUALS LET IDENT EQUALS FALSE SEMI
+##
+## Ends in an error in state: 71.
+##
+## expr -> LET IDENT EQUALS expr . IN expr [ SEMI RPAREN IN ]
+##
+## The known suffix of the stack is as follows:
+## LET IDENT EQUALS expr
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 42, spurious reduction of production app_expr -> arith_expr
+## In state 70, spurious reduction of production expr -> app_expr
+##
+
+Expected 'in' after let binding
+
+prog: IDENT COLON IDENT LET IDENT EQUALS LET IDENT EQUALS FALSE IN TINT
+##
+## Ends in an error in state: 72.
+##
+## expr -> LET IDENT EQUALS expr IN . expr [ SEMI RPAREN IN ]
+##
+## The known suffix of the stack is as follows:
+## LET IDENT EQUALS expr IN
+##
+
+Expected an expression after 'in'
+
+prog: IDENT COLON IDENT LET IDENT EQUALS LPAREN FALSE SEMI
+##
+## Ends in an error in state: 74.
+##
+## simple_expr -> LPAREN expr . RPAREN [ UNIT TRUE TIMES THEN SEMI RPAREN PLUS NEQ MINUS LTE LT LPAREN INT IN IDENT GTE GT FALSE EQUALS ELSE DIV ]
+##
+## The known suffix of the stack is as follows:
+## LPAREN expr
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 42, spurious reduction of production app_expr -> arith_expr
+## In state 70, spurious reduction of production expr -> app_expr
+##
+
+Expected ')' after expression
+
+prog: IDENT COLON IDENT LET IDENT EQUALS FALSE RPAREN
+##
+## Ends in an error in state: 76.
+##
+## fundef -> IDENT COLON typ LET IDENT optargs EQUALS expr . SEMI [ IDENT EOF ]
+##
+## The known suffix of the stack is as follows:
+## IDENT COLON typ LET IDENT optargs EQUALS expr
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 42, spurious reduction of production app_expr -> arith_expr
+## In state 70, spurious reduction of production expr -> app_expr
+##
+
+Expected ';' after expression
+
+prog: IDENT COLON IDENT LET IDENT EQUALS FALSE SEMI UNIT
+##
+## Ends in an error in state: 82.
+##
+## list(fundef) -> fundef . list(fundef) [ EOF ]
+##
+## The known suffix of the stack is as follows:
+## fundef
+##
+
+Expected function definition or end of file

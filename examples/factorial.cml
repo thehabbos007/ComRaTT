@@ -1,6 +1,8 @@
-def fact n =
+fact : int -> int
+let fact n =
   if n <= 1
   then 1
   else n * (fact (n - 1));
 
-def main x = fact x;
+main : int -> int
+let main x = fact x;

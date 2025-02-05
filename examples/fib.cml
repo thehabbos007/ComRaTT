@@ -1,8 +1,10 @@
-def fib n =
+fib : int -> int
+let fib n =
   if n = 0 then 0
   else
     (if n = 1 then 1
     else
       (fib (n - 1)) + (fib (n - 2)));
 
-def main x = fib x;
+main : int -> int
+let main x = fib x;
