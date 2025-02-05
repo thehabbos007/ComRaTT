@@ -8,17 +8,6 @@ module Environment = Map.Make (struct
     let compare = String.compare
   end)
 
-(*
-   type typ =
-  | TInt
-  | TBool
-  | TUnit
-  | TVar of typ_var
-  (* Refac to TFun of typ list * typ ? *)
-  | TFun of typ * typ
-[@@deriving show, eq]
-*)
-
 type typed_expr =
   | TFunDef of sym * (sym * typ) list * typed_expr * typ
   | TConst of const * typ
@@ -183,35 +172,6 @@ and check ctx expr ty : (typ * typed_expr) option =
              { condition = tcond; typ = ty; then_branch = tthen; else_branch = telse } )
      | _ -> None)
   (*
-     A function with arguments. It can call itself so add name to ctx.
-  Check length of "signature" against args list. Fail if too many
-  arguments are provided. Too few will make the return value a function type
-  (to be checked in next step).
-  Pop annotation till we reach the return type. check that against body, which
-  will initiate infer mode.
-  If all that goes well, return the functions type as given by the annotation.
-  Misuse of arguments is handled when checking the body.
-  *)
-  (*
-  | FunDef { annotation = TFun _ as fun_type; name; args; body }, _ ->
-    let _, ret_ty, types = TFun_len_n ty (List.length args) in
-    let args_with_types = List.combine args types in
-    let ctx_addition = (name, ty) :: args_with_types in
-    (match check (ctx_addition @ ctx) body ret_ty with
-     | Some (ty, typed_fun) ->
-       Some (fun_type, TFunDef (name, args_with_types, typed_fun, ty))
-     | None -> None)
-  (*
-     A function with no arguments. Check the (constant) body against the type.
-  Dont add name to context as we dont want a recursive constant function.
-  *)
-  | FunDef { annotation = typ; args = []; body; _ }, _ -> check ctx body typ
-  (*
-     A non-annotated fundef is illegal.
-  *)
-  | FunDef _, _ -> None (* Error: non-annotated fundef *)
-  *)
-  (*
      A lambda checked against TFun.
   unify length of TFun with length of args
   add args to ctx
@@ -237,30 +197,21 @@ and check ctx expr ty : (typ * typed_expr) option =
      | _ -> None (* Error: type inference doesn't unify *))
 ;;
 
-(*
-   | FunDef { annotation = TFun _ as fun_type; name; args; body }, _ ->
-  let _, ret_ty, types = TFun_len_n ty (List.length args) in
-  let args_with_types = List.combine args types in
-  let ctx_addition = (name, ty) :: args_with_types in
-  (match check (ctx_addition @ ctx) body ret_ty with
-   | Some (ty, typed_fun) ->
-     Some (fun_type, TFunDef (name, args_with_types, typed_fun, ty))
-   | None -> None)
-(*
-   A function with no arguments. Check the (constant) body against the type.
-Dont add name to context as we dont want a recursive constant function.
-*)
-| FunDef { annotation = typ; args = []; body; _ }, _ -> check ctx body typ
-(*
-   A non-annotated fundef is illegal.
-*)
-| FunDef _, _ -> None (* Error: non-annotated fundef *)
-*)
 let infer_all exprs =
   let rec aux ctx acc = function
     | [] -> List.rev acc
     | fexpr :: rest ->
       (match fexpr with
+       (*
+          A function with arguments. It can call itself so add name to ctx.
+        Check length of "signature" against args list. Fail if too many
+        arguments are provided. Too few will make the return value a function type
+        (to be checked in next step).
+        Pop annotation till we reach the return type. check that against body, which
+        will initiate infer mode.
+        If all that goes well, return the functions type as given by the annotation.
+        Misuse of arguments is handled when checking the body.
+       *)
        | FunDef (name, (TFun _ as ty), args, body) ->
          let _, ret_ty, types = tfun_len_n ty (List.length args) in
          let args_with_types = List.combine args types in
@@ -272,6 +223,10 @@ let infer_all exprs =
             let typed_fun = TFunDef (name, args_with_types, typed_body, fn_ty) in
             aux expanded_ctx (typed_fun :: acc) rest
           | None -> [])
+       (*
+          A function with no arguments. Check the (constant) body against the type.
+       Dont add name to context as we dont want a recursive constant function.
+       *)
        | FunDef (name, typ, [], body) ->
          (match check ctx body typ with
           (*
@@ -283,8 +238,10 @@ let infer_all exprs =
             let typed_fun = TFunDef (name, [], typed_body, fun_ty) in
             aux ((name, fun_ty) :: ctx) (typed_fun :: acc) rest
           | None -> [])
+       (*
+          A non-annotated fundef is illegal.
+       *)
        | FunDef _ -> [])
-    (*Error: non-annotated fundef. Explicitly output []*)
   in
   let inferred = aux [] [] exprs in
   inferred
