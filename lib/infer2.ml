@@ -42,16 +42,21 @@ type expr =
   | App of expr * expr
   | Prim of binop * expr * expr
   | Let of string * expr * expr
-  | FunDef of
+  (*
+     | FunDef of
       { annotation : typ
       ; name : sym
       ; args : sym list
       ; body : expr
       }
+  *)
   | IfThenElse of expr * expr * expr
   | Delay of expr
   | Advance of string
 [@@deriving show, eq]
+
+type toplevel = FunDef of string * typ * string list * expr [@@deriving show, eq]
+type prog = toplevel list [@@deriving show, eq]
 
 type typed_expr =
   | TFunDef of sym * (sym * typ) list * typed_expr * typ
@@ -95,10 +100,10 @@ let rec tarrow_len_n_rec counter ty types n =
   | _ -> counter, ty, List.rev types
 ;;
 
-let rec build_lambda_type args ret_ty =
+let rec build_fn_type args ret_ty =
   match args with
   | [] -> ret_ty
-  | ty :: tys -> TArrow (ty, build_lambda_type tys ret_ty)
+  | ty :: tys -> TArrow (ty, build_fn_type tys ret_ty)
 ;;
 
 let tarrow_len_n ty n =
@@ -188,13 +193,13 @@ let rec infer ctx expr : (typ * typed_expr) option =
     If check returns some, then we we are good.
     *)
     (match infer ctx fn with
-     | Some (TArrow (ty, _), fn_texp) ->
+     | Some (TArrow (ty, ret_ty), fn_texp) ->
        (match check ctx arg ty with
-        | Some (ty', arg_texp) ->
-          Some (ty', TApp { args = [ arg_texp ]; typ = ty'; fn = fn_texp })
-          (* ty' is the same as ty *)
+        | Some (_, arg_texp) ->
+          Some (ret_ty, TApp { args = [ arg_texp ]; typ = ret_ty; fn = fn_texp })
         | None -> None)
-     | Some _ -> failwith "Type of function was not TArrow"
+     | Some (t, _) ->
+       failwith ("Type of function was not TArrow" ^ " " ^ show_typ t ^ " " ^ show_expr fn)
      | None -> None)
   | Var x ->
     (match List.assoc_opt x ctx with
@@ -227,6 +232,7 @@ and check ctx expr ty : (typ * typed_expr) option =
   If all that goes well, return the functions type as given by the annotation.
   Misuse of arguments is handled when checking the body.
   *)
+  (*
   | FunDef { annotation = TArrow _ as fun_type; name; args; body }, _ ->
     let _, ret_ty, types = tarrow_len_n ty (List.length args) in
     let args_with_types = List.combine args types in
@@ -244,6 +250,7 @@ and check ctx expr ty : (typ * typed_expr) option =
      A non-annotated fundef is illegal.
   *)
   | FunDef _, _ -> None (* Error: non-annotated fundef *)
+  *)
   (*
      A lambda checked against TArrow.
   unify length of tarrow with length of args
@@ -260,7 +267,7 @@ and check ctx expr ty : (typ * typed_expr) option =
       let ctx_addition = List.combine args types in
       match check (ctx_addition @ ctx) body ret_ty with
       | Some (_, texp) ->
-        let lambda_type = build_lambda_type types ret_ty in
+        let lambda_type = build_fn_type types ret_ty in
         Some (lambda_type, TLam { args = ctx_addition; body = texp; typ = lambda_type })
       | None -> None)
   | Lam _, _ -> None (* Error: lambda type mismatch *)
@@ -268,6 +275,131 @@ and check ctx expr ty : (typ * typed_expr) option =
     (match infer ctx expr with
      | Some (ty', texp) when ty = ty' -> Some (ty, texp)
      | _ -> None (* Error: type inference doesn't unify *))
+;;
+
+(*
+   | FunDef { annotation = TArrow _ as fun_type; name; args; body }, _ ->
+  let _, ret_ty, types = tarrow_len_n ty (List.length args) in
+  let args_with_types = List.combine args types in
+  let ctx_addition = (name, ty) :: args_with_types in
+  (match check (ctx_addition @ ctx) body ret_ty with
+   | Some (ty, typed_fun) ->
+     Some (fun_type, TFunDef (name, args_with_types, typed_fun, ty))
+   | None -> None)
+(*
+   A function with no arguments. Check the (constant) body against the type.
+Dont add name to context as we dont want a recursive constant function.
+*)
+| FunDef { annotation = typ; args = []; body; _ }, _ -> check ctx body typ
+(*
+   A non-annotated fundef is illegal.
+*)
+| FunDef _, _ -> None (* Error: non-annotated fundef *)
+*)
+let infer_all exprs =
+  let rec aux ctx acc = function
+    | [] -> List.rev acc
+    | fexpr :: rest ->
+      (match fexpr with
+       | FunDef (name, (TArrow _ as ty), args, body) ->
+         let _, ret_ty, types = tarrow_len_n ty (List.length args) in
+         let args_with_types = List.combine args types in
+         let ctx_addition = (name, ty) :: args_with_types in
+         let expanded_ctx = ctx_addition @ ctx in
+         (match check expanded_ctx body ret_ty with
+          | Some (body_ty, typed_body) ->
+            let fn_ty = build_fn_type types body_ty in
+            let typed_fun = TFunDef (name, args_with_types, typed_body, fn_ty) in
+            aux expanded_ctx (typed_fun :: acc) rest
+          | None -> [])
+       | FunDef (name, typ, [], body) ->
+         (match check ctx body typ with
+          (*
+             Function with no arguments.
+            If check is successful, add the name and type to context, add typed function
+            to accumulator and continue on tail.
+          *)
+          | Some (fun_ty, typed_body) ->
+            let typed_fun = TFunDef (name, [], typed_body, fun_ty) in
+            aux ((name, fun_ty) :: ctx) (typed_fun :: acc) rest
+          | None -> [])
+       | FunDef _ -> [])
+    (*Error: non-annotated fundef. Explicitly output []*)
+  in
+  let inferred = aux [] [] exprs in
+  inferred
+;;
+
+let%test_unit "infer_all on two functions where one calls the other should not fail" =
+  let add_ty = TArrow (TInt, TArrow (TInt, TInt)) in
+  let add_args = [ "x"; "y" ] in
+  let add_body = Prim (Add, Var "x", Var "y") in
+  let add_fn = FunDef ("add", add_ty, add_args, add_body) in
+  let main_body = App (App (Var "add", Const (CInt 2)), Const (CInt 2)) in
+  let main_ty = TInt in
+  let main_fn = FunDef ("main", main_ty, [], main_body) in
+  let inferred = infer_all [ add_fn; main_fn ] in
+  OUnit2.assert_equal 2 (List.length inferred);
+  match inferred with
+  | [ TFunDef (add_name, add_args, add_body, add_ty)
+    ; TFunDef (main_name, main_args, main_body, main_ty)
+    ] ->
+    OUnit2.assert_equal "add" add_name;
+    OUnit2.assert_equal "main" main_name;
+    OUnit2.assert_equal (TArrow (TInt, TArrow (TInt, TInt))) add_ty;
+    OUnit2.assert_equal TInt main_ty;
+    OUnit2.assert_equal [ "x", TInt; "y", TInt ] add_args;
+    OUnit2.assert_equal [] main_args;
+    OUnit2.assert_equal
+      (TPrim { op = Add; left = TName ("x", TInt); right = TName ("y", TInt); typ = TInt })
+      add_body
+      ~printer:show_typed_expr;
+    OUnit2.assert_equal
+      (TApp
+         { fn =
+             TApp
+               { fn = TName ("add", TArrow (TInt, TArrow (TInt, TInt)))
+               ; args = [ TConst (CInt 2, TInt) ]
+               ; typ = TArrow (TInt, TInt)
+               }
+         ; typ = TInt
+         ; args = [ TConst (CInt 2, TInt) ]
+         })
+      main_body
+      ~printer:show_typed_expr
+  | _ -> OUnit2.assert_failure "Expected two elements in the list"
+;;
+
+let%test_unit "infer_all on single arg function that adds arg to constant should not fail"
+  =
+  let fn_type = TArrow (TInt, TInt) in
+  let fn = FunDef ("test", fn_type, [ "x" ], Prim (Add, Var "x", Const (CInt 2))) in
+  let inferred = infer_all [ fn ] in
+  match List.nth inferred 0 with
+  | TFunDef (name, args, body, ty) ->
+    OUnit2.assert_equal "test" name ~printer:show_sym;
+    OUnit2.assert_equal [ "x", TInt ] args;
+    OUnit2.assert_equal
+      (TPrim
+         { op = Add; left = TName ("x", TInt); right = TConst (CInt 2, TInt); typ = TInt })
+      body
+      ~printer:show_typed_expr;
+    OUnit2.assert_equal (TArrow (TInt, TInt)) ty ~printer:show_typ
+  | _ -> OUnit2.assert_failure "Not a fundef"
+;;
+
+let%test_unit "infer_all on single constant function should not fail" =
+  let fn_type = TInt in
+  let fn = FunDef ("test", fn_type, [], Const (CInt 2)) in
+  let inferred = infer_all [ fn ] in
+  OUnit2.assert_equal 1 (List.length inferred);
+  match List.nth inferred 0 with
+  | TFunDef (name, args, body, ty) ->
+    OUnit2.assert_equal "test" name;
+    OUnit2.assert_equal [] args;
+    OUnit2.assert_equal (TConst (CInt 2, TInt)) body;
+    OUnit2.assert_equal TInt ty
+  | _ -> OUnit2.assert_failure "Not a fundef"
 ;;
 
 (*
@@ -287,11 +419,12 @@ let%test_unit "build_lambda_type returns correct type" =
   let expected_type = TArrow (TInt, TArrow (TBool, TBool)) in
   let arg_types = [ TInt; TBool ] in
   let ret_ty = TBool in
-  let actual_type = build_lambda_type arg_types ret_ty in
+  let actual_type = build_fn_type arg_types ret_ty in
   OUnit2.assert_equal expected_type actual_type
 ;;
 
-let%test_unit "Valid function with shadowing should type check correctly" =
+(*
+   let%test_unit "Valid function with shadowing should type check correctly" =
   let fn_type = TArrow (TInt, TInt) in
   let fn_args = [ "x" ] in
   let fn_body = Let ("x", Const (CInt 40), Prim (Add, Var "x", Const (CInt 2))) in
@@ -418,6 +551,7 @@ let%test_unit "Complex, valid function should type check correctly" =
       ~printer:show_typed_expr
   | None -> OUnit2.assert_bool "Failed to check complex, valid function" false
 ;;
+*)
 
 let%test_unit "Checking a lambda against non-TArrow type should fail" =
   let lam = Lam ([ "x" ], Const (CInt 2)) in
@@ -459,6 +593,26 @@ let%test_unit "Invalid application should fail type checking" =
     OUnit2.assert_bool "Should have failed to infer type of invalid application" false
   | None ->
     OUnit2.assert_bool "Correctly failed to infer type of invalid application" true
+;;
+
+let%test_unit "Valid multiple application should type check correctly" =
+  let app = App (App (Var "f", Const (CInt 2)), Const (CInt 2)) in
+  let expected_inner_fn = TName ("f", TArrow (TInt, TArrow (TInt, TInt))) in
+  let expected_inner_app =
+    TApp
+      { fn = expected_inner_fn
+      ; typ = TArrow (TInt, TInt)
+      ; args = [ TConst (CInt 2, TInt) ]
+      }
+  in
+  let expected_outer_app =
+    TApp { fn = expected_inner_app; args = [ TConst (CInt 2, TInt) ]; typ = TInt }
+  in
+  match infer [ "f", TArrow (TInt, TArrow (TInt, TInt)) ] app with
+  | Some (ty, texp) ->
+    OUnit2.assert_equal ~printer:show_typ TInt ty;
+    OUnit2.assert_equal expected_outer_app texp ~printer:show_typed_expr
+  | None -> OUnit2.assert_bool "Failed to check valid application" false
 ;;
 
 let%test_unit "Valid application should type check correctly" =
@@ -605,7 +759,8 @@ let%test_unit "Infer let-binding: let x = 2 in x+x" =
   | None -> OUnit2.assert_bool "Failed to infer let binding" false
 ;;
 
-let%test_unit "Function with let-binding" =
+(*
+   let%test_unit "Function with let-binding" =
   let fn_type = TArrow (TInt, TBool) in
   let fn_args = [ "x" ] in
   let fn_body = Let ("y", Const (CInt 2), Prim (Eq, Var "x", Var "y")) in
@@ -703,6 +858,7 @@ let%test_unit "Check function that adds variable to constant should return corre
       ~printer:show_typed_expr
   | None -> failwith "failed to check"
 ;;
+*)
 
 let%test_unit "tarrow_len_n given non TArrow type raises Failure" =
   OUnit2.assert_raises (Failure "Attempted to traverse a non-tarrow type") (fun () ->
