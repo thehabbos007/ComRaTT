@@ -23,9 +23,9 @@
             pkgs.ocamlPackages.ocamlformat-rpc-lib
             pkgs.ocamlPackages.utop
 
-            pkgs.ocamlPackages.ppx_assert
             pkgs.ocamlPackages.ppx_deriving
             pkgs.ocamlPackages.ppx_expect
+            pkgs.ocamlPackages.ppx_inline_test
             pkgs.ocamlPackages.menhir
             pkgs.ocamlPackages.menhirLib
             pkgs.ocamlPackages.base
