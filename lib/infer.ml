@@ -328,8 +328,6 @@ let%test_unit "infer_all on single constant function should not fail" =
 
   Also, tests will be more precise when we have refactored to use clear error types instead of
   None for everything.
-
-  Also, the failure strings used in assert_bool with true constant are redundant.
 *)
 
 let%test_unit "build_lambda_type returns correct type" =
@@ -474,7 +472,7 @@ let%test_unit "Checking a lambda against non-TFun type should fail" =
   let lam = Lam ([ "x" ], Const (CInt 2)) in
   match check [] lam TInt with
   | Some _ ->
-    OUnit2.assert_bool "Should have failed to check type of lambda against non-TFun" false
+    OUnit2.assert_failure "Should have failed to check type of lambda against non-TFun"
   | None ->
     OUnit2.assert_bool "Correctly failed to check type of lambda against non-TFun" true
 ;;
@@ -498,14 +496,14 @@ let%test_unit "Checking a valid lambda should not fail" =
          })
       texp
       ~printer:show_typed_expr
-  | None -> OUnit2.assert_bool "Failed to check valid lambda" false
+  | None -> OUnit2.assert_failure "Failed to check valid lambda"
 ;;
 
 let%test_unit "Invalid application should fail type checking" =
   let app = App (Var "f", Const (CBool true)) in
   match infer [ "f", TFun (TInt, TInt) ] app with
   | Some _ ->
-    OUnit2.assert_bool "Should have failed to infer type of invalid application" false
+    OUnit2.assert_failure "Should have failed to infer type of invalid application"
   | None ->
     OUnit2.assert_bool "Correctly failed to infer type of invalid application" true
 ;;
@@ -527,7 +525,7 @@ let%test_unit "Valid multiple application should type check correctly" =
   | Some (ty, texp) ->
     OUnit2.assert_equal ~printer:show_typ TInt ty;
     OUnit2.assert_equal expected_outer_app texp ~printer:show_typed_expr
-  | None -> OUnit2.assert_bool "Failed to check valid application" false
+  | None -> OUnit2.assert_failure "Failed to check valid application"
 ;;
 
 let%test_unit "Valid application should type check correctly" =
@@ -543,7 +541,7 @@ let%test_unit "Valid application should type check correctly" =
          })
       texp
       ~printer:show_typed_expr
-  | None -> OUnit2.assert_bool "Failed to check valid application" false
+  | None -> OUnit2.assert_failure "Failed to check valid application"
 ;;
 
 let%test_unit "Infer Delay should produce a thunk" =
@@ -559,7 +557,7 @@ let%test_unit "Infer Delay should produce a thunk" =
          })
       texp
       ~printer:show_typed_expr
-  | None -> OUnit2.assert_bool "Failed to infer type of delay" false
+  | None -> OUnit2.assert_failure "Failed to infer type of delay"
 ;;
 
 let%test_unit "Infer Advance should not fail when name is bound to a thunk" =
@@ -575,16 +573,15 @@ let%test_unit "Infer Advance should not fail when name is bound to a thunk" =
          })
       texp
       ~printer:show_typed_expr
-  | None -> OUnit2.assert_bool "Failed to infer type of advance" false
+  | None -> OUnit2.assert_failure "Failed to infer type of advance"
 ;;
 
 let%test_unit "Infer Advance should fail when name is not bound to a thunk" =
   let adv = Advance "x" in
   match infer [ "x", TFun (TInt, TInt) ] adv with
   | Some _ ->
-    OUnit2.assert_bool
+    OUnit2.assert_failure
       "Should have failed to infer type of advance on name bound to non-thunk"
-      false
   | None ->
     OUnit2.assert_bool
       "Correctly failed to infer type of advance on name bound to non-thunk"
@@ -595,9 +592,7 @@ let%test_unit "Infer Advance should fail when name is not bound" =
   let adv = Advance "x" in
   match infer [] adv with
   | Some _ ->
-    OUnit2.assert_bool
-      "Should have failed to infer type of advance on name not bound"
-      false
+    OUnit2.assert_failure "Should have failed to infer type of advance on name not bound"
   | None ->
     OUnit2.assert_bool "Correctly failed to infer type of advance on name not bound" true
 ;;
@@ -616,7 +611,7 @@ let%test_unit "Check conditional expression" =
          })
       texp
       ~printer:show_typed_expr
-  | None -> OUnit2.assert_bool "Failed to infer let binding" false
+  | None -> OUnit2.assert_failure "Failed to infer let binding"
 ;;
 
 let%test_unit
@@ -627,9 +622,7 @@ let%test_unit
   in
   match check [] conditional TInt with
   | Some _ ->
-    OUnit2.assert_bool
-      "Checking conditional with different branch types should fail"
-      false
+    OUnit2.assert_failure "Checking conditional with different branch types should fail"
   | None ->
     OUnit2.assert_bool
       "Correctly failed to check conditional with different branch types"
@@ -647,7 +640,7 @@ let%test_unit "Infer let-binding: let x = 2 in x" =
          { name = "x"; typ = TInt; rhs = TConst (CInt 2, TInt); body = TName ("x", TInt) })
       texp
       ~printer:show_typed_expr
-  | None -> OUnit2.assert_bool "Failed to infer let binding" false
+  | None -> OUnit2.assert_failure "Failed to infer let binding"
 ;;
 
 let%test_unit "Infer let-binding: let x = 2 in x+x" =
@@ -671,7 +664,7 @@ let%test_unit "Infer let-binding: let x = 2 in x+x" =
          })
       texp
       ~printer:show_typed_expr
-  | None -> OUnit2.assert_bool "Failed to infer let binding" false
+  | None -> OUnit2.assert_failure "Failed to infer let binding"
 ;;
 
 (*
