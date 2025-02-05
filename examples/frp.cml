@@ -1,7 +1,7 @@
 add : int -> int -> int
 let add x y = x + y;
 
-main : () -> int
+main : int
 let main =
   let x = 4 in
   let b = delay (add x 3) in
