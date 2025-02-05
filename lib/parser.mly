@@ -44,7 +44,6 @@ atomic_typ:
   | TBOOL { TBool }
   | TUNIT { TUnit }
   | LPAREN t = typ RPAREN { t }
-  | id = IDENT { TVar id }
 
 expr:
   | LET x = IDENT EQUALS e1 = expr IN e2 = expr { Let (x, e1, e2) }

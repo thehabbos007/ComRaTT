@@ -24,9 +24,7 @@ let wasm_type_of_type ty =
   | TInt -> "i64"
   | TBool -> "i32"
   | TUnit -> "i32"
-  | TVar tv -> failwith ("error: TVar found with index " ^ string_of_type_var_kind tv)
-  | TArrow (_t1, _t2) -> failwith "arrow type"
-  | TList _ -> failwith "TODO: wasm type of list"
+  | TFun (_t1, _t2) -> failwith "arrow type"
 ;;
 
 let rec args_to_str (arg_list : (sym * typ) list) =
@@ -49,14 +47,16 @@ let rec generate_local_vars vars =
 
 let rec get_names_for_forward_declaration expr map =
   match expr with
-  | TLet (name, ty, _, body) ->
-    get_names_for_forward_declaration body (Environment.add name ty map)
-  | TIfThenElse (b, _, e1, e2, _) ->
+  | TLet { name; typ; body; _ } ->
+    get_names_for_forward_declaration body (Environment.add name typ map)
+  | TIfThenElse { condition; then_branch; else_branch; _ } ->
     get_names_for_forward_declaration
-      b
-      (get_names_for_forward_declaration e1 (get_names_for_forward_declaration e2 map))
-  | TPrim (_, e1, e2, _) ->
-    get_names_for_forward_declaration e1 (get_names_for_forward_declaration e2 map)
+      condition
+      (get_names_for_forward_declaration
+         then_branch
+         (get_names_for_forward_declaration else_branch map))
+  | TPrim { left; right; _ } ->
+    get_names_for_forward_declaration left (get_names_for_forward_declaration right map)
   | TLam _ -> failwith "no lambdas allowed"
   | TFunDef _ -> failwith "no fundefs allowed"
   | TConst _ | TName _ | TApp _ -> map
@@ -76,10 +76,10 @@ let rec comp expr name_idx funtable =
   | TConst (CInt num, _) -> "(i64.const " ^ string_of_int num ^ ")"
   | TConst (CBool b, _) -> "(i32.const " ^ (if b then "1" else "0") ^ ")"
   | TConst (CUnit, _) -> "(i32.const " ^ "-1)"
-  | TPrim (op, e1, e2, ty) ->
-    let e1_comp = comp e1 name_idx funtable in
-    let e2_comp = comp e2 name_idx funtable in
-    e1_comp ^ "\n" ^ e2_comp ^ "\n" ^ binop_to_wasm op ty
+  | TPrim { op; left; right; typ } ->
+    let e1_comp = comp left name_idx funtable in
+    let e2_comp = comp right name_idx funtable in
+    e1_comp ^ "\n" ^ e2_comp ^ "\n" ^ binop_to_wasm op typ
   | TFunDef (name, args, body, ret_ty) ->
     let forward_dec =
       unfold_forward_decs (get_names_for_forward_declaration body Environment.empty)
@@ -92,29 +92,29 @@ let rec comp expr name_idx funtable =
       forward_dec
       (comp body name_idx funtable)
   | TLam _ -> failwith "lambda should have been lifted :("
-  | TLet (name, _ty, rhs, TName (name', _ty')) when name = name' ->
+  | TLet { name; rhs; body = TName (name', _ty'); _ } when name = name' ->
     let comp_rhs = comp rhs name_idx funtable in
     Printf.sprintf "%s \n (local.tee $%s)" comp_rhs name
-  | TLet (name, _ty, rhs, body) ->
+  | TLet { name; rhs; body; _ } ->
     let comp_rhs = comp rhs name_idx funtable in
     let set_name_to_rhs = Printf.sprintf "%s (local.set $%s)" comp_rhs name in
     let comp_body = comp body name_idx funtable in
     Printf.sprintf "%s\n %s" set_name_to_rhs comp_body
-  | TApp (func, args, _ty) ->
+  | TApp { fn; args; _ } ->
     (* Assume that calling a function is done with a valid function name *)
-    (match func with
+    (match fn with
      | TName (name, _) ->
        Printf.sprintf
          "%s\n(call $%s)"
          (List.fold_left (fun acc arg -> acc ^ comp arg name_idx funtable ^ "\n") "" args)
          name
      | _ -> failwith "attempted calling a function that was not a valid AVar")
-  | TIfThenElse (guard, _guard_typ, then_branch, else_branch, branch_type) ->
+  | TIfThenElse { condition; then_branch; else_branch; typ } ->
     (* The result part of the if should be left out if void, but we do not support that *)
     Printf.sprintf
       "%s (if (result %s) (then %s) (else %s))"
-      (comp guard name_idx funtable)
-      (wasm_type_of_type branch_type)
+      (comp condition name_idx funtable)
+      (wasm_type_of_type typ)
       (comp then_branch name_idx funtable)
       (comp else_branch name_idx funtable)
 ;;
@@ -123,7 +123,10 @@ let comp_global_defs (globals : Preprocess.global_def list) name_idx funtable =
   List.fold_left
     (fun acc ({ name; fundef; ret_type; _ } : Preprocess.global_def) ->
        acc
-       ^ comp (TLet (name, ret_type, fundef, TConst (CInt 0, TInt))) name_idx funtable
+       ^ comp
+           (TLet { name; typ = ret_type; rhs = fundef; body = TConst (CInt 0, TInt) })
+           name_idx
+           funtable
        ^ "\n")
     ""
     globals

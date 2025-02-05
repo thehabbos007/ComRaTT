@@ -114,26 +114,26 @@ let _frub = ast_of_text "def fib x = if x = 2 then 8 else fib (x + 1); def main 
 let _show_funtable table =
   FunTable.iter
     (fun idx (args, typ) ->
-      print_endline
-        ("Function with index "
-         ^ string_of_int idx
-         ^ " and type: "
-         ^ string_of_type typ
-         ^ " has args: ");
-      List.iter
-        (fun (name, ty) ->
-          print_endline ("  arg_name: " ^ name ^ " ty: " ^ string_of_type ty))
-        args)
+       print_endline
+         ("Function with index "
+          ^ string_of_int idx
+          ^ " and type: "
+          ^ string_of_type typ
+          ^ " has args: ");
+       List.iter
+         (fun (name, ty) ->
+            print_endline ("  arg_name: " ^ name ^ " ty: " ^ string_of_type ty))
+         args)
     table
 ;;
 
 let () =
   Result.map
     (fun annot_exprs ->
-      let defs, lifted = optimize_program annot_exprs in
-      let nidx, signature = generate_function_tables defs lifted in
-      let compiled = init_wat (defs @ lifted) [] nidx signature in
-      print_endline compiled)
+       let defs, lifted = optimize_program annot_exprs in
+       let nidx, signature = generate_function_tables defs lifted in
+       let compiled = init_wat (defs @ lifted) [] nidx signature in
+       print_endline compiled)
     (* let compiled = init_wat (defs @ lifted) [] in
       print_endline compiled)*)
     (*

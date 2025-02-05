@@ -9,7 +9,6 @@ type binop =
   | Gt
   | Gte
   | Neq
-  | Cons
 [@@deriving show, eq]
 
 type const =
@@ -22,8 +21,8 @@ type typ =
   | TInt
   | TBool
   | TUnit
+  (* Refac to TFun of typ list * typ ? *)
   | TFun of typ * typ
-  | TVar of string
 [@@deriving show, eq]
 
 type expr =

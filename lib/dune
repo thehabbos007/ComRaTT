@@ -9,4 +9,4 @@
  (preprocess
   (pps ppx_inline_test ppx_assert ppx_deriving.show ppx_deriving.eq ppx_deriving.ord))
   (inline_tests)
- (modules source infer infer2 interpret lambda_lift preprocess compile parser lexer ast_of_text))
+ (modules source infer interpret lambda_lift preprocess compile parser lexer ast_of_text))

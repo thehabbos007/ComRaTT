@@ -22,9 +22,9 @@ let rec interp (x : typed_expr) env =
     (match Environment.find_opt v env with
      | Some var -> var
      | None -> failwith ("variable not defined in environment: " ^ v))
-  | TLam ([ (param, _) ], body, _) -> VClosure ([ param ], body, env)
-  | TPrim (op, e1, e2, _) ->
-    (match interp e1 env, interp e2 env with
+  | TLam { args = [ (param, _) ]; body; typ = _ } -> VClosure ([ param ], body, env)
+  | TPrim { op; left; right; typ = _ } ->
+    (match interp left env, interp right env with
      | VInt x, VInt y ->
        (match op with
         | Add -> VInt (x + y)
@@ -36,8 +36,7 @@ let rec interp (x : typed_expr) env =
         | Lte -> VBool (x <= y)
         | Gt -> VBool (x > y)
         | Gte -> VBool (x >= y)
-        | Neq -> VBool (x <> y)
-        | Cons -> failwith "did not implement interpreter for lists")
+        | Neq -> VBool (x <> y))
      | _, VClosure _ ->
        failwith "cannot do primitive operations on anything and a closure"
      | VClosure _, _ -> failwith "cannot do primitive operations on closure and anything"
@@ -45,9 +44,9 @@ let rec interp (x : typed_expr) env =
      | _, VBool _ -> failwith "cannot do primitive operations on anything and bool"
      | VUnit, _ -> failwith "cannot do primitive operations on unit and anything"
      | _, VUnit -> failwith "cannot do primitive operations on anything and unit")
-  | TApp (body, args, _) ->
+  | TApp { fn; args; typ = _ } ->
     let args' = List.map (fun arg' -> interp arg' env) args in
-    (match interp body env with
+    (match interp fn env with
      | VClosure (params, body', env') ->
        let zipped = List.combine params args' in
        let env'' =
@@ -58,12 +57,12 @@ let rec interp (x : typed_expr) env =
        in
        interp body' env''
      | _ -> failwith "Cannot apply to non-closure")
-  | TLet (name, _, e1, e2) ->
-    let e1' = interp e1 env in
+  | TLet { name; typ = _; rhs; body } ->
+    let e1' = interp rhs env in
     let env' = Environment.add name e1' env in
-    interp e2 env'
-  | TIfThenElse (guard, _, then_branch, else_branch, _) ->
-    let guard_holds = interp guard env in
+    interp body env'
+  | TIfThenElse { condition; then_branch; else_branch; typ = _ } ->
+    let guard_holds = interp condition env in
     (match guard_holds with
      | VBool t -> if t then interp then_branch env else interp else_branch env
      | VInt i -> if i <> 0 then interp then_branch env else interp else_branch env
@@ -73,7 +72,3 @@ let rec interp (x : typed_expr) env =
   | TFunDef (_name, _args, body, _) -> interp body env
   | _ -> failwith "Oops, unhandled or invalid annot_expr in interp"
 ;;
-
-open Base
-
-let%test_unit "bois" = [%test_eq: int list] (List.rev [ 1; 2; 3 ]) [ 3; 2; 1 ]
