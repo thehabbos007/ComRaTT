@@ -17,6 +17,7 @@ let rec free_vars ?(except = []) expr =
     @ List.filter (fun v -> v <> (name, typ)) (free_vars ~except body)
   | TIfThenElse { condition = cond; then_branch = e1; else_branch = e2; typ = _ } ->
     free_vars ~except cond @ free_vars ~except e1 @ free_vars ~except e2
+  | TTuple _ -> failwith "free_vars tuple"
 ;;
 
 let fresh_var =
@@ -47,6 +48,7 @@ let rec subst_name old_name new_name expr =
       ; else_branch = subst_name else_branch
       ; typ
       }
+  | TTuple _ -> failwith "subst_name tuple"
 ;;
 
 let rec subst_expr_name new_expr old_name expr =
@@ -70,6 +72,7 @@ let rec subst_expr_name new_expr old_name expr =
       ; else_branch = subst_expr_name else_branch
       ; typ
       }
+  | TTuple _ -> failwith "subst_expr_name tuple"
 ;;
 
 let push_ts_tarrow typs tarrow = List.fold_right (fun x acc -> TFun (x, acc)) typs tarrow
@@ -144,6 +147,7 @@ let rec lift (defs : (sym * typ) list) expr =
         }
     , supercombinators1 @ supercombinators2 @ supercombinators3
     , None )
+  | TTuple _ -> failwith "lift tuple"
 ;;
 
 let lambda_lift defs expr =

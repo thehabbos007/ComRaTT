@@ -25,6 +25,7 @@ let wasm_type_of_type ty =
   | TBool -> "i32"
   | TUnit -> "i32"
   | TFun (_t1, _t2) -> failwith "arrow type"
+  | TProduct _ -> failwith "wasm_type_of_type TProduct. TODO"
 ;;
 
 let rec args_to_str (arg_list : (sym * typ) list) =
@@ -60,6 +61,7 @@ let rec get_names_for_forward_declaration expr map =
   | TLam _ -> failwith "no lambdas allowed"
   | TFunDef _ -> failwith "no fundefs allowed"
   | TConst _ | TName _ | TApp _ -> map
+  | TTuple _ -> failwith "get_names_for_forward_declaration tuple"
 ;;
 
 let unfold_forward_decs decs =
@@ -117,6 +119,7 @@ let rec comp expr name_idx funtable =
       (wasm_type_of_type typ)
       (comp then_branch name_idx funtable)
       (comp else_branch name_idx funtable)
+  | TTuple _ -> failwith "comp tuple"
 ;;
 
 let comp_global_defs (globals : Preprocess.global_def list) name_idx funtable =

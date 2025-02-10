@@ -47,6 +47,7 @@ module ConstantFold = struct
         ; else_branch = constant_fold_expr else_branch
         ; typ
         }
+    | TTuple _ -> failwith "constant fold tuple"
   ;;
 end
 
@@ -63,6 +64,7 @@ let rec final_type ty =
   match ty with
   | TInt | TBool | TUnit -> ty
   | TFun (_, t2) -> final_type t2
+  | TProduct (_, t2) -> final_type t2
 ;;
 
 module EliminatePartialApp = struct
@@ -94,12 +96,14 @@ module EliminatePartialApp = struct
         ; typ
         }
     | TConst _ | TLet _ | TName _ | TFunDef _ -> aexpr
+    | TTuple _ -> failwith "substitute_binding tuple"
   ;;
 
   let rec unpack_type ty =
     match ty with
     | TInt | TBool | TUnit -> []
     | TFun (t1, t2) -> t1 :: unpack_type t2
+    | TProduct (t1, t2) -> t1 :: unpack_type t2
   ;;
 
   let generate_names types =
@@ -164,6 +168,7 @@ module EliminatePartialApp = struct
         ; else_branch = eliminate_partial else_branch
         ; typ
         }
+    | TTuple _ -> failwith "eliminate_partial tuple"
   ;;
 end
 
@@ -218,6 +223,7 @@ module ForwardDeclataion = struct
       , counter + 1 )
     | TConst _ | TName _ | TLam _ | TApp _ | TPrim _ | TLet _ | TIfThenElse _ ->
       name_idx, idx_args_signature, counter
+    | TTuple _ -> failwith "expr_to_tables tuple"
   ;;
 
   let generate_function_tables lifted globals =
@@ -261,6 +267,7 @@ module EliminateConsecApp = struct
         ; else_branch = eliminate_consec else_branch
         ; typ
         }
+    | TTuple _ -> failwith "eliminate_consec tuple"
   ;;
 end
 
