@@ -58,10 +58,12 @@ let rec get_names_for_forward_declaration expr map =
          (get_names_for_forward_declaration else_branch map))
   | TPrim { left; right; _ } ->
     get_names_for_forward_declaration left (get_names_for_forward_declaration right map)
-  | TLam _ -> failwith "no lambdas allowed"
-  | TFunDef _ -> failwith "no fundefs allowed"
+  | TLam _ -> failwith "get_names_for_forward_declaration: Lambda should have been lifted"
+  | TFunDef _ ->
+    failwith "get_names_for_forward_declaration: FunDefs are only allowed top-level"
   | TConst _ | TName _ | TApp _ -> map
-  | TTuple _ -> failwith "get_names_for_forward_declaration tuple"
+  | TTuple (texp1, texp2, _) ->
+    get_names_for_forward_declaration texp1 (get_names_for_forward_declaration texp2 map)
 ;;
 
 let unfold_forward_decs decs =
