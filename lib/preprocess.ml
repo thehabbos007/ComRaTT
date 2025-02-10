@@ -47,7 +47,8 @@ module ConstantFold = struct
         ; else_branch = constant_fold_expr else_branch
         ; typ
         }
-    | TTuple _ -> failwith "constant fold tuple"
+    | TTuple (texp1, texp2, typ) ->
+      TTuple (constant_fold_expr texp1, constant_fold_expr texp2, typ)
   ;;
 end
 
@@ -96,7 +97,7 @@ module EliminatePartialApp = struct
         ; typ
         }
     | TConst _ | TLet _ | TName _ | TFunDef _ -> aexpr
-    | TTuple _ -> failwith "substitute_binding tuple"
+    | TTuple (texp1, texp2, typ) -> TTuple (subst texp1, subst texp2, typ)
   ;;
 
   let rec unpack_type ty =
@@ -168,7 +169,8 @@ module EliminatePartialApp = struct
         ; else_branch = eliminate_partial else_branch
         ; typ
         }
-    | TTuple _ -> failwith "eliminate_partial tuple"
+    | TTuple (texp1, texp2, typ) ->
+      TTuple (eliminate_partial texp1, eliminate_partial texp2, typ)
   ;;
 end
 
@@ -221,9 +223,8 @@ module ForwardDeclataion = struct
       ( Environment.add name counter name_idx
       , FunTable.add counter (args, typ) idx_args_signature
       , counter + 1 )
-    | TConst _ | TName _ | TLam _ | TApp _ | TPrim _ | TLet _ | TIfThenElse _ ->
-      name_idx, idx_args_signature, counter
-    | TTuple _ -> failwith "expr_to_tables tuple"
+    | TConst _ | TName _ | TLam _ | TApp _ | TPrim _ | TLet _ | TIfThenElse _ | TTuple _
+      -> name_idx, idx_args_signature, counter
   ;;
 
   let generate_function_tables lifted globals =
@@ -267,7 +268,8 @@ module EliminateConsecApp = struct
         ; else_branch = eliminate_consec else_branch
         ; typ
         }
-    | TTuple _ -> failwith "eliminate_consec tuple"
+    | TTuple (texp1, texp2, typ) ->
+      TTuple (eliminate_consec texp1, eliminate_consec texp2, typ)
   ;;
 end
 
