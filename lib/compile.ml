@@ -62,8 +62,8 @@ let rec get_names_for_forward_declaration expr map =
   | TFunDef _ ->
     failwith "get_names_for_forward_declaration: FunDefs are only allowed top-level"
   | TConst _ | TName _ | TApp _ -> map
-  | TTuple (texp1, texp2, _) ->
-    get_names_for_forward_declaration texp1 (get_names_for_forward_declaration texp2 map)
+  | TTuple (texps, _) ->
+    List.fold_left (fun acc t -> get_names_for_forward_declaration t acc) map texps
 ;;
 
 let unfold_forward_decs decs =

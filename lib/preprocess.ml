@@ -47,8 +47,7 @@ module ConstantFold = struct
         ; else_branch = constant_fold_expr else_branch
         ; typ
         }
-    | TTuple (texp1, texp2, typ) ->
-      TTuple (constant_fold_expr texp1, constant_fold_expr texp2, typ)
+    | TTuple (texps, typ) -> TTuple (List.map constant_fold_expr texps, typ)
   ;;
 end
 
@@ -97,7 +96,7 @@ module EliminatePartialApp = struct
         ; typ
         }
     | TConst _ | TLet _ | TName _ | TFunDef _ -> aexpr
-    | TTuple (texp1, texp2, typ) -> TTuple (subst texp1, subst texp2, typ)
+    | TTuple (texps, typ) -> TTuple (List.map subst texps, typ)
   ;;
 
   let rec unpack_type ty =
@@ -169,8 +168,7 @@ module EliminatePartialApp = struct
         ; else_branch = eliminate_partial else_branch
         ; typ
         }
-    | TTuple (texp1, texp2, typ) ->
-      TTuple (eliminate_partial texp1, eliminate_partial texp2, typ)
+    | TTuple (texps, typ) -> TTuple (List.map eliminate_partial texps, typ)
   ;;
 end
 
@@ -268,8 +266,7 @@ module EliminateConsecApp = struct
         ; else_branch = eliminate_consec else_branch
         ; typ
         }
-    | TTuple (texp1, texp2, typ) ->
-      TTuple (eliminate_consec texp1, eliminate_consec texp2, typ)
+    | TTuple (texps, typ) -> TTuple (List.map eliminate_consec texps, typ)
   ;;
 end
 

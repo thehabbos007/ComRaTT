@@ -36,7 +36,7 @@ type expr =
   | IfThenElse of expr * expr * expr
   | Delay of expr
   | Advance of string
-  | Tuple of expr * expr
+  | Tuple of expr list
 [@@deriving show, eq]
 
 type toplevel = FunDef of string * typ * string list * expr [@@deriving show, eq]
