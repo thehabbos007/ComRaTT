@@ -23,6 +23,7 @@ type typ =
   | TUnit
   (* Refac to TFun of typ list * typ ? *)
   | TFun of typ * typ
+  | TProduct of typ * typ
 [@@deriving show, eq]
 
 type expr =
@@ -35,6 +36,7 @@ type expr =
   | IfThenElse of expr * expr * expr
   | Delay of expr
   | Advance of string
+  | Tuple of expr * expr
 [@@deriving show, eq]
 
 type toplevel = FunDef of string * typ * string list * expr [@@deriving show, eq]

@@ -40,6 +40,7 @@ type typed_expr =
       ; else_branch : typed_expr
       ; typ : typ
       }
+  | TTuple of typed_expr * typed_expr * typ
 [@@deriving show, eq]
 
 let rec build_fn_type args ret_ty =
