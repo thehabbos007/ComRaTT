@@ -63,6 +63,11 @@ let tfun_len_n ty n =
 
 let rec infer ctx expr : (typ * typed_expr) option =
   match expr with
+  | Tuple (t1, t2) ->
+    (match infer ctx t1, infer ctx t2 with
+     | Some (t1, texp1), Some (t2, texp2) ->
+       Some (TProduct (t1, t2), TTuple (texp1, texp2, TProduct (t1, t2)))
+     | _ -> None)
   (*
      For Advance, look up the type of the name being advanced
     which should result in a thunk. Produce the return type of the thunk.
@@ -241,6 +246,58 @@ let infer_all exprs =
   in
   let inferred = aux [] [] exprs in
   inferred
+;;
+
+let%test_unit "type checking the tuple ((42, true), false) should work" =
+  let tuple = Tuple (Tuple (Const (CInt 42), Const (CBool true)), Const (CBool false)) in
+  let expected_first_elem_type = TProduct (TInt, TBool) in
+  let expected_type = TProduct (expected_first_elem_type, TBool) in
+  let expected =
+    TTuple
+      ( TTuple
+          (TConst (CInt 42, TInt), TConst (CBool true, TBool), expected_first_elem_type)
+      , TConst (CBool false, TBool)
+      , expected_type )
+  in
+  let inferred = infer [] tuple in
+  match inferred with
+  | Some (typ, texpr) ->
+    OUnit2.assert_equal expected_type typ ~printer:show_typ;
+    OUnit2.assert_equal texpr expected ~printer:show_typed_expr
+  | None -> OUnit2.assert_failure "Failed to infer type of typle (42, true)"
+;;
+
+let%test_unit "type checking the tuple (42, true, false) should work" =
+  let tuple = Tuple (Const (CInt 42), Tuple (Const (CBool true), Const (CBool false))) in
+  let inner_expected_type = TProduct (TBool, TBool) in
+  let expected_type = TProduct (TInt, inner_expected_type) in
+  let expected =
+    TTuple
+      ( TConst (CInt 42, TInt)
+      , TTuple
+          (TConst (CBool true, TBool), TConst (CBool false, TBool), inner_expected_type)
+      , expected_type )
+  in
+  let inferred = infer [] tuple in
+  match inferred with
+  | Some (typ, texpr) ->
+    OUnit2.assert_equal expected_type typ ~printer:show_typ;
+    OUnit2.assert_equal texpr expected ~printer:show_typed_expr
+  | None -> OUnit2.assert_failure "Failed to infer type of typle (42, true)"
+;;
+
+let%test_unit "type checking the tuple (42, true) should work" =
+  let tuple = Tuple (Const (CInt 42), Const (CBool true)) in
+  let expected_type = TProduct (TInt, TBool) in
+  let expected =
+    TTuple (TConst (CInt 42, TInt), TConst (CBool true, TBool), expected_type)
+  in
+  let inferred = infer [] tuple in
+  match inferred with
+  | Some (typ, texpr) ->
+    OUnit2.assert_equal expected_type typ ~printer:show_typ;
+    OUnit2.assert_equal texpr expected ~printer:show_typed_expr
+  | None -> OUnit2.assert_failure "Failed to infer type of typle (42, true)"
 ;;
 
 let%test_unit "infer_all on two functions where one calls the other should not fail" =
@@ -813,4 +870,5 @@ let rec string_of_type = function
   | TBool -> "bool"
   | TUnit -> "()"
   | TFun (t1, t2) -> "(" ^ string_of_type t1 ^ " -> " ^ string_of_type t2 ^ ")"
+  | TProduct (t1, t2) -> "(" ^ string_of_type t1 ^ ", " ^ string_of_type t2 ^ ")"
 ;;
