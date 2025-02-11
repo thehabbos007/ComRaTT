@@ -37,6 +37,7 @@ type expr =
   | Delay of expr
   | Advance of string
   | Tuple of expr list
+  | Access of expr * int
 [@@deriving show, eq]
 
 type toplevel = FunDef of string * typ * string list * expr [@@deriving show, eq]

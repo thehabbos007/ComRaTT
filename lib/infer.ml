@@ -41,6 +41,7 @@ type typed_expr =
       ; typ : typ
       }
   | TTuple of typed_expr list * typ
+  | TAccess of typed_expr * int * typ
 [@@deriving show, eq]
 
 let rec build_fn_type args ret_ty =
@@ -70,6 +71,20 @@ let get_with_custom_message opt message =
 (* Refac to not use failwith. In general we want a Result type that can be bubbled up flatmap style *)
 let rec infer ctx expr : (typ * typed_expr) option =
   match expr with
+  (*
+     Access expressions for e.g. accessing elements of a tuple.
+    Infer the type of the expression and check if it is valid in access expression
+    e.g. should be tuple.
+    If it is a tuple and the index is within bounds, take the idx'th element and
+    extract the type of that also.
+  *)
+  | Access (expr, idx) ->
+    (match infer ctx expr with
+     | (Some (TProduct typs, (TTuple _ as texp)) | Some (TProduct typs, (TName _ as texp)))
+       when idx < List.length typs ->
+       let typ = List.nth typs idx in
+       Some (typ, TAccess (texp, idx, typ))
+     | _ -> None)
   | Tuple ts ->
     if List.length ts < 2
     then None
