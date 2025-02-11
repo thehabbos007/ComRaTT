@@ -11,7 +11,7 @@ let check_prime_helper n divisor =
      then false
      else (check_prime_helper n (divisor + 1)));
 
-is_prime : int -> int
+is_prime : int -> bool
 let is_prime n =
   if (n <= 1)
   then false
