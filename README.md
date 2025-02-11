@@ -25,13 +25,13 @@ We have a directory of example programs. These can be run with the help of wasmt
 
 ```terminal
 $ chmod +x run_ratt.sh
-$ ./run_ratt.sh 1 < examples/is_prime.cml
-$ ./run_ratt.sh 3 < examples/collatz.cml
-$ ./run_ratt.sh 3 < examples/factorial.cml
-$ ./run_ratt.sh 7 < examples/fib.cml
+$ ./run_ratt.sh examples/is_prime.cml 1 
+$ ./run_ratt.sh examples/collatz.cml 3 
+$ ./run_ratt.sh examples/factorial.cml 3 
+$ ./run_ratt.sh examples/fib.cml 7 
 # Returns number of steps to find x in 0..100
-$ ./run_ratt.sh 51 < examples/bin_search.cml
-$ ./run_ratt.sh < examples/frp.cml
+$ ./run_ratt.sh examples/bin_search.cml 51
+$ ./run_ratt.sh examples/frp.cml
 ```
 
 This should compile the ComRaTT snippets to WAT and pipe the WAT code into wasmtime.
