@@ -204,18 +204,20 @@ let rec infer ctx expr : (typ * typed_expr) option =
      | CInt _ -> Some (TInt, TConst (c, TInt))
      | CBool _ -> Some (TBool, TConst (c, TBool))
      | CUnit -> Some (TUnit, TConst (c, TUnit)))
-  | _ -> failwith "Not implemented"
+  | IfThenElse (cond, thenb, elseb) ->
+    (match check ctx cond TBool, infer ctx thenb, infer ctx elseb with
+     | Some (TBool, tcond), Some (thenty, tthen), Some (elsety, telse)
+       when thenty = elsety ->
+       Some
+         ( thenty
+         , TIfThenElse
+             { condition = tcond; typ = thenty; then_branch = tthen; else_branch = telse }
+         )
+     | _ -> None)
+  | exp -> failwith ("Not implemented " ^ show_expr exp)
 
 and check ctx expr ty : (typ * typed_expr) option =
   match expr, ty with
-  | IfThenElse (cond, thenb, elseb), _ ->
-    (match check ctx cond TBool, check ctx thenb ty, check ctx elseb ty with
-     | Some (TBool, tcond), Some (_, tthen), Some (_, telse) ->
-       Some
-         ( ty
-         , TIfThenElse
-             { condition = tcond; typ = ty; then_branch = tthen; else_branch = telse } )
-     | _ -> None)
   (*
      A lambda checked against TFun.
   unify length of TFun with length of args
