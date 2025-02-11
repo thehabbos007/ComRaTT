@@ -48,7 +48,7 @@ module ConstantFold = struct
         ; typ
         }
     | TTuple (texps, typ) -> TTuple (List.map constant_fold_expr texps, typ)
-    | _ -> failwith "taccess"
+    | TAccess (texp, idx, typ) -> TAccess (constant_fold_expr texp, idx, typ)
   ;;
 end
 
@@ -103,7 +103,7 @@ module EliminatePartialApp = struct
         }
     | TConst _ | TLet _ | TName _ | TFunDef _ -> aexpr
     | TTuple (texps, typ) -> TTuple (List.map subst texps, typ)
-    | _ -> failwith "taccess"
+    | TAccess (texp, idx, typ) -> TAccess (subst texp, idx, typ)
   ;;
 
   let rec unpack_type ty =
@@ -176,7 +176,7 @@ module EliminatePartialApp = struct
         ; typ
         }
     | TTuple (texps, typ) -> TTuple (List.map eliminate_partial texps, typ)
-    | _ -> failwith "taccess"
+    | TAccess (texp, idx, typ) -> TAccess (eliminate_partial texp, idx, typ)
   ;;
 end
 
@@ -229,9 +229,15 @@ module ForwardDeclataion = struct
       ( Environment.add name counter name_idx
       , FunTable.add counter (args, typ) idx_args_signature
       , counter + 1 )
-    | TConst _ | TName _ | TLam _ | TApp _ | TPrim _ | TLet _ | TIfThenElse _ | TTuple _
-      -> name_idx, idx_args_signature, counter
-    | _ -> failwith "taccess"
+    | TConst _
+    | TName _
+    | TLam _
+    | TApp _
+    | TPrim _
+    | TLet _
+    | TIfThenElse _
+    | TTuple _
+    | TAccess _ -> name_idx, idx_args_signature, counter
   ;;
 
   let generate_function_tables lifted globals =
@@ -276,7 +282,7 @@ module EliminateConsecApp = struct
         ; typ
         }
     | TTuple (texps, typ) -> TTuple (List.map eliminate_consec texps, typ)
-    | _ -> failwith "taccess"
+    | TAccess (texp, idx, typ) -> TAccess (eliminate_consec texp, idx, typ)
   ;;
 end
 

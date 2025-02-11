@@ -64,7 +64,7 @@ let rec get_names_for_forward_declaration expr map =
   | TConst _ | TName _ | TApp _ -> map
   | TTuple (texps, _) ->
     List.fold_left (fun acc t -> get_names_for_forward_declaration t acc) map texps
-  | _ -> failwith "taccess"
+  | TAccess (texp, _, _) -> get_names_for_forward_declaration texp map
 ;;
 
 let unfold_forward_decs decs =
@@ -122,8 +122,8 @@ let rec comp expr name_idx funtable =
       (wasm_type_of_type typ)
       (comp then_branch name_idx funtable)
       (comp else_branch name_idx funtable)
-  | TTuple _ -> failwith "comp tuple"
-  | _ -> failwith "taccess"
+  | TTuple _ -> failwith "comp TTuple"
+  | _ -> failwith "comp TAccess"
 ;;
 
 let comp_global_defs (globals : Preprocess.global_def list) name_idx funtable =
