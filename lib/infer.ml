@@ -73,14 +73,22 @@ let rec infer ctx expr : (typ * typed_expr) option =
   match expr with
   (*
      Access expressions for e.g. accessing elements of a tuple.
-    Infer the type of the expression and check if it is valid in access expression
-    e.g. should be tuple.
-    If it is a tuple and the index is within bounds, take the idx'th element and
-    extract the type of that also.
+     Infer the type of the expression and check if it is valid in access expression i.e. should be TProduct and
+     either tuple or name.
+     Take the idx'th type and create an access expression.
+
+     Any texp is ok as long as the type is TProduct for now right?
+     We need more than TTuple and TName to allow e.g.
+     let t = (42, (true, 40)) in
+     2 + t[1][1]
+     i.e. accessing an element of a tuple that is itself in a tuple
+     i.e. arbitrarily nested tuples.
   *)
   | Access (expr, idx) ->
     (match infer ctx expr with
-     | (Some (TProduct typs, (TTuple _ as texp)) | Some (TProduct typs, (TName _ as texp)))
+     | Some (TProduct typs, (TTuple _ as texp))
+     | Some (TProduct typs, (TName _ as texp))
+     | Some (TProduct typs, (_ as texp))
        when idx < List.length typs ->
        let typ = List.nth typs idx in
        Some (typ, TAccess (texp, idx, typ))
@@ -280,6 +288,161 @@ let infer_all exprs =
   in
   let inferred = aux [] [] exprs in
   inferred
+;;
+
+let%test_unit
+    "type checking simple tuple access used in a primitive operation within a function \
+     should work"
+  =
+  let tuple = Tuple [ Const (CInt 42); Const (CBool true); Const (CInt 40) ] in
+  let fn_type = TFun (TInt, TInt) in
+  let fn_args = [ "x" ] in
+  let fn_body = Prim (Add, Var "x", Access (tuple, 2)) in
+  let fn = FunDef ("test", fn_type, fn_args, fn_body) in
+  let inferred = infer_all [ fn ] in
+  OUnit2.assert_equal 1 (List.length inferred);
+  match List.nth inferred 0 with
+  | TFunDef
+      ( "test"
+      , [ ("x", TInt) ]
+      , TPrim
+          { op = Add
+          ; left = TName ("x", TInt)
+          ; right =
+              TAccess
+                ( TTuple
+                    ( [ TConst (CInt 42, TInt)
+                      ; TConst (CBool true, TBool)
+                      ; TConst (CInt 40, TInt)
+                      ]
+                    , TProduct [ TInt; TBool; TInt ] )
+                , 2
+                , TInt )
+          ; typ = TInt
+          }
+      , TFun (TInt, TInt) ) -> ()
+  | _ ->
+    OUnit2.assert_failure
+      "Failed to type check function that adds argument to tuple access"
+;;
+
+let%test_unit
+    "type checking accessing an element within a tuple that is within a tuple should work"
+  =
+  let tuple =
+    Tuple [ Const (CInt 42); Tuple [ Const (CBool true); Const (CBool false) ] ]
+  in
+  let outer_access = Access (tuple, 1) in
+  let inner_access = Access (outer_access, 0) in
+  let inner_tuple_type = TProduct [ TBool; TBool ] in
+  let outer_tuple_type = TProduct [ TInt; inner_tuple_type ] in
+  let expected_texp =
+    TAccess
+      ( TAccess
+          ( TTuple
+              ( [ TConst (CInt 42, TInt)
+                ; TTuple
+                    ( [ TConst (CBool true, TBool); TConst (CBool false, TBool) ]
+                    , inner_tuple_type )
+                ]
+              , outer_tuple_type )
+          , 1
+          , inner_tuple_type )
+      , 0
+      , TBool )
+  in
+  match infer [] inner_access with
+  | Some (typ, texp) ->
+    OUnit2.assert_equal TBool typ ~printer:show_typ;
+    OUnit2.assert_equal expected_texp texp ~printer:show_typed_expr
+  | None -> OUnit2.assert_failure "Failed to infer type of nested tuple access"
+;;
+
+let%test_unit
+    "type checking a let binding where rhs is a tuple and body accesses it, should work"
+  =
+  let tuple = Tuple [ Const (CInt 42); Const (CBool true); Const (CBool false) ] in
+  let binding = Let ("tuple_binding", tuple, Access (Var "tuple_binding", 0)) in
+  match infer [] binding with
+  | Some (typ, texp) ->
+    OUnit2.assert_equal TInt typ ~printer:show_typ;
+    OUnit2.assert_equal
+      (TLet
+         { name = "tuple_binding"
+         ; typ = TInt
+         ; rhs =
+             TTuple
+               ( [ TConst (CInt 42, TInt)
+                 ; TConst (CBool true, TBool)
+                 ; TConst (CBool false, TBool)
+                 ]
+               , TProduct [ TInt; TBool; TBool ] )
+         ; body =
+             TAccess (TName ("tuple_binding", TProduct [ TInt; TBool; TBool ]), 0, TInt)
+         })
+      texp
+      ~printer:show_typed_expr
+  | None ->
+    OUnit2.assert_failure
+      "Failed to infer type of let binding where rhs is a tuple and body accesses it"
+;;
+
+let%test_unit "type checking accessing a tuple within a tuple, within bounds should work" =
+  let tuple =
+    Tuple [ Const (CInt 42); Tuple [ Const (CBool true); Const (CBool false) ] ]
+  in
+  let outer_access = Access (tuple, 1) in
+  match infer [] outer_access with
+  | Some (typ, texp) ->
+    OUnit2.assert_equal (TProduct [ TBool; TBool ]) typ ~printer:show_typ;
+    OUnit2.assert_equal
+      (TAccess
+         ( TTuple
+             ( [ TConst (CInt 42, TInt)
+               ; TTuple
+                   ( [ TConst (CBool true, TBool); TConst (CBool false, TBool) ]
+                   , TProduct [ TBool; TBool ] )
+               ]
+             , TProduct [ TInt; TProduct [ TBool; TBool ] ] )
+         , 1
+         , TProduct [ TBool; TBool ] ))
+      texp
+      ~printer:show_typed_expr
+  | None -> OUnit2.assert_failure "Failed to infer type of nested tuple access"
+;;
+
+let%test_unit "type checking a tuple access within bounds should work" =
+  let tuple = Tuple [ Const (CInt 42); Const (CBool true) ] in
+  let access = Access (tuple, 0) in
+  let inferred = infer [] access in
+  match inferred with
+  | Some (typ, texp) ->
+    OUnit2.assert_equal TInt typ;
+    OUnit2.assert_equal
+      (TAccess
+         ( TTuple
+             ( [ TConst (CInt 42, TInt); TConst (CBool true, TBool) ]
+             , TProduct [ TInt; TBool ] )
+         , 0
+         , TInt ))
+      texp
+  | None -> OUnit2.assert_failure "Failed to infer valid tuple access expression"
+;;
+
+let%test_unit "type checking an out-of-bounds tuple access should fail" =
+  let tuple = Tuple [ Const (CInt 42); Const (CBool true) ] in
+  let access = Access (tuple, 2) in
+  match infer [] access with
+  | Some _ ->
+    OUnit2.assert_failure "Should have failed to type check out-of-bounds tuple access"
+  | None -> ()
+;;
+
+let%test_unit "type checking a sub-zero tuple access should fail" =
+  let tuple = Tuple [ Const (CInt 42); Const (CBool true) ] in
+  let access = Access (tuple, -1) in
+  (* It is not very clean to assert on the failure string of a library function but OUnit2 does not allow testing for wildcard messages. *)
+  OUnit2.assert_raises (Invalid_argument "List.nth") (fun () -> infer [] access)
 ;;
 
 let%test_unit "type checking a zero element tuple should fail" =
