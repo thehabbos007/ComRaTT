@@ -285,6 +285,29 @@ let%test_unit "type checking a single element tuple should fail" =
     (fun () -> infer [] tuple)
 ;;
 
+let%test_unit "type checking the tuple (42, (true, false)) should work" =
+  let tuple =
+    Tuple [ Const (CInt 42); Tuple [ Const (CBool true); Const (CBool false) ] ]
+  in
+  let expected_second_elem_type = TProduct (TBool, TBool) in
+  let expected_type = TProduct (TInt, expected_second_elem_type) in
+  let expected =
+    TTuple
+      ( [ TConst (CInt 42, TInt)
+        ; TTuple
+            ( [ TConst (CBool true, TBool); TConst (CBool false, TBool) ]
+            , expected_second_elem_type )
+        ]
+      , expected_type )
+  in
+  let inferred = infer [] tuple in
+  match inferred with
+  | Some (typ, texpr) ->
+    OUnit2.assert_equal expected_type typ ~printer:show_typ;
+    OUnit2.assert_equal texpr expected ~printer:show_typed_expr
+  | None -> OUnit2.assert_failure "Failed to infer type of tuple (42, (true, false))"
+;;
+
 let%test_unit "type checking the tuple ((42, true), false) should work" =
   let tuple =
     Tuple [ Tuple [ Const (CInt 42); Const (CBool true) ]; Const (CBool false) ]
@@ -305,7 +328,7 @@ let%test_unit "type checking the tuple ((42, true), false) should work" =
   | Some (typ, texpr) ->
     OUnit2.assert_equal expected_type typ ~printer:show_typ;
     OUnit2.assert_equal texpr expected ~printer:show_typed_expr
-  | None -> OUnit2.assert_failure "Failed to infer type of tuple (42, true)"
+  | None -> OUnit2.assert_failure "Failed to infer type of tuple ((42, true), false)"
 ;;
 
 let%test_unit "type checking the tuple (42, true, false) should work" =
@@ -322,7 +345,7 @@ let%test_unit "type checking the tuple (42, true, false) should work" =
   | Some (typ, texpr) ->
     OUnit2.assert_equal expected_type typ ~printer:show_typ;
     OUnit2.assert_equal texpr expected ~printer:show_typed_expr
-  | None -> OUnit2.assert_failure "Failed to infer type of tuple (42, true)"
+  | None -> OUnit2.assert_failure "Failed to infer type of tuple (42, true, false)"
 ;;
 
 let%test_unit "type checking the tuple (42, true) should work" =
