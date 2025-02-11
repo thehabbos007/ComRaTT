@@ -271,6 +271,20 @@ let infer_all exprs =
   inferred
 ;;
 
+let%test_unit "type checking a zero element tuple should fail" =
+  let tuple = Tuple [] in
+  OUnit2.assert_raises
+    (Failure "Failed to construct TProduct from list of tuple types and elements")
+    (fun () -> infer [] tuple)
+;;
+
+let%test_unit "type checking a single element tuple should fail" =
+  let tuple = Tuple [ Const (CInt 42) ] in
+  OUnit2.assert_raises
+    (Failure "Failed to construct TProduct from list of tuple types and elements")
+    (fun () -> infer [] tuple)
+;;
+
 let%test_unit "type checking the tuple ((42, true), false) should work" =
   let tuple =
     Tuple [ Tuple [ Const (CInt 42); Const (CBool true) ]; Const (CBool false) ]
@@ -291,7 +305,7 @@ let%test_unit "type checking the tuple ((42, true), false) should work" =
   | Some (typ, texpr) ->
     OUnit2.assert_equal expected_type typ ~printer:show_typ;
     OUnit2.assert_equal texpr expected ~printer:show_typed_expr
-  | None -> OUnit2.assert_failure "Failed to infer type of typle (42, true)"
+  | None -> OUnit2.assert_failure "Failed to infer type of tuple (42, true)"
 ;;
 
 let%test_unit "type checking the tuple (42, true, false) should work" =
@@ -308,7 +322,7 @@ let%test_unit "type checking the tuple (42, true, false) should work" =
   | Some (typ, texpr) ->
     OUnit2.assert_equal expected_type typ ~printer:show_typ;
     OUnit2.assert_equal texpr expected ~printer:show_typed_expr
-  | None -> OUnit2.assert_failure "Failed to infer type of typle (42, true)"
+  | None -> OUnit2.assert_failure "Failed to infer type of tuple (42, true)"
 ;;
 
 let%test_unit "type checking the tuple (42, true) should work" =
@@ -322,7 +336,7 @@ let%test_unit "type checking the tuple (42, true) should work" =
   | Some (typ, texpr) ->
     OUnit2.assert_equal expected_type typ ~printer:show_typ;
     OUnit2.assert_equal texpr expected ~printer:show_typed_expr
-  | None -> OUnit2.assert_failure "Failed to infer type of typle (42, true)"
+  | None -> OUnit2.assert_failure "Failed to infer type of tuple (42, true)"
 ;;
 
 let%test_unit "infer_all on two functions where one calls the other should not fail" =
