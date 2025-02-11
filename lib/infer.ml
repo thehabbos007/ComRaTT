@@ -61,13 +61,6 @@ let tfun_len_n ty n =
   n_tfuns_to_list_rec ty n []
 ;;
 
-let rec tproduct_from_type_list (inferred : typ list) =
-  match inferred with
-  | [] -> failwith "Failed to construct TProduct from list of tuple types and elements"
-  | [ t; tlast ] -> TProduct (t, tlast)
-  | t :: ts -> TProduct (t, tproduct_from_type_list ts)
-;;
-
 let get_with_custom_message opt message =
   match opt with
   | None -> failwith message
@@ -78,19 +71,22 @@ let get_with_custom_message opt message =
 let rec infer ctx expr : (typ * typed_expr) option =
   match expr with
   | Tuple ts ->
-    let inferred = ts |> List.map (fun t -> infer ctx t) in
-    let types, tyexps =
-      inferred
-      |> List.map (fun t ->
-        (*
-           This deviates from the style of returning None given a failure, used everywhere else in infer/check
+    if List.length ts < 2
+    then None
+    else (
+      let inferred = ts |> List.map (fun t -> infer ctx t) in
+      let types, tyexps =
+        inferred
+        |> List.map (fun t ->
+          (*
+             This deviates from the style of returning None given a failure, used everywhere else in infer/check
           But leave it until we refactor to Result
-        *)
-        get_with_custom_message t "Failed to infer type tuple due to element")
-      |> List.split
-    in
-    let tproduct = tproduct_from_type_list types in
-    Some (tproduct, TTuple (tyexps, tproduct))
+          *)
+          get_with_custom_message t "Failed to infer type tuple due to element")
+        |> List.split
+      in
+      let tproduct = TProduct types in
+      Some (tproduct, TTuple (tyexps, tproduct)))
   (*
      For Advance, look up the type of the name being advanced
     which should result in a thunk. Produce the return type of the thunk.
@@ -273,24 +269,25 @@ let infer_all exprs =
 
 let%test_unit "type checking a zero element tuple should fail" =
   let tuple = Tuple [] in
-  OUnit2.assert_raises
-    (Failure "Failed to construct TProduct from list of tuple types and elements")
-    (fun () -> infer [] tuple)
+  match infer [] tuple with
+  | Some _ -> OUnit2.assert_failure "Should have failed to type check zero element tuple"
+  | None -> ()
 ;;
 
 let%test_unit "type checking a single element tuple should fail" =
   let tuple = Tuple [ Const (CInt 42) ] in
-  OUnit2.assert_raises
-    (Failure "Failed to construct TProduct from list of tuple types and elements")
-    (fun () -> infer [] tuple)
+  match infer [] tuple with
+  | Some _ ->
+    OUnit2.assert_failure "Should have failed to type check single element tuple"
+  | None -> ()
 ;;
 
 let%test_unit "type checking the tuple (42, (true, false)) should work" =
   let tuple =
     Tuple [ Const (CInt 42); Tuple [ Const (CBool true); Const (CBool false) ] ]
   in
-  let expected_second_elem_type = TProduct (TBool, TBool) in
-  let expected_type = TProduct (TInt, expected_second_elem_type) in
+  let expected_second_elem_type = TProduct [ TBool; TBool ] in
+  let expected_type = TProduct [ TInt; expected_second_elem_type ] in
   let expected =
     TTuple
       ( [ TConst (CInt 42, TInt)
@@ -312,8 +309,8 @@ let%test_unit "type checking the tuple ((42, true), false) should work" =
   let tuple =
     Tuple [ Tuple [ Const (CInt 42); Const (CBool true) ]; Const (CBool false) ]
   in
-  let expected_first_elem_type = TProduct (TInt, TBool) in
-  let expected_type = TProduct (expected_first_elem_type, TBool) in
+  let expected_first_elem_type = TProduct [ TInt; TBool ] in
+  let expected_type = TProduct [ expected_first_elem_type; TBool ] in
   let expected =
     TTuple
       ( [ TTuple
@@ -333,8 +330,7 @@ let%test_unit "type checking the tuple ((42, true), false) should work" =
 
 let%test_unit "type checking the tuple (42, true, false) should work" =
   let tuple = Tuple [ Const (CInt 42); Const (CBool true); Const (CBool false) ] in
-  let inner_expected_type = TProduct (TBool, TBool) in
-  let expected_type = TProduct (TInt, inner_expected_type) in
+  let expected_type = TProduct [ TInt; TBool; TBool ] in
   let expected =
     TTuple
       ( [ TConst (CInt 42, TInt); TConst (CBool true, TBool); TConst (CBool false, TBool) ]
@@ -350,7 +346,7 @@ let%test_unit "type checking the tuple (42, true, false) should work" =
 
 let%test_unit "type checking the tuple (42, true) should work" =
   let tuple = Tuple [ Const (CInt 42); Const (CBool true) ] in
-  let expected_type = TProduct (TInt, TBool) in
+  let expected_type = TProduct [ TInt; TBool ] in
   let expected =
     TTuple ([ TConst (CInt 42, TInt); TConst (CBool true, TBool) ], expected_type)
   in
@@ -932,5 +928,9 @@ let rec string_of_type = function
   | TBool -> "bool"
   | TUnit -> "()"
   | TFun (t1, t2) -> "(" ^ string_of_type t1 ^ " -> " ^ string_of_type t2 ^ ")"
-  | TProduct (t1, t2) -> "(" ^ string_of_type t1 ^ ", " ^ string_of_type t2 ^ ")"
+  | TProduct ts -> string_of_tproduct ts
+
+and string_of_tproduct = function
+  | [] -> ""
+  | t :: ts -> "(" ^ string_of_type t ^ ", " ^ string_of_tproduct ts ^ ")"
 ;;

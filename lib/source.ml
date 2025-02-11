@@ -23,7 +23,7 @@ type typ =
   | TUnit
   (* Refac to TFun of typ list * typ ? *)
   | TFun of typ * typ
-  | TProduct of typ * typ
+  | TProduct of typ list
 [@@deriving show, eq]
 
 type expr =

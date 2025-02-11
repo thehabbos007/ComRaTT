@@ -64,7 +64,12 @@ let rec final_type ty =
   match ty with
   | TInt | TBool | TUnit -> ty
   | TFun (_, t2) -> final_type t2
-  | TProduct (_, t2) -> final_type t2
+  | TProduct ts -> final_type_tproduct ts
+
+and final_type_tproduct = function
+  | [] -> failwith "final_type_tproduct: Attempted to take final type of empty tproduct"
+  | [ t ] -> t
+  | _ :: ts -> final_type_tproduct ts
 ;;
 
 module EliminatePartialApp = struct
@@ -103,7 +108,7 @@ module EliminatePartialApp = struct
     match ty with
     | TInt | TBool | TUnit -> []
     | TFun (t1, t2) -> t1 :: unpack_type t2
-    | TProduct (t1, t2) -> t1 :: unpack_type t2
+    | TProduct ts -> ts
   ;;
 
   let generate_names types =
