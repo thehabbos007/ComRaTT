@@ -32,7 +32,7 @@ impl std::fmt::Display for ComRaTTError {
             .title(&self.message)
             .snippet(
                 annotate_snippets::Snippet::source(&self.input)
-                    .fold(true)
+                    // .fold(true)
                     .annotation(annotate_snippets::Level::Error.span(self.span.clone())),
             );
         let renderer = annotate_snippets::Renderer::styled();
