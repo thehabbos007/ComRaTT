@@ -43,13 +43,13 @@ fn main() -> Result<(), lexopt::Error> {
 
     let input = args.read();
 
-    let prog = match Prog::parse(&input) {
-        Ok(prog) => prog,
-        Err(err) => {
-            eprintln!("{}", err);
-            return Ok(());
-        }
-    };
+    // let prog = match Prog::parse(&input) {
+    //     Ok(prog) => prog,
+    //     Err(err) => {
+    //         eprintln!("{}", err);
+    //         return Ok(());
+    //     }
+    // };
 
     Ok(())
 }
