@@ -288,7 +288,68 @@ mod tests {
                 assert_eq!(body, TypedExpr::TConst(Const::CInt(2), Type::TInt));
                 assert_eq!(ty, Type::TInt);
             }
-            _ => panic!("Not a fundef"), // TODO: assert failure?
+            _ => panic!("Failed to infer type of single constant function"),
+        }
+    }
+
+    #[test]
+    fn infer_int_const() {
+        let expr = Expr::Const(Const::CInt(42));
+        let inferred = infer(&mut HashMap::new(), expr.b());
+        match inferred {
+            Some((ty, texp)) => {
+                assert_eq!(ty, Type::TInt);
+                assert_eq!(texp, TypedExpr::TConst(Const::CInt(42), Type::TInt));
+            }
+            None => panic!("Failed to infer type of int constant 42"),
+        }
+    }
+
+    #[test]
+    fn infer_let_binding_with_rhs_as_body() {
+        let expr = Expr::Let(
+            "x".to_owned(),
+            Expr::Const(Const::CInt(42)).b(),
+            Expr::Var("x".to_owned()).b(),
+        );
+        let inferred = infer(&mut HashMap::new(), expr.b());
+        match inferred {
+            Some((ty, texp)) => {
+                assert_eq!(ty, Type::TInt);
+                assert_eq!(
+                    texp,
+                    TypedExpr::TLet(
+                        "x".to_owned(),
+                        Type::TInt,
+                        TypedExpr::TConst(Const::CInt(42), Type::TInt).b(),
+                        TypedExpr::TName("x".to_owned(), Type::TInt).b()
+                    )
+                );
+            }
+            None => panic!("Failed to infer type of 'let x = 42 in x'"),
+        }
+    }
+
+    #[test]
+    fn infer_prim_add() {
+        let expr = Expr::Prim(
+            Binop::Add,
+            Expr::Const(Const::CInt(40)).b(),
+            Expr::Const(Const::CInt(2)).b(),
+        );
+        let expected = TypedExpr::TPrim(
+            Binop::Add,
+            TypedExpr::TConst(Const::CInt(40), Type::TInt).b(),
+            TypedExpr::TConst(Const::CInt(2), Type::TInt).b(),
+            Type::TInt,
+        );
+        let inferred = infer(&mut HashMap::new(), expr.b());
+        match inferred {
+            Some((ty, texp)) => {
+                assert_eq!(ty, Type::TInt);
+                assert_eq!(texp, expected);
+            }
+            None => panic!("Failed to infer type of primitive expression '40 + 2'"),
         }
     }
 }
