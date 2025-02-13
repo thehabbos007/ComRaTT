@@ -1,8 +1,9 @@
 use std::{any::TypeId, collections::HashMap};
 
-use crate::source::{Binop, Const, Expr, Type};
+use crate::source::{Binop, Const, Expr, Toplevel, Type};
 type Sym = String;
 
+#[derive(PartialEq, Eq, Debug, Clone)]
 enum TypedExpr {
     TFunDef(Sym, Vec<(Sym, Type)>, Box<TypedExpr>, Type),
     TConst(Const, Type),
@@ -202,5 +203,92 @@ fn check(context: &mut HashMap<Sym, Type>, expr: Box<Expr>, ty: Type) -> Option<
             Some((inferred_ty, texp)) if ty == inferred_ty => Some((inferred_ty, texp)),
             _ => None,
         },
+    }
+}
+
+fn infer_all(exprs: Vec<Toplevel>) -> Vec<TypedExpr> {
+    infer_all_aux(exprs.as_slice(), &mut HashMap::new(), &mut Vec::new())
+}
+
+fn infer_all_aux(
+    exprs: &[Toplevel],
+    context: &mut HashMap<Sym, Type>,
+    acc: &mut Vec<TypedExpr>,
+) -> Vec<TypedExpr> {
+    match exprs {
+        [] => {
+            acc.reverse();
+            acc.to_vec()
+        }
+        [fexpr, rest @ ..] => match fexpr {
+            Toplevel::FunDef(name, box ty @ Type::TFun(_, _), args, body) => {
+                let (ret_ty, types) = tfun_len_n(ty.clone(), args.len());
+                // args.clone() to avoid borrowing the strings, but is
+                // it necessary? is some other way better?
+                let args_with_types = args.clone().into_iter().zip(types.clone());
+                let mut cloned_context = context.clone();
+                cloned_context.insert(name.to_owned(), ty.clone());
+                for (arg, typ) in args_with_types.clone() {
+                    cloned_context.insert(arg.to_owned(), typ);
+                }
+
+                match check(&mut cloned_context, body.clone(), ret_ty) {
+                    Some((body_ty, typed_body)) => {
+                        let fun_ty = build_function_type(types.as_slice(), body_ty);
+                        let typed_fun = TypedExpr::TFunDef(
+                            name.to_owned(),
+                            args_with_types.collect(),
+                            typed_body.b(),
+                            fun_ty,
+                        );
+                        acc.push(typed_fun);
+                        infer_all_aux(rest, &mut cloned_context, acc)
+                    }
+                    None => panic!("Error type checking function {}", name),
+                }
+            }
+            Toplevel::FunDef(name, typ, args, body) if args.len() == 0 => {
+                match check(context, body.clone(), *typ.clone()) {
+                    Some((fun_ty, typed_body)) => {
+                        let typed_fun = TypedExpr::TFunDef(
+                            name.to_owned(),
+                            vec![],
+                            typed_body.b(),
+                            fun_ty.clone(),
+                        );
+                        let mut cloned_context = context.clone();
+                        cloned_context.insert(name.to_owned(), fun_ty);
+                        acc.push(typed_fun);
+                        infer_all_aux(rest, &mut cloned_context, acc)
+                    }
+                    None => panic!("Error type checking function {} with no arguments", name),
+                }
+            }
+            _ => panic!("Error: Non-annotated function"),
+        },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn infer_all_constant_function() {
+        let fn_type = Type::TInt;
+        let fun_body = Expr::Const(Const::CInt(2));
+        let fun = Toplevel::FunDef("test".to_owned(), fn_type.b(), vec![], fun_body.b());
+
+        let inferred = infer_all(vec![fun]);
+        assert_eq!(inferred.len(), 1);
+        match inferred[0].clone() {
+            TypedExpr::TFunDef(name, args, box body, ty) => {
+                assert_eq!(name, "test");
+                assert!(args.is_empty());
+                assert_eq!(body, TypedExpr::TConst(Const::CInt(2), Type::TInt));
+                assert_eq!(ty, Type::TInt);
+            }
+            _ => panic!("Not a fundef"), // TODO: assert failure?
+        }
     }
 }
