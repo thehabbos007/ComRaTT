@@ -324,6 +324,247 @@ mod tests {
     }
 
     #[test]
+    fn infer_valid_two_element_tuple_with_second_element_tuple() {
+        let expr = Expr::Tuple(vec![
+            Expr::Const(Const::CBool(false)),
+            Expr::Tuple(vec![
+                Expr::Const(Const::CInt(42)),
+                Expr::Const(Const::CBool(true)),
+            ]),
+        ]);
+        let expected_second_element_type = Type::TProduct(vec![Type::TInt, Type::TBool]);
+        let expected_type = Type::TProduct(vec![Type::TBool, expected_second_element_type.clone()]);
+        let expected_texp = TypedExpr::TTuple(
+            vec![
+                TypedExpr::TConst(Const::CBool(false), Type::TBool),
+                TypedExpr::TTuple(
+                    vec![
+                        TypedExpr::TConst(Const::CInt(42), Type::TInt),
+                        TypedExpr::TConst(Const::CBool(true), Type::TBool),
+                    ],
+                    expected_second_element_type,
+                ),
+            ],
+            expected_type.clone(),
+        );
+        let inferred = infer(&mut HashMap::new(), expr.b());
+        match inferred {
+            Some((ty, texp)) => {
+                assert_eq!(ty, expected_type);
+                assert_eq!(texp, expected_texp);
+            }
+            None => panic!("Failed to infer type of valid tuple (42, (true, false))"),
+        }
+    }
+
+    #[test]
+    fn infer_valid_two_element_tuple_with_first_element_tuple() {
+        let expr = Expr::Tuple(vec![
+            Expr::Tuple(vec![
+                Expr::Const(Const::CInt(42)),
+                Expr::Const(Const::CBool(true)),
+            ]),
+            Expr::Const(Const::CBool(false)),
+        ]);
+        let expected_first_element_type = Type::TProduct(vec![Type::TInt, Type::TBool]);
+        let expected_type = Type::TProduct(vec![expected_first_element_type.clone(), Type::TBool]);
+        let expected_texp = TypedExpr::TTuple(
+            vec![
+                TypedExpr::TTuple(
+                    vec![
+                        TypedExpr::TConst(Const::CInt(42), Type::TInt),
+                        TypedExpr::TConst(Const::CBool(true), Type::TBool),
+                    ],
+                    expected_first_element_type,
+                ),
+                TypedExpr::TConst(Const::CBool(false), Type::TBool),
+            ],
+            expected_type.clone(),
+        );
+        let inferred = infer(&mut HashMap::new(), expr.b());
+        match inferred {
+            Some((ty, texp)) => {
+                assert_eq!(ty, expected_type);
+                assert_eq!(texp, expected_texp);
+            }
+            None => panic!("Failed to infer type of valid tuple ((42, true), false)"),
+        }
+    }
+
+    #[test]
+    fn infer_valid_three_element_tuple() {
+        let expr = Expr::Tuple(vec![
+            Expr::Const(Const::CInt(42)),
+            Expr::Const(Const::CBool(true)),
+            Expr::Const(Const::CBool(false)),
+        ]);
+        let expected_type = Type::TProduct(vec![Type::TInt, Type::TBool, Type::TBool]);
+        let expected_texp = TypedExpr::TTuple(
+            vec![
+                TypedExpr::TConst(Const::CInt(42), Type::TInt),
+                TypedExpr::TConst(Const::CBool(true), Type::TBool),
+                TypedExpr::TConst(Const::CBool(false), Type::TBool),
+            ],
+            expected_type.clone(),
+        );
+        let inferred = infer(&mut HashMap::new(), expr.b());
+        match inferred {
+            Some((ty, texp)) => {
+                assert_eq!(ty, expected_type);
+                assert_eq!(texp, expected_texp);
+            }
+            None => panic!("Failed to infer type of valid tuple (42, true, false)"),
+        }
+    }
+
+    #[test]
+    fn infer_valid_two_element_tuple() {
+        let expr = Expr::Tuple(vec![
+            Expr::Const(Const::CInt(42)),
+            Expr::Const(Const::CBool(true)),
+        ]);
+        let expected_type = Type::TProduct(vec![Type::TInt, Type::TBool]);
+        let expected_texp = TypedExpr::TTuple(
+            vec![
+                TypedExpr::TConst(Const::CInt(42), Type::TInt),
+                TypedExpr::TConst(Const::CBool(true), Type::TBool),
+            ],
+            expected_type.clone(),
+        );
+        let inferred = infer(&mut HashMap::new(), expr.b());
+        match inferred {
+            Some((ty, texp)) => {
+                assert_eq!(ty, expected_type);
+                assert_eq!(texp, expected_texp);
+            }
+            None => panic!("Failed to infer type of valid tuple (42, true)"),
+        }
+    }
+
+    #[test]
+    fn infer_single_element_tuple_should_fail() {
+        let expr = Expr::Tuple(vec![Expr::Const(Const::CInt(42))]);
+        let inferred = infer(&mut HashMap::new(), expr.b());
+        match inferred {
+            Some(_) => panic!("Should have failed to infer type of single element tuple"),
+            None => (),
+        }
+    }
+
+    #[test]
+    fn infer_zero_element_tuple_should_fail() {
+        let expr = Expr::Tuple(vec![]);
+        let inferred = infer(&mut HashMap::new(), expr.b());
+        match inferred {
+            Some(_) => panic!("Should have failed to infer type of zero element tuple"),
+            None => (),
+        }
+    }
+
+    #[test]
+    fn infer_conditional_different_branch_types_should_fail() {
+        let expr = Expr::IfThenElse(
+            Expr::Const(Const::CBool(true)).b(),
+            Expr::Const(Const::CInt(42)).b(),
+            Expr::Const(Const::CBool(false)).b(),
+        );
+        let inferred = infer(&mut HashMap::new(), expr.b());
+        match inferred {
+            Some(_) => panic!(
+                "Should have failed to infer type of conditional with different branch types"
+            ),
+            None => (),
+        }
+    }
+    #[test]
+    fn infer_conditional() {
+        let expr = Expr::IfThenElse(
+            Expr::Const(Const::CBool(true)).b(),
+            Expr::Const(Const::CInt(42)).b(),
+            Expr::Const(Const::CInt(0)).b(),
+        );
+        let inferred = infer(&mut HashMap::new(), expr.b());
+        match inferred {
+            Some((ty, texp)) => {
+                assert_eq!(ty, Type::TInt);
+                assert_eq!(
+                    texp,
+                    TypedExpr::TIfThenElse(
+                        TypedExpr::TConst(Const::CBool(true), Type::TBool).b(),
+                        TypedExpr::TConst(Const::CInt(42), Type::TInt).b(),
+                        TypedExpr::TConst(Const::CInt(0), Type::TInt).b(),
+                        Type::TInt
+                    )
+                );
+            }
+            None => panic!("Failed to infer type of valid conditional"),
+        }
+    }
+
+    #[test]
+    fn infer_var_in_context() {
+        let expr = Expr::Var("x".to_owned());
+        let context = &mut HashMap::new();
+        context.insert("x".to_owned(), Type::TInt);
+        let inferred = infer(context, expr.b());
+        match inferred {
+            Some((ty, texp)) => {
+                assert_eq!(ty, Type::TInt);
+                assert_eq!(texp, TypedExpr::TName("x".to_owned(), Type::TInt));
+            }
+            None => panic!("Failed to infer type of variable that has type in context"),
+        }
+    }
+
+    #[test]
+    fn infer_var_not_in_context_should_fail() {
+        let expr = Expr::Var("x".to_owned());
+        let inferred = infer(&mut HashMap::new(), expr.b());
+        match inferred {
+            Some(_) => {
+                panic!("Should have failed to infer type of variable that has no type in context")
+            }
+            None => (),
+        }
+    }
+
+    #[test]
+    fn infer_let_binding_with_prim_body() {
+        let expr = Expr::Let(
+            "x".to_owned(),
+            Expr::Const(Const::CInt(2)).b(),
+            Expr::Prim(
+                Binop::Add,
+                Expr::Var("x".to_owned()).b(),
+                Expr::Var("x".to_owned()).b(),
+            )
+            .b(),
+        );
+        let inferred = infer(&mut HashMap::new(), expr.b());
+        match inferred {
+            Some((ty, texp)) => {
+                assert_eq!(ty, Type::TInt);
+                assert_eq!(
+                    texp,
+                    TypedExpr::TLet(
+                        "x".to_owned(),
+                        Type::TInt,
+                        TypedExpr::TConst(Const::CInt(2), Type::TInt).b(),
+                        TypedExpr::TPrim(
+                            Binop::Add,
+                            TypedExpr::TName("x".to_owned(), Type::TInt).b(),
+                            TypedExpr::TName("x".to_owned(), Type::TInt).b(),
+                            Type::TInt
+                        )
+                        .b()
+                    )
+                );
+            }
+            None => panic!("Failed to infer type of 'let x = 2 in x+x'"),
+        }
+    }
+
+    #[test]
     fn infer_let_binding_with_rhs_as_body() {
         let expr = Expr::Let(
             "x".to_owned(),
