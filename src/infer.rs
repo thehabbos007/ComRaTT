@@ -135,8 +135,26 @@ fn infer(context: &mut HashMap<Sym, Type>, expr: Box<Expr>) -> Option<(Type, Typ
             None => None,
         },
         Expr::Prim(op, left, right) => match op {
-            Binop::Add | Binop::Mul | Binop::Div | Binop::Sub => todo!(),
-            Binop::Lt | Binop::Lte | Binop::Gt | Binop::Gte => todo!(),
+            Binop::Add | Binop::Mul | Binop::Div | Binop::Sub => match (
+                check(context, left, Type::TInt),
+                check(context, right, Type::TInt),
+            ) {
+                (Some((_, tleft)), Some((_, tright))) => Some((
+                    Type::TInt,
+                    TypedExpr::TPrim(op, tleft.b(), tright.b(), Type::TInt),
+                )),
+                _ => None,
+            },
+            Binop::Lt | Binop::Lte | Binop::Gt | Binop::Gte => match (
+                check(context, left, Type::TInt),
+                check(context, right, Type::TInt),
+            ) {
+                (Some((_, tleft)), Some((_, tright))) => Some((
+                    Type::TBool,
+                    TypedExpr::TPrim(op, tleft.b(), tright.b(), Type::TBool),
+                )),
+                _ => None,
+            },
             Binop::Eq | Binop::Neq => match (infer(context, left), infer(context, right)) {
                 (Some((Type::TInt, tleft)), Some((Type::TInt, tright)))
                 | (Some((Type::TBool, tleft)), Some((Type::TBool, tright))) => Some((
