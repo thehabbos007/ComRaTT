@@ -861,7 +861,7 @@ mod tests {
             Expr::Const(Const::CInt(40)).b(),
             Expr::Const(Const::CInt(2)).b(),
         );
-        let expected = TypedExpr::TPrim(
+        let expected_texp = TypedExpr::TPrim(
             Binop::Add,
             TypedExpr::TConst(Const::CInt(40), Type::TInt).b(),
             TypedExpr::TConst(Const::CInt(2), Type::TInt).b(),
@@ -871,15 +871,83 @@ mod tests {
         match inferred {
             Some((ty, texp)) => {
                 assert_eq!(ty, Type::TInt);
-                assert_eq!(texp, expected);
+                assert_eq!(texp, expected_texp);
             }
             None => panic!("Failed to infer type of primitive expression '40 + 2'"),
         }
     }
 
     #[test]
+    fn check_valid_lambda() {
+        let expr = Expr::Lam(
+            vec!["x".to_owned()],
+            Expr::Prim(
+                Binop::Add,
+                Expr::Var("x".to_owned()).b(),
+                Expr::Const(Const::CInt(2)).b(),
+            )
+            .b(),
+        );
+        let expected_texp = TypedExpr::TLam(
+            vec![("x".to_owned(), Type::TInt)],
+            TypedExpr::TPrim(
+                Binop::Add,
+                TypedExpr::TName("x".to_owned(), Type::TInt).b(),
+                TypedExpr::TConst(Const::CInt(2), Type::TInt).b(),
+                Type::TInt,
+            )
+            .b(),
+            Type::TFun(Type::TInt.b(), Type::TInt.b()),
+        );
+        let checked = check(
+            &mut HashMap::new(),
+            expr.b(),
+            Type::TFun(Type::TInt.b(), Type::TInt.b()),
+        );
+        match checked {
+            Some((ty, texp)) => {
+                assert_eq!(ty, Type::TFun(Type::TInt.b(), Type::TInt.b()));
+                assert_eq!(texp, expected_texp);
+            }
+            None => panic!("Failed to check type of valid lambda 'fun x -> x+2'"),
+        }
+    }
+
+    #[test]
     fn infer_valid_multiple_application() {
-        todo!();
+        let expr = Expr::App(
+            Expr::App(
+                Expr::Var("f".to_owned()).b(),
+                Expr::Const(Const::CInt(2)).b(),
+            )
+            .b(),
+            Expr::Const(Const::CInt(2)).b(),
+        );
+        let inner_fun_type = Type::TFun(
+            Type::TInt.b(),
+            Type::TFun(Type::TInt.b(), Type::TInt.b()).b(),
+        );
+        let mut context = HashMap::from([("f".to_owned(), inner_fun_type.clone())]);
+        let expected_inner_fun = TypedExpr::TName("f".to_owned(), inner_fun_type.clone());
+        let expected_inner_app = TypedExpr::TApp(
+            expected_inner_fun.clone().b(),
+            vec![TypedExpr::TConst(Const::CInt(2), Type::TInt)],
+            Type::TFun(Type::TInt.b(), Type::TInt.b()),
+        );
+
+        let expected_outer_app = TypedExpr::TApp(
+            expected_inner_app.clone().b(),
+            vec![TypedExpr::TConst(Const::CInt(2), Type::TInt)],
+            Type::TInt,
+        );
+        let inferred = infer(&mut context, expr.b());
+        match inferred {
+            Some((ty, texp)) => {
+                assert_eq!(ty, Type::TInt);
+                assert_eq!(texp, expected_outer_app);
+            }
+            None => panic!("Failed to infer type of valid multiple application"),
+        }
     }
 
     #[test]
