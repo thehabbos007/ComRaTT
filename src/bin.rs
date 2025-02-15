@@ -1,11 +1,11 @@
 use lexopt::Arg;
+use std::ffi::OsString;
 use std::fs::File;
 use std::io::{self, Read as _};
-use std::path::PathBuf;
 use ComRaTT::source::Prog;
 
 struct Args {
-    input: Option<PathBuf>,
+    input: Option<OsString>,
 }
 
 impl Args {
@@ -32,24 +32,23 @@ fn main() -> Result<(), lexopt::Error> {
     let mut args = Args { input: None };
 
     let mut parser = lexopt::Parser::from_env();
-    /*
+
     while let Some(arg) = parser.next()? {
         match arg {
-            Arg::Positional("input") => args.input = parser.expect_value()?,
+            Arg::Value(path) => args.input = Some(path),
             _ => return Ok(()),
         }
     }
-    */
 
     let input = args.read();
 
-    // let prog = match Prog::parse(&input) {
-    //     Ok(prog) => prog,
-    //     Err(err) => {
-    //         eprintln!("{}", err);
-    //         return Ok(());
-    //     }
-    // };
+    let prog = match Prog::parse(&input) {
+        Ok(prog) => prog,
+        Err(err) => {
+            eprintln!("{}", err);
+            return Ok(());
+        }
+    };
 
     Ok(())
 }

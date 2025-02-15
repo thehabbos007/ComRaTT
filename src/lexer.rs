@@ -76,14 +76,14 @@ impl<'a> Tokenizer<'a> {
 }
 
 impl<'a> Iterator for Tokenizer<'a> {
-    type Item = Result<Token<'a>, ComRaTTError>;
+    type Item = Result<Token<'a>, ComRaTTError<'a>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.lexer.next() {
             Some(Err(_)) => {
                 let span = Range::from(self.lexer.span().start..self.source.len());
                 let message = "failed to recognize the rest tokens".to_owned();
-                Some(Err(ComRaTTError::new(message, span)))
+                Some(Err(ComRaTTError::from_span(message, span, &self.source)))
             }
             Some(Ok(kind)) => Some(Ok(Token {
                 source: self.source,

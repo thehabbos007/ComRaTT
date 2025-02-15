@@ -64,9 +64,3 @@ pub enum Toplevel {
 
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub struct Prog(pub Vec<Toplevel>);
-
-// impl Prog {
-//     pub fn parse(input: &str) -> Result<Prog, ComRaTTError> {
-//         input.parse::<Prog>()
-//     }
-// }

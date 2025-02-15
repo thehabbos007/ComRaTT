@@ -1,39 +1,45 @@
-use winnow::ascii::{dec_int, multispace0};
-use winnow::combinator::{eof, opt, trace};
-use winnow::error::{ContextError, ParserError, StrContext, StrContextValue};
+use winnow::combinator::opt;
+use winnow::error::{ContextError, StrContext, StrContextValue};
 use winnow::token::literal;
 use winnow::{
-    combinator::{alt, delimited, preceded, repeat, separated, terminated},
-    stream::AsChar,
-    token::{one_of, take_while},
+    combinator::{alt, delimited, preceded, repeat, terminated},
     Parser, Result,
 };
 
 use crate::error::ComRaTTError;
-use crate::lexer::{Token, TokenKind};
+use crate::lexer::{Token, TokenKind, Tokenizer};
 use crate::source::{Binop, Const, Expr, Prog, Toplevel, Type};
 
 pub type TokenSlice<'a> = winnow::stream::TokenSlice<'a, Token<'a>>;
 pub type Input<'a> = TokenSlice<'a>;
+
+impl Prog {
+    pub fn parse(input: &str) -> Result<Prog, ComRaTTError> {
+        let tokenizer = Tokenizer::tokenize(input)
+            .filter_map(|t| t.ok())
+            .collect::<Vec<_>>();
+
+        let token_slice = TokenSlice::new(&tokenizer);
+
+        prog.parse(token_slice).map_err(|e| {
+            let offset = e.offset();
+            ComRaTTError::from_context_error(e.into_inner(), offset, input)
+        })
+    }
+}
 
 impl<'a> Parser<Input<'a>, &'a Token<'a>, ContextError> for TokenKind {
     fn parse_next(&mut self, input: &mut Input<'a>) -> Result<&'a Token<'a>, ContextError> {
         literal(*self).parse_next(input).map(|t| &t[0])
     }
 }
+
 pub fn text<'a, Registry>(
     text: &'static str,
 ) -> impl Parser<Input<'a>, &'a Token<'a>, ContextError> {
     move |input: &mut Input<'a>| literal(text).parse_next(input).map(|t| &t[0])
 }
 
-fn integer<'a>(input: &mut Input<'a>) -> Result<i32> {
-    TokenKind::Int
-        .map(|t| t.text().parse().unwrap())
-        .parse_next(input)
-}
-
-// Type parsers
 fn atomic_typ<'a>(input: &mut Input<'a>) -> Result<Type> {
     alt((
         TokenKind::TBool.value(Type::TBool),
@@ -70,10 +76,7 @@ fn typ<'a>(input: &mut Input<'a>) -> Result<Type> {
 fn simple_expr<'a>(input: &mut Input<'a>) -> Result<Expr> {
     alt((
         TokenKind::Ident.map(|t| Expr::Var(t.text().to_owned())),
-        TokenKind::Int.try_map(|t| {
-            dbg!(&t);
-            t.text().parse().map(|n| Expr::Const(Const::CInt(n)))
-        }),
+        TokenKind::Int.try_map(|t| t.text().parse().map(|n| Expr::Const(Const::CInt(n)))),
         TokenKind::True.value(Expr::Const(Const::CBool(true))),
         TokenKind::False.value(Expr::Const(Const::CBool(false))),
         TokenKind::Unit.value(Expr::Const(Const::CUnit)),
@@ -499,7 +502,6 @@ mod tests {
         let tokens = tokenize(input);
         let mut token_slice = TokenSlice::new(&tokens);
         let result = prog.parse_next(&mut token_slice);
-        dbg!(&result);
         assert!(result.is_ok());
         assert_eq!(result.unwrap().0.len(), 2);
     }
