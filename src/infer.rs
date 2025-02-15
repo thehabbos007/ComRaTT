@@ -324,6 +324,268 @@ mod tests {
     }
 
     #[test]
+    fn infer_tuple_nested_tuple_access() {
+        let tuple = Expr::Tuple(vec![
+            Expr::Const(Const::CInt(42)),
+            Expr::Tuple(vec![
+                Expr::Const(Const::CBool(true)),
+                Expr::Const(Const::CBool(false)),
+            ]),
+        ]);
+        let outer_access = Expr::Access(tuple.b(), 1);
+        let inner_access = Expr::Access(outer_access.b(), 0);
+        let inner_tuple_type = Type::TProduct(vec![Type::TBool, Type::TBool]);
+        let outer_tuple_type = Type::TProduct(vec![Type::TInt, inner_tuple_type.clone()]);
+        let expected_texp = TypedExpr::TAccess(
+            TypedExpr::TAccess(
+                TypedExpr::TTuple(
+                    vec![
+                        TypedExpr::TConst(Const::CInt(42), Type::TInt),
+                        TypedExpr::TTuple(
+                            vec![
+                                TypedExpr::TConst(Const::CBool(true), Type::TBool),
+                                TypedExpr::TConst(Const::CBool(false), Type::TBool),
+                            ],
+                            inner_tuple_type.clone(),
+                        ),
+                    ],
+                    outer_tuple_type,
+                )
+                .b(),
+                1,
+                inner_tuple_type,
+            )
+            .b(),
+            0,
+            Type::TBool,
+        );
+        let inferred = infer(&mut HashMap::new(), inner_access.b());
+        match inferred {
+            Some((ty, texp)) => {
+                assert_eq!(ty, Type::TBool);
+                assert_eq!(texp, expected_texp);
+            }
+            None => panic!("Failed to infer type of nested tuple access"),
+        }
+    }
+
+    #[test]
+    fn infer_valid_tuple_access() {
+        let tuple = Expr::Tuple(vec![
+            Expr::Const(Const::CInt(42)),
+            Expr::Const(Const::CBool(true)),
+        ]);
+        let expr = Expr::Access(tuple.b(), 0);
+        let inferred = infer(&mut HashMap::new(), expr.b());
+        match inferred {
+            Some((ty, texp)) => {
+                assert_eq!(ty, Type::TInt);
+                assert_eq!(
+                    texp,
+                    TypedExpr::TAccess(
+                        TypedExpr::TTuple(
+                            vec![
+                                TypedExpr::TConst(Const::CInt(42), Type::TInt),
+                                TypedExpr::TConst(Const::CBool(true), Type::TBool)
+                            ],
+                            Type::TProduct(vec![Type::TInt, Type::TBool])
+                        )
+                        .b(),
+                        0,
+                        Type::TInt
+                    )
+                );
+            }
+            None => panic!("Failed to infer type of valid tuple access"),
+        }
+    }
+
+    #[test]
+    fn infer_sub_zero_tuple_access_should_fail() {
+        let tuple = Expr::Tuple(vec![
+            Expr::Const(Const::CInt(42)),
+            Expr::Const(Const::CBool(true)),
+        ]);
+        let expr = Expr::Access(tuple.b(), -1);
+        let inferred = infer(&mut HashMap::new(), expr.b());
+        match inferred {
+            Some(_) => panic!("Should have failed to infer type of sub-zero tuple access"),
+            None => (),
+        }
+    }
+
+    #[test]
+    fn infer_advance_name_bound_to_thunk_in_context() {
+        let expr = Expr::Advance("x".to_owned());
+        let mut context = HashMap::new();
+        let fun_type = Type::TFun(Type::TUnit.b(), Type::TInt.b());
+        context.insert("x".to_owned(), fun_type.clone());
+        let expected_texp = TypedExpr::TApp(
+            TypedExpr::TName("x".to_owned(), fun_type).b(),
+            vec![TypedExpr::TConst(Const::CUnit, Type::TUnit)],
+            Type::TInt,
+        );
+        let inferred = infer(&mut context, expr.b());
+        match inferred {
+            Some((ty, texp)) => {
+                assert_eq!(ty, Type::TInt);
+                assert_eq!(texp, expected_texp);
+            }
+            None => panic!("Failed to infer type of valid advance"),
+        }
+    }
+
+    #[test]
+    fn infer_advance_name_not_bound_in_context_should_fail() {
+        let expr = Expr::Advance("x".to_owned());
+        let inferred = infer(&mut HashMap::new(), expr.b());
+        match inferred {
+            Some(_) => panic!("Should have failed to infer type of advance on unbound name"),
+            None => (),
+        }
+    }
+
+    #[test]
+    fn infer_advance_name_not_bound_to_thunk_in_context_should_fail() {
+        let expr = Expr::Advance("x".to_owned());
+        let mut context = HashMap::new();
+        context.insert("x".to_owned(), Type::TInt);
+        let inferred = infer(&mut context, expr.b());
+        match inferred {
+            Some(_) => {
+                panic!("Should have failed to infer type of advance on name not bound to thunk")
+            }
+            None => (),
+        }
+    }
+
+    #[test]
+    fn infer_delay_produces_thunk() {
+        let expr = Expr::Delay(Expr::Const(Const::CInt(42)).b());
+        let inferred = infer(&mut HashMap::new(), expr.b());
+        let expected_texp = TypedExpr::TLam(
+            vec![("#advance_unit".to_owned(), Type::TUnit)],
+            TypedExpr::TConst(Const::CInt(42), Type::TInt).b(),
+            Type::TFun(Type::TUnit.b(), Type::TInt.b()),
+        );
+        match inferred {
+            Some((ty, texp)) => {
+                assert_eq!(ty, Type::TFun(Type::TUnit.b(), Type::TInt.b()));
+                assert_eq!(texp, expected_texp);
+            }
+            None => panic!("Failed to infer type of delay"),
+        }
+    }
+
+    #[test]
+    fn infer_out_of_bounds_tuple_access_should_fail() {
+        let tuple = Expr::Tuple(vec![
+            Expr::Const(Const::CInt(42)),
+            Expr::Const(Const::CBool(true)),
+        ]);
+        let expr = Expr::Access(tuple.b(), 2);
+        let inferred = infer(&mut HashMap::new(), expr.b());
+        match inferred {
+            Some(_) => panic!("Should have failed to infer type of out-of-bounds tuple access"),
+            None => (),
+        }
+    }
+
+    #[test]
+    fn infer_all_tuple_access_used_in_primitive_op_in_function() {
+        let tuple = Expr::Tuple(vec![
+            Expr::Const(Const::CInt(42)),
+            Expr::Const(Const::CBool(true)),
+            Expr::Const(Const::CInt(40)),
+        ]);
+        let fun_body = Expr::Prim(
+            Binop::Add,
+            Expr::Var("x".to_owned()).b(),
+            Expr::Access(tuple.b(), 2).b(),
+        );
+        let fun_type = Type::TFun(Type::TInt.b(), Type::TInt.b());
+        let fun_args = vec!["x".to_owned()];
+        let fun = Toplevel::FunDef(
+            "test".to_owned(),
+            fun_type.clone().b(),
+            fun_args,
+            fun_body.b(),
+        );
+        let expected_body = TypedExpr::TPrim(
+            Binop::Add,
+            TypedExpr::TName("x".to_owned(), Type::TInt).b(),
+            TypedExpr::TAccess(
+                TypedExpr::TTuple(
+                    vec![
+                        TypedExpr::TConst(Const::CInt(42), Type::TInt),
+                        TypedExpr::TConst(Const::CBool(true), Type::TBool),
+                        TypedExpr::TConst(Const::CInt(40), Type::TInt),
+                    ],
+                    Type::TProduct(vec![Type::TInt, Type::TBool, Type::TInt]),
+                )
+                .b(),
+                2,
+                Type::TInt,
+            )
+            .b(),
+            Type::TInt,
+        );
+        let inferred = infer_all(vec![fun]);
+        assert_eq!(inferred.len(), 1);
+        match inferred[0].clone() {
+            TypedExpr::TFunDef(name, args, box body, ty) => {
+                assert_eq!(name, "test");
+                assert_eq!(args.len(), 1);
+                assert_eq!(body, expected_body);
+                assert_eq!(ty, fun_type);
+            }
+            _ => panic!("Failed to infer of function that adds argument to tuple access"),
+        }
+    }
+
+    #[test]
+    fn infer_let_bound_tuple_accessed_in_body() {
+        let tuple = Expr::Tuple(vec![
+            Expr::Const(Const::CInt(42)),
+            Expr::Const(Const::CBool(true)),
+            Expr::Const(Const::CBool(false)),
+        ]);
+        let expr = Expr::Let(
+            "tuple_binding".to_owned(),
+            tuple.b(),
+            Expr::Access(Expr::Var("tuple_binding".to_owned()).b(), 0).b(),
+        );
+        let tuple_type = Type::TProduct(vec![Type::TInt, Type::TBool, Type::TBool]);
+        let tuple_texp = TypedExpr::TTuple(
+            vec![
+                TypedExpr::TConst(Const::CInt(42), Type::TInt),
+                TypedExpr::TConst(Const::CBool(true), Type::TBool),
+                TypedExpr::TConst(Const::CBool(false), Type::TBool),
+            ],
+            tuple_type.clone(),
+        );
+        let expected_texp = TypedExpr::TLet(
+            "tuple_binding".to_owned(),
+            Type::TInt,
+            tuple_texp.b(),
+            TypedExpr::TAccess(
+                TypedExpr::TName("tuple_binding".to_owned(), tuple_type.clone()).b(),
+                0,
+                Type::TInt,
+            )
+            .b(),
+        );
+        let inferred = infer(&mut HashMap::new(), expr.b());
+        match inferred {
+          Some((ty, texp)) => {
+            assert_eq!(ty, Type::TInt);
+            assert_eq!(texp, expected_texp);
+          }
+          None => panic!("Failed to infer type of let binding where rhs is a tuple and body accesses it by name"),
+        }
+    }
+
+    #[test]
     fn infer_valid_two_element_tuple_with_second_element_tuple() {
         let expr = Expr::Tuple(vec![
             Expr::Const(Const::CBool(false)),
