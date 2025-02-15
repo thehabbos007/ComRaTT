@@ -876,4 +876,91 @@ mod tests {
             None => panic!("Failed to infer type of primitive expression '40 + 2'"),
         }
     }
+
+    #[test]
+    fn infer_valid_multiple_application() {
+        todo!();
+    }
+
+    #[test]
+    fn infer_invalid_application_should_fail() {
+        let expr = Expr::App(
+            Expr::Var("f".to_owned()).b(),
+            Expr::Const(Const::CInt(42)).b(),
+        );
+        let mut context = HashMap::new();
+        context.insert("f".to_owned(), Type::TFun(Type::TBool.b(), Type::TInt.b()));
+        let inferred = infer(&mut context, expr.b());
+        match inferred {
+            Some(_) => panic!("Should have failed to infer type of invalid application"),
+            None => (),
+        }
+    }
+    #[test]
+    fn infer_valid_application() {
+        let expr = Expr::App(
+            Expr::Var("f".to_owned()).b(),
+            Expr::Const(Const::CInt(42)).b(),
+        );
+        let mut context = HashMap::new();
+        context.insert("f".to_owned(), Type::TFun(Type::TInt.b(), Type::TInt.b()));
+        let inferred = infer(&mut context, expr.b());
+        match inferred {
+            Some((ty, texp)) => {
+                assert_eq!(ty, Type::TInt);
+                assert_eq!(
+                    texp,
+                    TypedExpr::TApp(
+                        TypedExpr::TName(
+                            "f".to_owned(),
+                            Type::TFun(Type::TInt.b(), Type::TInt.b())
+                        )
+                        .b(),
+                        vec![TypedExpr::TConst(Const::CInt(42), Type::TInt)],
+                        Type::TInt
+                    )
+                );
+            }
+            None => panic!("Failed to infer type of valid application"),
+        }
+    }
+
+    #[test]
+    #[should_panic]
+    fn tfun_len_n_given_non_tfun_panics() {
+        tfun_len_n(Type::TBool, 1);
+    }
+
+    #[test]
+    #[should_panic]
+    fn tfun_len_n_given_tfun_and_out_of_bounds_n_panics() {
+        tfun_len_n(Type::TFun(Type::TInt.b(), Type::TInt.b()), 2);
+    }
+
+    #[test]
+    fn tfun_len_n_given_tfun_and_zero_returns_type_unmodified() {
+        let tfun = Type::TFun(Type::TInt.b(), Type::TInt.b());
+        let (ret_ty, types) = tfun_len_n(tfun.clone(), 0);
+        assert_eq!(ret_ty, tfun);
+        assert_eq!(types, vec![]);
+    }
+
+    #[test]
+    fn tfun_len_n_given_singlearg_tfun_and_n_equals_length_of_args() {
+        let tfun = Type::TFun(Type::TInt.b(), Type::TInt.b());
+        let (ret_ty, types) = tfun_len_n(tfun.clone(), 1);
+        assert_eq!(ret_ty, Type::TInt);
+        assert_eq!(types, vec![Type::TInt]);
+    }
+
+    #[test]
+    fn tfun_len_n_given_multiarg_tfun_and_n_equals_length_of_args() {
+        let tfun = Type::TFun(
+            Type::TInt.b(),
+            Type::TFun(Type::TInt.b(), Type::TBool.b()).b(),
+        );
+        let (ret_ty, types) = tfun_len_n(tfun.clone(), 2);
+        assert_eq!(ret_ty, Type::TBool);
+        assert_eq!(types, vec![Type::TInt, Type::TInt]);
+    }
 }
