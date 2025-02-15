@@ -131,7 +131,10 @@ fn infer(context: &mut HashMap<Sym, Type>, expr: Box<Expr>) -> Option<(Type, Typ
                 }
                 None => None,
             },
-            Some(_) => panic!(),
+            Some((ty, _)) => panic!(
+                "infer app: Type of function being applied was not TFun but {:?}",
+                ty
+            ),
             None => None,
         },
         Expr::Prim(op, left, right) => match op {
