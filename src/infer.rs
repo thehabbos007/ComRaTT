@@ -1,4 +1,4 @@
-use std::{any::TypeId, collections::HashMap};
+use std::collections::HashMap;
 
 use crate::source::{Binop, Const, Expr, Toplevel, Type};
 type Sym = String;
@@ -227,16 +227,16 @@ fn check(context: &mut HashMap<Sym, Type>, expr: Box<Expr>, ty: Type) -> Option<
     }
 }
 
-fn infer_all(exprs: Vec<Toplevel>) -> Vec<TypedExpr> {
-    infer_all_aux(exprs.as_slice(), &mut HashMap::new(), &mut Vec::new())
+fn infer_all(toplevels: Vec<Toplevel>) -> Vec<TypedExpr> {
+    infer_all_aux(toplevels.as_slice(), &mut HashMap::new(), &mut Vec::new())
 }
 
 fn infer_all_aux(
-    exprs: &[Toplevel],
+    toplevels: &[Toplevel],
     context: &mut HashMap<Sym, Type>,
     acc: &mut Vec<TypedExpr>,
 ) -> Vec<TypedExpr> {
-    match exprs {
+    match toplevels {
         [] => {
             acc.reverse();
             acc.to_vec()
@@ -293,6 +293,97 @@ fn infer_all_aux(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn build_function_type_returns_correct_type() {
+        let expected_type = Type::TFun(
+            Type::TInt.b(),
+            Type::TFun(Type::TBool.b(), Type::TBool.b()).b(),
+        );
+        let arg_types = vec![Type::TInt, Type::TBool];
+        let ret_ty = Type::TBool;
+        let actual_type = build_function_type(arg_types.as_slice(), ret_ty);
+        assert_eq!(actual_type, expected_type);
+    }
+
+    #[test]
+    fn infer_all_function_with_shadowing() {
+        let fun_type = Type::TFun(Type::TInt.b(), Type::TInt.b());
+        let fun_args = vec!["x".to_owned()];
+        let fun_body = Expr::Let(
+            "x".to_owned(),
+            Expr::Const(Const::CInt(40)).b(),
+            Expr::Prim(
+                Binop::Add,
+                Expr::Var("x".to_owned()).b(),
+                Expr::Const(Const::CInt(2)).b(),
+            )
+            .b(),
+        );
+        let fun = Toplevel::FunDef(
+            "test".to_owned(),
+            fun_type.clone().b(),
+            fun_args,
+            fun_body.clone().b(),
+        );
+        let expected_body = TypedExpr::TLet(
+            "x".to_owned(),
+            Type::TInt,
+            TypedExpr::TConst(Const::CInt(40), Type::TInt).b(),
+            TypedExpr::TPrim(
+                Binop::Add,
+                TypedExpr::TName("x".to_owned(), Type::TInt).b(),
+                TypedExpr::TConst(Const::CInt(2), Type::TInt).b(),
+                Type::TInt,
+            )
+            .b(),
+        );
+        let inferred = infer_all(vec![fun]);
+        assert_eq!(inferred.len(), 1);
+        match inferred[0].clone() {
+            TypedExpr::TFunDef(name, args, box body, ty) => {
+                assert_eq!(name, "test".to_owned());
+                assert_eq!(args, vec![("x".to_owned(), Type::TInt)]);
+                assert_eq!(body, expected_body);
+                assert_eq!(ty, fun_type)
+            }
+            _ => panic!("Failed to check valid function with shadowing"),
+        }
+    }
+
+    #[test]
+    fn infer_all_function_with_shadowing_where_types_change() {
+        let fun_type = Type::TFun(Type::TInt.b(), Type::TBool.b());
+        let fun_args = vec!["x".to_owned()];
+        let fun_body = Expr::Let(
+            "x".to_owned(),
+            Expr::Const(Const::CBool(true)).b(),
+            Expr::Var("x".to_owned()).b(),
+        );
+        let fun = Toplevel::FunDef(
+            "test".to_owned(),
+            fun_type.clone().b(),
+            fun_args,
+            fun_body.clone().b(),
+        );
+        let expected_body = TypedExpr::TLet(
+            "x".to_owned(),
+            Type::TBool,
+            TypedExpr::TConst(Const::CBool(true), Type::TBool).b(),
+            TypedExpr::TName("x".to_owned(), Type::TBool).b(),
+        );
+        let inferred = infer_all(vec![fun]);
+        assert_eq!(inferred.len(), 1);
+        match inferred[0].clone() {
+            TypedExpr::TFunDef(name, args, box body, ty) => {
+                assert_eq!(name, "test".to_owned());
+                assert_eq!(args, vec![("x".to_owned(), Type::TInt)]);
+                assert_eq!(body, expected_body);
+                assert_eq!(ty, fun_type)
+            }
+            _ => panic!("Failed to check valid function with shadowing"),
+        }
+    }
 
     #[test]
     fn infer_all_constant_function() {
@@ -874,6 +965,24 @@ mod tests {
                 assert_eq!(texp, expected_texp);
             }
             None => panic!("Failed to infer type of primitive expression '40 + 2'"),
+        }
+    }
+
+    #[test]
+    fn check_lambda_against_non_tfun_should_fail() {
+        let expr = Expr::Lam(
+            vec!["x".to_owned()],
+            Expr::Prim(
+                Binop::Add,
+                Expr::Var("x".to_owned()).b(),
+                Expr::Const(Const::CInt(2)).b(),
+            )
+            .b(),
+        );
+        let checked = check(&mut HashMap::new(), expr.b(), Type::TInt);
+        match checked {
+            Some(_) => panic!("Should have failed to check type of lambda against non TFun"),
+            None => (),
         }
     }
 
