@@ -212,14 +212,13 @@ fn infer_all_aux(
                     cloned_context.insert(arg.to_owned(), typ);
                 }
 
-                match check(&mut cloned_context, body.clone(), ret_ty) {
+                match check(&mut cloned_context, body.clone(), ret_ty.clone()) {
                     Some((body_ty, typed_body)) => {
-                        let fun_ty = build_function_type(types.as_slice(), body_ty);
                         let typed_fun = TypedToplevel::TFunDef(
                             name.to_owned(),
                             args_with_types.collect(),
                             typed_body.b(),
-                            fun_ty,
+                            ret_ty,
                         );
                         acc.push(typed_fun);
                         infer_all_aux(rest, &mut cloned_context, acc)

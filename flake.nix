@@ -43,6 +43,7 @@
             pkgs.nil
             # Wasm
             pkgs.wasmtime
+            pkgs.wabt
           ];
           buildInputs = [
             toolchain

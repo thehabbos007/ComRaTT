@@ -42,7 +42,7 @@ impl Expr {
     }
 }
 
-#[derive(PartialEq, Eq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone, Hash)]
 pub enum Type {
     TInt,
     TBool,

@@ -14,3 +14,6 @@ lexopt = "0.3"
 logos = "0.15.0"
 map_box = "0.2.2"
 itertools = "0.14.0"
+wasm-encoder = { version = "0.225.0", features = ["wasmparser"] }
+wasmparser = "0.225.0"
+wasmprinter = "0.225.0"

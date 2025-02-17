@@ -116,3 +116,34 @@ pub fn build_function_type(types: &[Type], ret_ty: Type) -> Type {
         [ty, types @ ..] => Type::TFun(ty.clone().b(), build_function_type(types, ret_ty).b()),
     }
 }
+
+pub fn traverse_locals<'a>(expr: &'a TypedExpr, locals: &mut Vec<(&'a str, Type)>) {
+    match expr {
+        TypedExpr::TLet(name, typ, rhs, body) => {
+            locals.push((name.as_str(), typ.clone()));
+            traverse_locals(rhs, locals);
+            traverse_locals(body, locals);
+        }
+        TypedExpr::TIfThenElse(condition, then_branch, else_branch, _) => {
+            traverse_locals(condition, locals);
+            traverse_locals(then_branch, locals);
+            traverse_locals(else_branch, locals);
+        }
+        TypedExpr::TPrim(_, left, right, _) => {
+            traverse_locals(left, locals);
+            traverse_locals(right, locals);
+        }
+        TypedExpr::TLam(_, _, _) => {
+            panic!("get_names_for_forward_declaration: Lambda should have been lifted");
+        }
+        TypedExpr::TTuple(exprs, _) => {
+            for expr in exprs {
+                traverse_locals(expr, locals);
+            }
+        }
+        TypedExpr::TAccess(expr, _, _) => {
+            traverse_locals(expr, locals);
+        }
+        TypedExpr::TConst(_, _) | TypedExpr::TName(_, _) | TypedExpr::TApp(_, _, _) => {}
+    }
+}
