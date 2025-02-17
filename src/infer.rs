@@ -1,19 +1,27 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, ops::Deref};
 
-use crate::source::{Binop, Const, Expr, Toplevel, Type};
+use crate::source::{Binop, Const, Expr, Prog, Toplevel, Type};
 type Sym = String;
 
 #[derive(PartialEq, Eq, Debug, Clone)]
-enum TypedExpr {
-    TFunDef(Sym, Vec<(Sym, Type)>, Box<TypedExpr>, Type),
+pub enum TypedExpr {
+    /// A constant value with (the constant, its type)
     TConst(Const, Type),
+    /// A variable name with (the name, its type)
     TName(Sym, Type),
+    /// A lambda with (args and their types, body expression, the lambda's type)
     TLam(Vec<(Sym, Type)>, Box<TypedExpr>, Type),
+    /// A function application with (function expression, argument expressions, result type)
     TApp(Box<TypedExpr>, Vec<TypedExpr>, Type),
+    /// A primitive operation with (the operator, left operand, right operand, result type)
     TPrim(Binop, Box<TypedExpr>, Box<TypedExpr>, Type),
+    /// A let binding with (bound name, type, bound expression, body expression)
     TLet(Sym, Type, Box<TypedExpr>, Box<TypedExpr>),
+    /// A conditional with (condition, then branch, else branch, result type)
     TIfThenElse(Box<TypedExpr>, Box<TypedExpr>, Box<TypedExpr>, Type),
+    /// A tuple with (element expressions, tuple type)
     TTuple(Vec<TypedExpr>, Type),
+    /// A tuple access with (tuple expression, index, result type)
     TAccess(Box<TypedExpr>, i32, Type),
 }
 
@@ -21,6 +29,39 @@ impl TypedExpr {
     pub fn b(self) -> Box<Self> {
         Box::new(self)
     }
+}
+
+#[derive(PartialEq, Eq, Debug, Clone)]
+pub enum TypedToplevel {
+    /// A function definition with (name, args and their types, body expression, return type)
+    TFunDef(Sym, Vec<(Sym, Type)>, Box<TypedExpr>, Type),
+}
+
+#[derive(PartialEq, Eq, Debug, Clone)]
+pub struct TypedProg(pub Vec<TypedToplevel>);
+
+impl Deref for TypedProg {
+    type Target = Vec<TypedToplevel>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl From<Vec<TypedToplevel>> for TypedProg {
+    fn from(v: Vec<TypedToplevel>) -> Self {
+        TypedProg(v)
+    }
+}
+
+#[macro_export]
+macro_rules! assert_typed_expr {
+    ($expr:expr, $pattern:pat => $assertions:block) => {
+        match $expr {
+            $pattern => $assertions,
+            _ => panic!("Expression did not match expected pattern"),
+        }
+    };
 }
 
 fn get_with_custom_message(opt: Option<(Type, TypedExpr)>, message: String) -> (Type, TypedExpr) {
@@ -227,15 +268,18 @@ fn check(context: &mut HashMap<Sym, Type>, expr: Box<Expr>, ty: Type) -> Option<
     }
 }
 
-fn infer_all(toplevels: Vec<Toplevel>) -> Vec<TypedExpr> {
-    infer_all_aux(toplevels.as_slice(), &mut HashMap::new(), &mut Vec::new())
+fn infer_all(prog: Prog) -> TypedProg {
+    let toplevels = prog.0;
+    let typed_toplevels = infer_all_aux(toplevels.as_slice(), &mut HashMap::new(), Vec::new());
+
+    TypedProg(typed_toplevels)
 }
 
 fn infer_all_aux(
     toplevels: &[Toplevel],
     context: &mut HashMap<Sym, Type>,
-    acc: &mut Vec<TypedExpr>,
-) -> Vec<TypedExpr> {
+    mut acc: Vec<TypedToplevel>,
+) -> Vec<TypedToplevel> {
     match toplevels {
         [] => {
             acc.reverse();
@@ -256,7 +300,7 @@ fn infer_all_aux(
                 match check(&mut cloned_context, body.clone(), ret_ty) {
                     Some((body_ty, typed_body)) => {
                         let fun_ty = build_function_type(types.as_slice(), body_ty);
-                        let typed_fun = TypedExpr::TFunDef(
+                        let typed_fun = TypedToplevel::TFunDef(
                             name.to_owned(),
                             args_with_types.collect(),
                             typed_body.b(),
@@ -271,7 +315,7 @@ fn infer_all_aux(
             Toplevel::FunDef(name, typ, args, body) if args.len() == 0 => {
                 match check(context, body.clone(), *typ.clone()) {
                     Some((fun_ty, typed_body)) => {
-                        let typed_fun = TypedExpr::TFunDef(
+                        let typed_fun = TypedToplevel::TFunDef(
                             name.to_owned(),
                             vec![],
                             typed_body.b(),
@@ -338,16 +382,15 @@ mod tests {
             )
             .b(),
         );
-        let inferred = infer_all(vec![fun]);
+        let inferred = infer_all(vec![fun].into());
         assert_eq!(inferred.len(), 1);
         match inferred[0].clone() {
-            TypedExpr::TFunDef(name, args, box body, ty) => {
+            TypedToplevel::TFunDef(name, args, box body, ty) => {
                 assert_eq!(name, "test".to_owned());
                 assert_eq!(args, vec![("x".to_owned(), Type::TInt)]);
                 assert_eq!(body, expected_body);
                 assert_eq!(ty, fun_type)
             }
-            _ => panic!("Failed to check valid function with shadowing"),
         }
     }
 
@@ -372,16 +415,15 @@ mod tests {
             TypedExpr::TConst(Const::CBool(true), Type::TBool).b(),
             TypedExpr::TName("x".to_owned(), Type::TBool).b(),
         );
-        let inferred = infer_all(vec![fun]);
+        let inferred = infer_all(vec![fun].into());
         assert_eq!(inferred.len(), 1);
         match inferred[0].clone() {
-            TypedExpr::TFunDef(name, args, box body, ty) => {
+            TypedToplevel::TFunDef(name, args, box body, ty) => {
                 assert_eq!(name, "test".to_owned());
                 assert_eq!(args, vec![("x".to_owned(), Type::TInt)]);
                 assert_eq!(body, expected_body);
                 assert_eq!(ty, fun_type)
             }
-            _ => panic!("Failed to check valid function with shadowing"),
         }
     }
 
@@ -391,16 +433,15 @@ mod tests {
         let fun_body = Expr::Const(Const::CInt(2));
         let fun = Toplevel::FunDef("test".to_owned(), fn_type.b(), vec![], fun_body.b());
 
-        let inferred = infer_all(vec![fun]);
+        let inferred = infer_all(vec![fun].into());
         assert_eq!(inferred.len(), 1);
         match inferred[0].clone() {
-            TypedExpr::TFunDef(name, args, box body, ty) => {
+            TypedToplevel::TFunDef(name, args, box body, ty) => {
                 assert_eq!(name, "test");
                 assert!(args.is_empty());
                 assert_eq!(body, TypedExpr::TConst(Const::CInt(2), Type::TInt));
                 assert_eq!(ty, Type::TInt);
             }
-            _ => panic!("Failed to infer type of single constant function"),
         }
     }
 
@@ -624,10 +665,10 @@ mod tests {
             .b(),
             Type::TInt,
         );
-        let inferred = infer_all(vec![fun]);
+        let inferred = infer_all(vec![fun].into());
         assert_eq!(inferred.len(), 1);
         match inferred[0].clone() {
-            TypedExpr::TFunDef(name, args, box body, ty) => {
+            TypedToplevel::TFunDef(name, args, box body, ty) => {
                 assert_eq!(name, "test");
                 assert_eq!(args.len(), 1);
                 assert_eq!(body, expected_body);

@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use crate::error::ComRaTTError;
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
@@ -64,3 +66,17 @@ pub enum Toplevel {
 
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub struct Prog(pub Vec<Toplevel>);
+
+impl Deref for Prog {
+    type Target = Vec<Toplevel>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl From<Vec<Toplevel>> for Prog {
+    fn from(v: Vec<Toplevel>) -> Self {
+        Prog(v)
+    }
+}
