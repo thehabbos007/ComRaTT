@@ -1,4 +1,4 @@
-use std::ops::Deref;
+use std::{fmt::Display, ops::Deref};
 
 use crate::error::ComRaTTError;
 
@@ -61,7 +61,7 @@ impl Type {
 
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub enum Toplevel {
-    FunDef(String, Box<Type>, Vec<String>, Box<Expr>),
+    FunDef(String, Type, Vec<String>, Box<Expr>),
 }
 
 #[derive(PartialEq, Eq, Debug, Clone)]

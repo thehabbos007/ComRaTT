@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use std::{collections::HashMap, ops::Deref};
 
 use crate::source::{Binop, Const, Expr, Prog, Toplevel, Type};
@@ -286,7 +288,7 @@ fn infer_all_aux(
             acc.to_vec()
         }
         [fexpr, rest @ ..] => match fexpr {
-            Toplevel::FunDef(name, box ty @ Type::TFun(_, _), args, body) => {
+            Toplevel::FunDef(name, ty @ Type::TFun(_, _), args, body) => {
                 let (ret_ty, types) = tfun_len_n(ty.clone(), args.len());
                 // args.clone() to avoid borrowing the strings, but is
                 // it necessary? is some other way better?
@@ -313,7 +315,7 @@ fn infer_all_aux(
                 }
             }
             Toplevel::FunDef(name, typ, args, body) if args.len() == 0 => {
-                match check(context, body.clone(), *typ.clone()) {
+                match check(context, body.clone(), typ.clone()) {
                     Some((fun_ty, typed_body)) => {
                         let typed_fun = TypedToplevel::TFunDef(
                             name.to_owned(),
@@ -366,7 +368,7 @@ mod tests {
         );
         let fun = Toplevel::FunDef(
             "test".to_owned(),
-            fun_type.clone().b(),
+            fun_type.clone(),
             fun_args,
             fun_body.clone().b(),
         );
@@ -405,7 +407,7 @@ mod tests {
         );
         let fun = Toplevel::FunDef(
             "test".to_owned(),
-            fun_type.clone().b(),
+            fun_type.clone(),
             fun_args,
             fun_body.clone().b(),
         );
@@ -431,7 +433,7 @@ mod tests {
     fn infer_all_constant_function() {
         let fn_type = Type::TInt;
         let fun_body = Expr::Const(Const::CInt(2));
-        let fun = Toplevel::FunDef("test".to_owned(), fn_type.b(), vec![], fun_body.b());
+        let fun = Toplevel::FunDef("test".to_owned(), fn_type, vec![], fun_body.b());
 
         let inferred = infer_all(vec![fun].into());
         assert_eq!(inferred.len(), 1);
@@ -640,12 +642,7 @@ mod tests {
         );
         let fun_type = Type::TFun(Type::TInt.b(), Type::TInt.b());
         let fun_args = vec!["x".to_owned()];
-        let fun = Toplevel::FunDef(
-            "test".to_owned(),
-            fun_type.clone().b(),
-            fun_args,
-            fun_body.b(),
-        );
+        let fun = Toplevel::FunDef("test".to_owned(), fun_type.clone(), fun_args, fun_body.b());
         let expected_body = TypedExpr::TPrim(
             Binop::Add,
             TypedExpr::TName("x".to_owned(), Type::TInt).b(),
