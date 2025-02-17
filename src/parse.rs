@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use winnow::combinator::opt;
 use winnow::error::{ContextError, StrContext, StrContextValue};
 use winnow::token::literal;
@@ -17,7 +18,7 @@ impl Prog {
     pub fn parse(input: &str) -> Result<Prog, ComRaTTError> {
         let tokenizer = Tokenizer::tokenize(input)
             .filter_map(|t| t.ok())
-            .collect::<Vec<_>>();
+            .collect_vec();
 
         let token_slice = TokenSlice::new(&tokenizer);
 
@@ -270,7 +271,7 @@ mod tests {
     pub fn tokenize<'a>(input: &'a str) -> Vec<Token<'a>> {
         Tokenizer::tokenize(input)
             .filter_map(|t| t.ok())
-            .collect::<Vec<_>>()
+            .collect_vec()
     }
 
     #[test]

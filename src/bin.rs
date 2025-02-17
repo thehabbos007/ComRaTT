@@ -27,8 +27,6 @@ impl Args {
 }
 
 fn main() -> Result<(), lexopt::Error> {
-    use lexopt::prelude::*;
-
     let mut args = Args { input: None };
 
     let mut parser = lexopt::Parser::from_env();
@@ -42,7 +40,7 @@ fn main() -> Result<(), lexopt::Error> {
 
     let input = args.read();
 
-    let prog = match Prog::parse(&input) {
+    let _prog = match Prog::parse(&input) {
         Ok(prog) => prog,
         Err(err) => {
             eprintln!("{}", err);
