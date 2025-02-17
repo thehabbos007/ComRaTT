@@ -38,6 +38,14 @@ pub enum TypedToplevel {
     TFunDef(Sym, Vec<(Sym, Type)>, Box<TypedExpr>, Type),
 }
 
+impl TypedToplevel {
+    pub fn get_type(&self) -> Type {
+        match self {
+            TypedToplevel::TFunDef(_, _, _, typ) => typ.clone(),
+        }
+    }
+}
+
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub struct TypedProg(pub Vec<TypedToplevel>);
 

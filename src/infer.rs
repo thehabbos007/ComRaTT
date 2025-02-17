@@ -183,7 +183,7 @@ fn check(context: &mut HashMap<Sym, Type>, expr: Box<Expr>, ty: Type) -> Option<
     }
 }
 
-fn infer_all(prog: Prog) -> TypedProg {
+pub fn infer_all(prog: Prog) -> TypedProg {
     let toplevels = prog.0;
     let typed_toplevels = infer_all_aux(toplevels.as_slice(), &mut HashMap::new(), Vec::new());
 

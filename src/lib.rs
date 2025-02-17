@@ -9,4 +9,6 @@ pub mod parse;
 pub mod passes;
 pub mod range;
 pub mod source;
+#[cfg(test)]
+mod test_suite;
 pub mod types;

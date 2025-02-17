@@ -6,11 +6,11 @@ use std::collections::HashSet;
 use super::Pass;
 
 #[derive(Debug)]
-pub struct LambdaLifting {
+pub struct LambdaLift {
     counter: usize,
 }
 
-impl Pass for LambdaLifting {
+impl Pass for LambdaLift {
     fn run(&mut self, prog: TypedProg) -> TypedProg {
         let defs = prog.0;
 
@@ -35,7 +35,7 @@ impl Pass for LambdaLifting {
     }
 }
 
-impl LambdaLifting {
+impl LambdaLift {
     pub fn new() -> Self {
         Self { counter: 0 }
     }
@@ -329,7 +329,7 @@ mod tests {
 
     #[test]
     fn test_lambda_lifting_simple() {
-        let mut lifter = LambdaLifting::new();
+        let mut lifter = LambdaLift::new();
 
         let expr = let_expr(
             "x",
@@ -363,7 +363,7 @@ mod tests {
 
     #[test]
     fn test_lambda_lifting_nested() {
-        let mut lifter = LambdaLifting::new();
+        let mut lifter = LambdaLift::new();
 
         let expr = let_expr(
             "x",
@@ -392,7 +392,7 @@ mod tests {
 
     #[test]
     fn test_lambda_lifting_with_if() {
-        let mut lifter = LambdaLifting::new();
+        let mut lifter = LambdaLift::new();
 
         let expr = let_expr(
             "x",
@@ -418,7 +418,7 @@ mod tests {
 
     #[test]
     fn test_lambda_lifting_no_free_vars() {
-        let mut lifter = LambdaLifting::new();
+        let mut lifter = LambdaLift::new();
 
         let expr = lam(
             "x",
@@ -435,7 +435,7 @@ mod tests {
 
     #[test]
     fn test_lambda_lifting_nested_lambdas() {
-        let mut lifter = LambdaLifting::new();
+        let mut lifter = LambdaLift::new();
 
         let expr = let_expr(
             "x",
@@ -480,7 +480,7 @@ mod tests {
         //
         // Where #lambda_1 is:
         // def #lambda_1 x y = x + y
-        let mut lifter = LambdaLifting::new();
+        let mut lifter = LambdaLift::new();
 
         let expr = let_expr(
             "x",
@@ -530,7 +530,7 @@ mod tests {
     }
     #[test]
     fn test_lambda_lifting_tuple() {
-        let mut lifter = LambdaLifting::new();
+        let mut lifter = LambdaLift::new();
 
         let expr = let_expr(
             "x",
@@ -554,7 +554,7 @@ mod tests {
 
     #[test]
     fn test_lambda_lifting_tuple_access() {
-        let mut lifter = LambdaLifting::new();
+        let mut lifter = LambdaLift::new();
 
         let expr = let_expr(
             "x",
