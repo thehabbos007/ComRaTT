@@ -1,5 +1,6 @@
 use crate::infer::TypedProg;
 
+pub mod eliminate_consec_app;
 pub mod eliminate_partial;
 pub mod lambda_lift;
 
