@@ -3,8 +3,8 @@ use std::fmt::Display;
 use itertools::Itertools;
 
 use crate::{
-    infer::{TypedExpr, TypedProg, TypedToplevel},
     source::*,
+    types::{TypedExpr, TypedProg, TypedToplevel},
 };
 
 impl TypedExpr {

@@ -1,6 +1,4 @@
-use std::{fmt::Display, ops::Deref};
-
-use crate::error::ComRaTTError;
+use std::ops::Deref;
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub enum Binop {

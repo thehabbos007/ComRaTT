@@ -9,3 +9,4 @@ pub mod parse;
 pub mod passes;
 pub mod range;
 pub mod source;
+pub mod types;

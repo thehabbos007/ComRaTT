@@ -1,25 +1,8 @@
-use crate::infer::{TypedExpr, TypedProg, TypedToplevel};
-use crate::source::Type;
+use crate::types::{final_type, TypedExpr, TypedProg, TypedToplevel};
 use itertools::Itertools;
 use map_box::Map;
 
 use super::Pass;
-
-fn final_type(ty: &Type) -> Type {
-    match ty {
-        Type::TInt | Type::TBool | Type::TUnit => ty.clone(),
-        Type::TFun(_, t2) => final_type(t2),
-        Type::TProduct(ts) => final_type_tproduct(ts),
-    }
-}
-
-fn final_type_tproduct(ts: &[Type]) -> Type {
-    match ts {
-        [] => panic!("final_type_tproduct: Attempted to take final type of empty tproduct"),
-        [t] => t.clone(),
-        [_, rest @ ..] => final_type_tproduct(rest),
-    }
-}
 
 #[derive(Debug, Default)]
 pub struct EliminateConsecApp;
@@ -100,6 +83,7 @@ impl EliminateConsecApp {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::source::Type;
     use crate::source::{Binop, Const};
 
     #[test]

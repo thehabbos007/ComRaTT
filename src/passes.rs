@@ -1,4 +1,4 @@
-use crate::infer::TypedProg;
+use crate::types::TypedProg;
 
 pub mod eliminate_consec_app;
 pub mod eliminate_partial;

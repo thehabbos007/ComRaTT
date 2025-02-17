@@ -70,7 +70,7 @@ impl<'a> Tokenizer<'a> {
     }
 }
 impl<'a> Tokenizer<'a> {
-    pub fn tokenize(source: &'a str) -> impl Iterator<Item = Result<Token<'a>, ComRaTTError>> {
+    pub fn tokenize(source: &'a str) -> impl Iterator<Item = Result<Token<'a>, ComRaTTError<'a>>> {
         Tokenizer::new(source)
     }
 }

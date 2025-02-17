@@ -1,11 +1,38 @@
-use crate::infer::{TypedExpr, TypedProg, TypedToplevel};
 use crate::source::Type;
+use crate::types::{TypedExpr, TypedProg, TypedToplevel};
 use itertools::Itertools;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
+
+use super::Pass;
 
 #[derive(Debug)]
 pub struct LambdaLifting {
     counter: usize,
+}
+
+impl Pass for LambdaLifting {
+    fn run(&mut self, prog: TypedProg) -> TypedProg {
+        let defs = prog.0;
+
+        let (lifted_defs, lifted_lambdas): (Vec<_>, Vec<_>) = defs
+            .into_iter()
+            .map(|TypedToplevel::TFunDef(name, args, body, typ)| {
+                let (lifted_body, lambda_defs) = self.lambda_lift(&args, *body);
+                (
+                    TypedToplevel::TFunDef(name, args, lifted_body.b(), typ),
+                    lambda_defs,
+                )
+            })
+            .unzip();
+
+        let lifted_lambdas = lifted_lambdas.into_iter().flatten().collect_vec();
+
+        lifted_defs
+            .into_iter()
+            .chain(lifted_lambdas)
+            .collect_vec()
+            .into()
+    }
 }
 
 impl LambdaLifting {
@@ -31,7 +58,7 @@ impl LambdaLifting {
                     set
                 }
             }
-            TypedExpr::TPrim(op, left, right, _) => {
+            TypedExpr::TPrim(_, left, right, _) => {
                 let mut left_free = self.find_free_vars(left, bound);
                 let right_free = self.find_free_vars(right, bound);
                 left_free.extend(right_free);
@@ -221,6 +248,7 @@ impl LambdaLifting {
 }
 
 #[cfg(test)]
+#[allow(unused)]
 mod tests {
     use super::*;
     use crate::source::{Binop, Const};
