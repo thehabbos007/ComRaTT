@@ -232,9 +232,7 @@ fn fundef<'a>(input: &mut Input<'a>) -> Result<Toplevel> {
         ),
         TokenKind::Semi,
     )
-    .map(|(name, t, _def_name, args, e)| {
-        Toplevel::FunDef(name.text().to_string(), t.b(), args, e.b())
-    })
+    .map(|(name, t, _def_name, args, e)| Toplevel::FunDef(name.text().to_string(), t, args, e.b()))
     .context(StrContext::Label("function definition"))
     .context(StrContext::Expected(StrContextValue::Description(
         "function definition",
@@ -484,7 +482,7 @@ mod tests {
             fundef.parse_next(&mut token_slice),
             Ok(Toplevel::FunDef(
                 "id".to_string(),
-                Box::new(Type::TFun(Box::new(Type::TInt), Box::new(Type::TInt))),
+                Type::TFun(Type::TInt.b(), Type::TInt.b()),
                 vec!["x".to_string()],
                 Box::new(Expr::Var("x".to_string()))
             ))
