@@ -77,6 +77,31 @@ impl Type {
     pub fn b(self) -> Box<Self> {
         Box::new(self)
     }
+
+    pub fn occurs_check(&self, var: TypeVar) -> Result<(), Type> {
+        match self {
+            Type::TInt => Ok(()),
+            Type::TBool => Ok(()),
+            Type::TUnit => Ok(()),
+            Type::TVar(v) => {
+                if *v == var {
+                    Err(Type::TVar(*v))
+                } else {
+                    Ok(())
+                }
+            }
+            Type::TFun(from, to) => {
+                from.occurs_check(var).map_err(|_| self.clone())?;
+                to.occurs_check(var).map_err(|_| self.clone())
+            }
+            Type::TProduct(ts) => {
+                for t in ts {
+                    t.occurs_check(var).map_err(|_| self.clone())?
+                }
+                Ok(())
+            }
+        }
+    }
 }
 
 #[derive(PartialEq, Eq, Debug, Clone)]

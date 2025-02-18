@@ -1,6 +1,9 @@
 #![allow(unused)]
 
-use std::{collections::HashMap, ops::Deref};
+use std::{
+    collections::{BTreeSet, HashMap},
+    ops::Deref,
+};
 
 use ena::unify::InPlaceUnificationTable;
 
@@ -45,6 +48,7 @@ impl Inference {
             ),
         }
     }
+
     fn fresh_ty_var(&mut self) -> TypeVar {
         self.unification_table.new_key(None)
     }
@@ -190,17 +194,24 @@ impl Inference {
                     ),
                 );
             }
-            Expr::App(fun, arg) => match self.infer(context, fun) {
+            Expr::App(fun, arg) => match self.infer(context, fun.clone()) {
                 (Type::TFun(ty, ret_ty), mut fun_output) => {
-                    let (_, mut arg_output) = self.check(context, arg, *ty);
-                    let mut constraints = Vec::new();
-                    constraints.append(&mut fun_output.constraints);
-                    constraints.append(&mut arg_output.constraints);
+                    let (_, mut arg_output) = self.check(context, arg, *ty.clone());
+                    let ret_ty = Type::TVar(self.fresh_ty_var());
+                    let fun_ty = Type::TFun(ty.clone(), ret_ty.clone().b());
+
+                    let (fun_ty, fun_output) = self.check(context, fun, fun_ty);
+                    println!("Infer::App fun_ty");
+                    dbg!(fun_ty);
                     return (
-                        *ret_ty.clone(),
+                        ret_ty.clone(),
                         TypeOutput::new(
-                            constraints,
-                            TypedExpr::TApp(fun_output.texp.b(), vec![arg_output.texp], *ret_ty),
+                            arg_output
+                                .constraints
+                                .into_iter()
+                                .chain(fun_output.constraints)
+                                .collect(),
+                            TypedExpr::TApp(fun_output.texp.b(), vec![arg_output.texp], ret_ty),
                         ),
                     );
                 }
@@ -210,28 +221,38 @@ impl Inference {
                 ),
             },
             Expr::Prim(op, left, right) => match op {
-                Binop::Add | Binop::Mul | Binop::Div | Binop::Sub => match (
-                    self.check(context, left, Type::TInt),
-                    self.check(context, right, Type::TInt),
-                ) {
-                    ((_, mut left_output), (_, mut right_output)) => {
-                        let mut constraints = Vec::new();
-                        constraints.append(&mut left_output.constraints);
-                        constraints.append(&mut right_output.constraints);
-                        (
-                            Type::TInt,
-                            TypeOutput::new(
-                                constraints,
-                                TypedExpr::TPrim(
-                                    op,
-                                    left_output.texp.b(),
-                                    right_output.texp.b(),
-                                    Type::TInt,
+                Binop::Add | Binop::Mul | Binop::Div | Binop::Sub => {
+                    match (self.infer(context, left), self.infer(context, right)) {
+                        ((left_ty, mut left_output), (right_ty, mut right_output)) => {
+                            if let Ok(_) = self.unify_ty_ty(left_ty.clone(), right_ty.clone()) {
+                                dbg!("unification ok");
+                            }
+
+                            if let Ok(_) = self.unify_ty_ty(left_ty, Type::TInt) {
+                                dbg!("unification int ok");
+                            }
+
+                            if let Ok(_) = self.unify_ty_ty(right_ty, Type::TInt) {
+                                dbg!("unification right int ok");
+                            }
+                            let mut constraints = Vec::new();
+                            constraints.append(&mut left_output.constraints);
+                            constraints.append(&mut right_output.constraints);
+                            (
+                                Type::TInt,
+                                TypeOutput::new(
+                                    constraints,
+                                    TypedExpr::TPrim(
+                                        op,
+                                        left_output.texp.b(),
+                                        right_output.texp.b(),
+                                        Type::TInt,
+                                    ),
                                 ),
-                            ),
-                        )
+                            )
+                        }
                     }
-                },
+                }
                 Binop::Lt | Binop::Lte | Binop::Gt | Binop::Gte => match (
                     self.check(context, left, Type::TInt),
                     self.check(context, right, Type::TInt),
@@ -294,9 +315,13 @@ impl Inference {
                 for (arg, ty_var) in args_with_types.clone() {
                     cloned_context.insert(arg, ty_var);
                 }
+                dbg!(&args_ty_vars);
+                dbg!(&body);
                 let (body_type, body_output) = self.infer(&mut cloned_context, body);
+                dbg!(body_output.texp.clone());
                 let lambda_type =
                     Inference::build_function_type(args_ty_vars.as_slice(), body_type);
+                dbg!(lambda_type.clone());
                 let lambda = TypedExpr::TLam(
                     args_with_types.collect(),
                     body_output.texp.b(),
@@ -321,12 +346,264 @@ impl Inference {
                 (inferred_type, inferred_output) if ty == inferred_type => {
                     (inferred_type, inferred_output)
                 }
-                _ => todo!(),
+                (inferred_type, inferred_output) => {
+                    dbg!(ty);
+                    dbg!(inferred_type);
+
+                    todo!()
+                }
             },
         }
     }
 
-    fn infer_all_aux(
+    fn normalize_ty(&mut self, ty: Type) -> Type {
+        match ty {
+            Type::TInt => Type::TInt,
+            Type::TBool => Type::TBool,
+            Type::TUnit => Type::TUnit,
+            Type::TFun(from, to) => {
+                let from = self.normalize_ty(*from);
+                let to = self.normalize_ty(*to);
+                Type::TFun(from.b(), to.b())
+            }
+            Type::TProduct(ts) => {
+                let normalized = ts.into_iter().map(|t| self.normalize_ty(t));
+                Type::TProduct(normalized.collect())
+            }
+            Type::TVar(v) => match self.unification_table.probe_value(v) {
+                Some(ty) => self.normalize_ty(ty),
+                None => Type::TVar(self.unification_table.find(v)),
+            },
+        }
+    }
+
+    fn unify_ty_ty(&mut self, unnorm_left: Type, unnorm_right: Type) -> Result<(), TypeError> {
+        let left = self.normalize_ty(unnorm_left);
+        let right = self.normalize_ty(unnorm_right);
+        match (left, right) {
+            (Type::TInt, Type::TInt) => Ok(()),
+            (Type::TBool, Type::TBool) => Ok(()),
+            (Type::TUnit, Type::TUnit) => Ok(()),
+            (Type::TFun(fst_from, fst_to), Type::TFun(snd_from, snd_to)) => {
+                self.unify_ty_ty(*fst_from, *snd_from)?;
+                self.unify_ty_ty(*fst_to, *snd_to)
+            }
+            (Type::TProduct(fst_ts), Type::TProduct(snd_ts)) => {
+                let zipped = fst_ts.into_iter().zip(snd_ts);
+                zipped.for_each(|(fst, snd)| {
+                    self.unify_ty_ty(fst, snd);
+                });
+                Ok(())
+            }
+            (Type::TVar(a), Type::TVar(b)) => self
+                .unification_table
+                .unify_var_var(a, b)
+                .map_err(|(l, r)| TypeError::TypeNotEqual(l, r)),
+            (Type::TVar(v), ty) | (ty, Type::TVar(v)) => {
+                ty.occurs_check(v)
+                    .map_err(|ty| TypeError::InfiniteType(v, ty))?;
+                self.unification_table
+                    .unify_var_value(v, Some(ty))
+                    .map_err(|(l, r)| TypeError::TypeNotEqual(l, r))
+            }
+            (left, right) => Err(TypeError::TypeNotEqual(left, right)),
+        }
+    }
+
+    fn unification(&mut self, constraints: Vec<Constraint>) -> Result<(), TypeError> {
+        for constraint in constraints {
+            match constraint {
+                Constraint::TypeEqual(left, right) => self.unify_ty_ty(left, right)?,
+            }
+        }
+        Ok(())
+    }
+
+    fn substitute(&mut self, ty: Type) -> (BTreeSet<TypeVar>, Type) {
+        match ty {
+            Type::TInt => (BTreeSet::new(), Type::TInt),
+            Type::TBool => (BTreeSet::new(), Type::TBool),
+            Type::TUnit => (BTreeSet::new(), Type::TUnit),
+            Type::TFun(from, to) => {
+                let (mut from_unbound, from) = self.substitute(*from);
+                let (mut to_unbound, to) = self.substitute(*to);
+                from_unbound.extend(to_unbound);
+                (from_unbound, Type::TFun(from.b(), to.b()))
+            }
+            Type::TProduct(ts) => {
+                let mut unbounds = BTreeSet::new();
+                for t in ts.clone() {
+                    let (unbound, t) = self.substitute(t);
+                    unbounds.extend(unbound);
+                }
+                (unbounds, Type::TProduct(ts))
+            }
+            Type::TVar(v) => {
+                let root = self.unification_table.find(v);
+                match self.unification_table.probe_value(root) {
+                    Some(ty) => self.substitute(ty),
+                    None => {
+                        let mut unbound = BTreeSet::new();
+                        unbound.insert(root);
+                        (unbound, Type::TVar(root))
+                    }
+                }
+            }
+        }
+    }
+
+    fn substitute_texp(&mut self, texp: TypedExpr) -> (BTreeSet<TypeVar>, TypedExpr) {
+        match texp {
+            TypedExpr::TConst(c, ty) => (BTreeSet::new(), TypedExpr::TConst(c, ty)),
+            TypedExpr::TName(name, ty) => {
+                let (unbound, ty) = self.substitute(ty);
+                (unbound, TypedExpr::TName(name, ty))
+            }
+            TypedExpr::TLam(args, body, ty) => {
+                let mut unbounds = BTreeSet::new();
+                for arg in args.clone() {
+                    let (unbound, ty) = self.substitute(arg.1);
+                    unbounds.extend(unbound);
+                }
+                let (unbound, body) = self.substitute_texp(*body.clone());
+                unbounds.extend(unbound);
+                (unbounds, TypedExpr::TLam(args, body.b(), ty))
+            }
+            TypedExpr::TApp(fun, args, ty) => {
+                let mut unbounds = BTreeSet::new();
+                let (unbound_fun, fun) = self.substitute_texp(*fun);
+                unbounds.extend(unbound_fun);
+                for arg in args.clone() {
+                    let (unbound, arg_texp) = self.substitute_texp(arg);
+                    unbounds.extend(unbound);
+                }
+
+                (unbounds, TypedExpr::TApp(fun.b(), args, ty))
+            }
+            TypedExpr::TPrim(op, left, right, ty) => {
+                let (mut unbound_left, left) = self.substitute_texp(*left);
+                let (unbound_right, right) = self.substitute_texp(*right);
+                unbound_left.extend(unbound_right);
+                (unbound_left, TypedExpr::TPrim(op, left.b(), right.b(), ty))
+            }
+            TypedExpr::TLet(name, ty, rhs, body) => {
+                let (mut unbound_rhs, rhs) = self.substitute_texp(*rhs);
+                let (unbound_body, body) = self.substitute_texp(*body);
+                unbound_rhs.extend(unbound_body);
+                (unbound_rhs, TypedExpr::TLet(name, ty, rhs.b(), body.b()))
+            }
+            TypedExpr::TIfThenElse(cond, then, else_branch, ty) => {
+                let (mut unbound_cond, cond) = self.substitute_texp(*cond);
+                let (unbound_then, then) = self.substitute_texp(*then);
+                let (unbound_else, else_branch) = self.substitute_texp(*else_branch);
+                unbound_cond.extend(unbound_then);
+                unbound_cond.extend(unbound_else);
+                (
+                    unbound_cond,
+                    TypedExpr::TIfThenElse(cond.b(), then.b(), else_branch.b(), ty),
+                )
+            }
+            TypedExpr::TTuple(ts, ty) => {
+                let mut unbounds = BTreeSet::new();
+                let mut new_ts = Vec::new();
+                for t in ts {
+                    let (unbound, t) = self.substitute_texp(t);
+                    unbounds.extend(unbound);
+                    new_ts.push(t);
+                }
+                (unbounds, TypedExpr::TTuple(new_ts, ty))
+            }
+            TypedExpr::TAccess(texp, idx, ty) => {
+                let (unbound, texp) = self.substitute_texp(*texp);
+                (unbound, TypedExpr::TAccess(texp.b(), idx, ty))
+            }
+        }
+    }
+
+    fn infer_all_toplevels(
+        &mut self,
+        toplevels: &[Toplevel],
+        context: &mut HashMap<Sym, Type>,
+    ) -> Vec<TypedToplevel> {
+        let mut typed_toplevels = Vec::new();
+        for toplevel in toplevels {
+            match toplevel {
+                Toplevel::FunDef(name, ty @ Type::TFun(_, _), args, body) => {
+                    let (ret_ty, types) = tfun_len_n(ty.clone(), args.len());
+                    let args_with_types = args.iter().cloned().zip(types.iter().cloned());
+                    let mut cloned_context = context.clone();
+                    cloned_context.insert(name.to_owned(), ty.clone());
+                    for (arg, typ) in args_with_types.clone() {
+                        cloned_context.insert(arg.to_owned(), typ);
+                    }
+
+                    dbg!("Checking body");
+                    dbg!(body);
+                    dbg!("Against return type");
+                    dbg!(ret_ty.clone());
+                    let (body_type, body_output) =
+                        self.check(&mut cloned_context, body.clone(), ret_ty.clone());
+                    dbg!(body_type.clone());
+
+                    // Constraint solving went well
+                    if let Ok(_) = self.unification(body_output.constraints) {
+                        // Substitute types
+                        let (mut unbound, ty) = self.substitute(body_type);
+                        let (unbound_body, body) = self.substitute_texp(body_output.texp);
+                        unbound.extend(unbound_body);
+
+                        let typed_toplevel = TypedToplevel::TFunDef(
+                            name.to_owned(),
+                            args_with_types.collect(),
+                            body.b(),
+                            ret_ty,
+                        );
+
+                        context.insert(name.to_owned(), ty);
+                        typed_toplevels.push(typed_toplevel);
+                    }
+                }
+                Toplevel::FunDef(name, typ, args, body) if args.len() == 0 => {
+                    todo!("hans")
+                    /*
+                    let (body_type, body_output) = self.check(context, body.clone(), typ.clone());
+                    let typed_fun = TypedToplevel::TFunDef(
+                        name.to_owned(),
+                        vec![],
+                        body_output.texp.b(),
+                        body_type.clone(),
+                    );
+                    let mut cloned_context = context.clone();
+                    cloned_context.insert(name.to_owned(), body_type);
+                    */
+                    // acc.push((body_type, TypeOutput::new()));
+                    // self.infer_all_aux(rest, &mut cloned_context, acc)
+                    /*
+                    match self.check(context, body.clone(), *typ.clone()) {
+                        Some((fun_ty, typed_body)) => {
+                            let typed_fun = TypedExpr::TFunDef(
+                                name.to_owned(),
+                                vec![],
+                                typed_body.b(),
+                                fun_ty.clone(),
+                            );
+                            let mut cloned_context = context.clone();
+                            cloned_context.insert(name.to_owned(), fun_ty);
+                            acc.push(typed_fun);
+                            self.infer_all_aux(rest, &mut cloned_context, acc)
+                        }
+                        None => panic!("Error type checking function {} with no arguments", name),
+                    }
+                    */
+                }
+                _ => panic!("Error: Non-annotated function"),
+            }
+        }
+
+        vec![]
+    }
+
+    fn infer_all_aux_old(
         &mut self,
         toplevels: &[Toplevel],
         context: &mut HashMap<Sym, Type>,
@@ -360,7 +637,7 @@ impl Inference {
                     );
                     // TODO constraints
                     // acc.push((fun_type, TypeOutput::new(vec![], typed_fun)));
-                    self.infer_all_aux(rest, &mut cloned_context, acc)
+                    self.infer_all_aux_old(rest, &mut cloned_context, acc)
 
                     /*
                     match self.check(&mut cloned_context, body.clone(), ret_ty) {
@@ -390,7 +667,7 @@ impl Inference {
                     let mut cloned_context = context.clone();
                     cloned_context.insert(name.to_owned(), body_type);
                     // acc.push((body_type, TypeOutput::new()));
-                    self.infer_all_aux(rest, &mut cloned_context, acc)
+                    self.infer_all_aux_old(rest, &mut cloned_context, acc)
                     /*
                     match self.check(context, body.clone(), *typ.clone()) {
                         Some((fun_ty, typed_body)) => {
@@ -467,21 +744,71 @@ pub fn infer_all(toplevels: Vec<Toplevel>) -> TypedProg { // Result<(TypedExpr, 
     // PLACEHOLDER
     // Err(TypeError::TypeNotEqual(Type::TInt, Type::TUnit))
     todo!()
->>>>>>> Stashed changes
 }
 */
 
 pub fn infer_all(prog: Prog) -> TypedProg {
     let toplevels = prog.0;
-    // let typed_toplevels = infer_all_aux(toplevels.as_slice(), &mut HashMap::new(), Vec::new());
 
-    let typed_toplevels = vec![];
+    let mut inference = Inference {
+        unification_table: InPlaceUnificationTable::default(),
+    };
+
+    let typed_toplevels = inference.infer_all_toplevels(toplevels.as_slice(), &mut HashMap::new());
+
     TypedProg(typed_toplevels)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hans() {
+        let lambda = Expr::Lam(
+            vec!["x".to_owned()],
+            Expr::Prim(
+                Binop::Add,
+                Expr::Var("x".to_owned()).b(),
+                Expr::Const(Const::CInt(2)).b(),
+            )
+            .b(),
+        );
+
+        let mut inference = Inference {
+            unification_table: InPlaceUnificationTable::default(),
+        };
+
+        let (ty, output) = inference.infer(&mut HashMap::new(), lambda.b());
+        dbg!(ty);
+    }
+
+    #[test]
+    fn infer() {
+        let fun_type = Type::TFun(Type::TInt.b(), Type::TInt.b());
+        let lambda = Expr::Lam(
+            vec!["y".to_owned()],
+            Expr::Prim(
+                Binop::Add,
+                Expr::Var("x".to_owned()).b(),
+                Expr::Var("y".to_owned()).b(),
+            )
+            .b(),
+        );
+        let fun_body = Expr::App(Expr::Var("x".to_owned()).b(), lambda.b());
+        let fundef = Toplevel::FunDef(
+            "test".to_owned(),
+            fun_type,
+            vec!["x".to_owned()],
+            fun_body.b(),
+        );
+
+        let prog = Prog(vec![fundef]);
+
+        let inferred = infer_all(prog);
+        dbg!(inferred.len());
+        panic!("{:?}", inferred)
+    }
 
     /*
     #[test]
