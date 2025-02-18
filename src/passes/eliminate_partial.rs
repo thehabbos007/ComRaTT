@@ -101,6 +101,7 @@ impl PartialElimination {
                 types
             }
             Type::TProduct(ts) => ts.clone(),
+            Type::TVar(_) => vec![],
         }
     }
 

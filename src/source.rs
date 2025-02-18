@@ -1,3 +1,4 @@
+use ena::unify::{EqUnifyValue, UnifyKey};
 use std::ops::Deref;
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
@@ -42,6 +43,24 @@ impl Expr {
     }
 }
 
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
+pub struct TypeVar(pub u32);
+impl UnifyKey for TypeVar {
+    type Value = Option<Type>;
+
+    fn index(&self) -> u32 {
+        self.0
+    }
+
+    fn from_index(u: u32) -> Self {
+        Self(u)
+    }
+
+    fn tag() -> &'static str {
+        "TypeVar"
+    }
+}
+
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub enum Type {
     TInt,
@@ -49,7 +68,10 @@ pub enum Type {
     TUnit,
     TFun(Box<Type>, Box<Type>),
     TProduct(Vec<Type>),
+    TVar(TypeVar),
 }
+
+impl EqUnifyValue for Type {}
 
 impl Type {
     pub fn b(self) -> Box<Self> {
