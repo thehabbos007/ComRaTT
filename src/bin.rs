@@ -73,8 +73,6 @@ fn compile_prog(prog: TypedProg) -> Result<(), lexopt::Error> {
     let mut stdout = std::io::stdout().lock();
     stdout.write_all(&res).unwrap();
 
-    println!("{}", &prog.untyped().to_string());
-
     Ok(())
 }
 
