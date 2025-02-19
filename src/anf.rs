@@ -63,10 +63,13 @@ pub enum AnfExpr {
 impl AnfExpr {
     pub fn traverse_locals<'a>(&'a self, locals: &mut BTreeSet<(&'a str, Type)>) {
         match self {
-            AnfExpr::Let(name, ty, val, body) => {
+            AnfExpr::Let(name, ty, rhs, body) => {
                 locals.insert((name, ty.clone()));
-                val.traverse_locals(locals);
+                rhs.traverse_locals(locals);
                 body.traverse_locals(locals);
+            }
+            AnfExpr::CExp(c) => {
+                c.traverse_locals(locals);
             }
             _ => {}
         }
@@ -86,5 +89,75 @@ impl Deref for AnfProg {
 
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_traverse_locals() {
+        let mut locals = BTreeSet::new();
+
+        // Test let binding
+        let expr = AnfExpr::Let(
+            "x".into(),
+            Type::TInt,
+            Box::new(AnfExpr::AExpr(AExpr::Const(Const::CInt(1), Type::TInt))),
+            Box::new(AnfExpr::AExpr(AExpr::Var("x".into(), Type::TInt))),
+        );
+
+        expr.traverse_locals(&mut locals);
+        assert_eq!(locals.len(), 1);
+        assert!(locals.contains(&("x", Type::TInt)));
+
+        locals.clear();
+
+        // Test nested let bindings
+        let expr = AnfExpr::Let(
+            "x".into(),
+            Type::TInt,
+            Box::new(AnfExpr::Let(
+                "y".into(),
+                Type::TBool,
+                Box::new(AnfExpr::AExpr(AExpr::Const(
+                    Const::CBool(true),
+                    Type::TBool,
+                ))),
+                Box::new(AnfExpr::AExpr(AExpr::Var("y".into(), Type::TBool))),
+            )),
+            Box::new(AnfExpr::AExpr(AExpr::Var("x".into(), Type::TInt))),
+        );
+
+        expr.traverse_locals(&mut locals);
+        assert_eq!(locals.len(), 2);
+        assert!(locals.contains(&("x", Type::TInt)));
+        assert!(locals.contains(&("y", Type::TBool)));
+
+        locals.clear();
+
+        // Test if-then-else
+        let expr = AnfExpr::CExp(CExpr::IfThenElse(
+            AExpr::Const(Const::CBool(true), Type::TBool),
+            Box::new(AnfExpr::Let(
+                "x".into(),
+                Type::TInt,
+                Box::new(AnfExpr::AExpr(AExpr::Const(Const::CInt(1), Type::TInt))),
+                Box::new(AnfExpr::AExpr(AExpr::Var("x".into(), Type::TInt))),
+            )),
+            Box::new(AnfExpr::Let(
+                "y".into(),
+                Type::TInt,
+                Box::new(AnfExpr::AExpr(AExpr::Const(Const::CInt(2), Type::TInt))),
+                Box::new(AnfExpr::AExpr(AExpr::Var("y".into(), Type::TInt))),
+            )),
+            Type::TInt,
+        ));
+
+        expr.traverse_locals(&mut locals);
+        assert_eq!(locals.len(), 2);
+        assert!(locals.contains(&("x", Type::TInt)));
+        assert!(locals.contains(&("y", Type::TInt)));
     }
 }

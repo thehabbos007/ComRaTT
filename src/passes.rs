@@ -1,4 +1,4 @@
-use crate::types::TypedProg;
+use crate::{anf::AnfProg, types::TypedProg};
 
 pub mod anf;
 pub mod eliminate_consec_app;
@@ -9,15 +9,24 @@ pub trait Pass<I = TypedProg, O = TypedProg> {
     fn run(&mut self, prog: I) -> O;
 }
 
-pub fn run_program_passes(mut prog: TypedProg) -> TypedProg {
+pub fn run_program_passes(prog: TypedProg) -> TypedProg {
     let mut eliminate_partial = eliminate_partial::PartialElimination::new();
-    prog = eliminate_partial.run(prog);
+    let prog = eliminate_partial.run(prog);
 
     let mut eliminate_consec = eliminate_consec_app::EliminateConsecApp::new();
-    prog = eliminate_consec.run(prog);
+    let prog = eliminate_consec.run(prog);
 
     let mut lambda_lift = lambda_lift::LambdaLift::new();
-    prog = lambda_lift.run(prog);
+    let prog = lambda_lift.run(prog);
+
+    prog
+}
+
+pub fn run_program_passes_anf(prog: TypedProg) -> AnfProg {
+    let prog = run_program_passes(prog);
+
+    let mut anf = anf::ANFConversion::new();
+    let prog = anf.run(prog);
 
     prog
 }

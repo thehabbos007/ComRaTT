@@ -120,7 +120,6 @@ impl<'a> AnfWasmEmitter<'a> {
                 let mut local_types = BTreeSet::new();
                 body.traverse_locals(&mut local_types);
 
-                dbg!(&local_types);
                 for (i, (arg_name, _)) in local_types.iter().enumerate() {
                     self.locals_map.insert(arg_name, self.next_local + i as u32);
                 }

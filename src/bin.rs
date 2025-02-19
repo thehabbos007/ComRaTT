@@ -2,13 +2,15 @@ use lexopt::Arg;
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{self, Read as _, Write};
-use ComRaTT::backend::compile_to_wasm;
+use ComRaTT::backend::{compile_anf_to_wasm, compile_to_wasm};
 use ComRaTT::infer::infer_all;
-use ComRaTT::passes::run_program_passes;
+use ComRaTT::passes::{run_program_passes, run_program_passes_anf};
 use ComRaTT::source::Prog;
+use ComRaTT::types::TypedProg;
 
 struct Args {
     input: Option<OsString>,
+    anf: bool,
 }
 
 impl Args {
@@ -30,13 +32,17 @@ impl Args {
 }
 
 fn main() -> Result<(), lexopt::Error> {
-    let mut args = Args { input: None };
+    let mut args = Args {
+        input: None,
+        anf: false,
+    };
 
     let mut parser = lexopt::Parser::from_env();
 
     while let Some(arg) = parser.next()? {
         match arg {
             Arg::Value(path) => args.input = Some(path),
+            Arg::Long("anf") => args.anf = true,
             _ => return Ok(()),
         }
     }
@@ -50,12 +56,31 @@ fn main() -> Result<(), lexopt::Error> {
             return Ok(());
         }
     };
-
     let prog = infer_all(prog);
-    let prog = run_program_passes(prog);
-    // println!("{}", &prog.untyped().to_string());
-    let res = compile_to_wasm(&prog);
 
+    if args.anf {
+        compile_prog_anf(prog)?;
+    } else {
+        compile_prog(prog)?;
+    }
+
+    Ok(())
+}
+
+fn compile_prog(prog: TypedProg) -> Result<(), lexopt::Error> {
+    let prog = run_program_passes(prog);
+    let res = compile_to_wasm(&prog);
+    let mut stdout = std::io::stdout().lock();
+    stdout.write_all(&res).unwrap();
+
+    println!("{}", &prog.untyped().to_string());
+
+    Ok(())
+}
+
+fn compile_prog_anf(prog: TypedProg) -> Result<(), lexopt::Error> {
+    let prog = run_program_passes_anf(prog);
+    let res = compile_anf_to_wasm(&prog);
     let mut stdout = std::io::stdout().lock();
     stdout.write_all(&res).unwrap();
 

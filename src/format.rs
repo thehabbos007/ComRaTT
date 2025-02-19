@@ -3,6 +3,7 @@ use std::fmt::Display;
 use itertools::Itertools;
 
 use crate::{
+    anf::{AExpr, AnfExpr, AnfProg, AnfToplevel, CExpr},
     source::*,
     types::{TypedExpr, TypedProg, TypedToplevel},
 };
@@ -250,5 +251,95 @@ impl Prog {
 impl Display for Prog {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.to_string())
+    }
+}
+
+impl AnfProg {
+    pub fn to_string(&self) -> String {
+        self.iter()
+            .map(|t| t.to_string())
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+}
+
+impl AnfToplevel {
+    pub fn to_string(&self) -> String {
+        match self {
+            AnfToplevel::FunDef(name, params, body, ret_ty) => {
+                let param_str = params
+                    .iter()
+                    .map(|(name, ty)| format!("{}: {}", name, ty))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                format!(
+                    "fun {}({}) : {} = {}",
+                    name,
+                    param_str,
+                    ret_ty,
+                    body.to_string()
+                )
+            }
+        }
+    }
+}
+
+impl AnfExpr {
+    pub fn to_string(&self) -> String {
+        match self {
+            AnfExpr::AExpr(a) => a.to_string(),
+            AnfExpr::CExp(c) => c.to_string(),
+            AnfExpr::Let(name, ty, val, body) => {
+                format!(
+                    "let {}: {} = {} in {}",
+                    name,
+                    ty,
+                    val.to_string(),
+                    body.to_string()
+                )
+            }
+        }
+    }
+}
+
+impl AExpr {
+    pub fn to_string(&self) -> String {
+        match self {
+            AExpr::Const(c, _) => c.to_string(),
+            AExpr::Var(s, _) => s.to_string(),
+        }
+    }
+}
+
+impl CExpr {
+    pub fn to_string(&self) -> String {
+        match self {
+            CExpr::Prim(op, a1, a2, _) => format!("{} {} {}", a1.to_string(), op, a2.to_string()),
+            CExpr::App(f, args, _) => {
+                let args_str = args
+                    .iter()
+                    .map(|a| a.to_string())
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                format!("{}({})", f.to_string(), args_str)
+            }
+            CExpr::Tuple(elems, _) => {
+                let elems_str = elems
+                    .iter()
+                    .map(|e| e.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("({})", elems_str)
+            }
+            CExpr::Access(tup, idx, _) => format!("{}.{}", tup.to_string(), idx),
+            CExpr::IfThenElse(cond, then_branch, else_branch, _) => {
+                format!(
+                    "if {} then {} else {}",
+                    cond.to_string(),
+                    then_branch.to_string(),
+                    else_branch.to_string()
+                )
+            }
+        }
     }
 }
