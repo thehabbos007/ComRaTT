@@ -1,6 +1,5 @@
 use crate::anf::{AExpr, AnfExpr, AnfProg, AnfToplevel, CExpr};
 use crate::passes::Pass;
-use crate::source::Type;
 use crate::types::{TypedExpr, TypedProg, TypedToplevel};
 
 pub struct ANFConversion {
@@ -22,19 +21,12 @@ impl ANFConversion {
         match expr {
             TypedExpr::TConst(c, ty) => AnfExpr::AExpr(AExpr::Const(c, ty)),
             TypedExpr::TName(x, ty) => AnfExpr::AExpr(AExpr::Var(x, ty)),
-
-            TypedExpr::TLam(args, body, _ty) => {
-                let body = self.normalize(*body);
-                AnfExpr::AExpr(AExpr::Lam(args, Box::new(body)))
-            }
-
             TypedExpr::TPrim(op, e1, e2, ty) => {
                 let (e1_anf, bindings1) = self.normalize_atom(*e1);
                 let (e2_anf, bindings2) = self.normalize_atom(*e2);
                 let comp = CExpr::Prim(op, e1_anf, e2_anf, ty);
                 self.wrap_bindings(bindings1, bindings2, AnfExpr::CExp(comp))
             }
-
             TypedExpr::TApp(f, args, ty) => {
                 let (f_anf, bindings_f) = self.normalize_atom(*f);
                 let mut all_bindings = bindings_f;
@@ -49,13 +41,11 @@ impl ANFConversion {
                 let comp = CExpr::App(f_anf, anf_args, ty);
                 self.wrap_bindings(all_bindings, vec![], AnfExpr::CExp(comp))
             }
-
             TypedExpr::TLet(x, ty, e1, e2) => {
                 let e1_anf = self.normalize(*e1);
                 let e2_anf = self.normalize(*e2);
                 AnfExpr::Let(x, ty, Box::new(e1_anf), Box::new(e2_anf))
             }
-
             TypedExpr::TIfThenElse(cond, then_br, else_br, ty) => {
                 let (cond_anf, bindings) = self.normalize_atom(*cond);
                 let then_anf = self.normalize(*then_br);
@@ -63,7 +53,6 @@ impl ANFConversion {
                 let comp = CExpr::IfThenElse(cond_anf, Box::new(then_anf), Box::new(else_anf), ty);
                 self.wrap_bindings(bindings, vec![], AnfExpr::CExp(comp))
             }
-
             TypedExpr::TTuple(es, ty) => {
                 let mut all_bindings = Vec::new();
                 let mut anf_es = Vec::new();
@@ -77,11 +66,13 @@ impl ANFConversion {
                 let comp = CExpr::Tuple(anf_es, ty);
                 self.wrap_bindings(all_bindings, vec![], AnfExpr::CExp(comp))
             }
-
             TypedExpr::TAccess(e, idx, ty) => {
                 let (e_anf, bindings) = self.normalize_atom(*e);
                 let comp = CExpr::Access(e_anf, idx, ty);
                 self.wrap_bindings(bindings, vec![], AnfExpr::CExp(comp))
+            }
+            TypedExpr::TLam(..) => {
+                panic!("Lambda expressions should have been eliminated by this point.")
             }
         }
     }

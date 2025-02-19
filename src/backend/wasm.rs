@@ -134,7 +134,6 @@ impl<'a> WasmEmitter<'a> {
                 for (i, (arg_name, _)) in local_types.iter().enumerate() {
                     self.locals_map.insert(arg_name, self.next_local + i as u32);
                 }
-
                 self.next_local += local_types.len() as u32;
 
                 let local_types = local_types
@@ -143,9 +142,6 @@ impl<'a> WasmEmitter<'a> {
                     .collect_vec();
 
                 let mut func = Function::new_with_locals_types(local_types);
-
-                self.next_local = args.len() as u32;
-
                 self.compile_expr(&mut func, body);
                 func.instruction(&Instruction::End);
 

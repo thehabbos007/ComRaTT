@@ -1,5 +1,6 @@
 use crate::source::{Binop, Const, Type};
-use crate::types::{Sym, TypedExpr, TypedProg, TypedToplevel};
+use crate::types::Sym;
+use std::collections::BTreeSet;
 use std::ops::Deref;
 
 type Param = (Sym, Type);
@@ -8,7 +9,8 @@ type Param = (Sym, Type);
 pub enum AExpr {
     Const(Const, Type),
     Var(Sym, Type),
-    Lam(Vec<Param>, Box<AnfExpr>),
+    // Lambdas are lifted to top-level functions, so we don't need this..
+    // Lam(..)
 }
 
 impl AExpr {
@@ -16,7 +18,6 @@ impl AExpr {
         match self {
             AExpr::Const(_, ty) => ty.clone(),
             AExpr::Var(_, ty) => ty.clone(),
-            AExpr::Lam(_, _) => Type::TUnit,
         }
     }
 }
@@ -40,6 +41,16 @@ impl CExpr {
             CExpr::IfThenElse(_, _, _, ty) => ty.clone(),
         }
     }
+
+    pub fn traverse_locals<'a>(&'a self, locals: &mut BTreeSet<(&'a str, Type)>) {
+        match self {
+            CExpr::IfThenElse(_, then_branch, else_branch, _) => {
+                then_branch.traverse_locals(locals);
+                else_branch.traverse_locals(locals);
+            }
+            _ => {}
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -47,6 +58,19 @@ pub enum AnfExpr {
     AExpr(AExpr),
     CExp(CExpr),
     Let(Sym, Type, Box<AnfExpr>, Box<AnfExpr>),
+}
+
+impl AnfExpr {
+    pub fn traverse_locals<'a>(&'a self, locals: &mut BTreeSet<(&'a str, Type)>) {
+        match self {
+            AnfExpr::Let(name, ty, val, body) => {
+                locals.insert((name, ty.clone()));
+                val.traverse_locals(locals);
+                body.traverse_locals(locals);
+            }
+            _ => {}
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
