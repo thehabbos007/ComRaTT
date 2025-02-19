@@ -37,3 +37,8 @@ _opam/
 
 result
 .zed
+
+
+# Added by cargo
+
+/target
