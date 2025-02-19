@@ -1,6 +1,7 @@
 #![feature(box_patterns)]
 #![feature(let_chains)]
 
+pub mod anf;
 pub mod backend;
 pub mod error;
 pub mod format;

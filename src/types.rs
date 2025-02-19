@@ -30,6 +30,20 @@ impl TypedExpr {
     pub fn b(self) -> Box<Self> {
         Box::new(self)
     }
+
+    pub fn ty(&self) -> Type {
+        match self {
+            TypedExpr::TConst(_, ty) => ty.clone(),
+            TypedExpr::TName(_, ty) => ty.clone(),
+            TypedExpr::TLam(_, _, ty) => ty.clone(),
+            TypedExpr::TApp(_, _, ty) => ty.clone(),
+            TypedExpr::TPrim(_, _, _, ty) => ty.clone(),
+            TypedExpr::TLet(_, ty, _, _) => ty.clone(),
+            TypedExpr::TIfThenElse(_, _, _, ty) => ty.clone(),
+            TypedExpr::TTuple(_, ty) => ty.clone(),
+            TypedExpr::TAccess(_, _, ty) => ty.clone(),
+        }
+    }
 }
 
 #[derive(PartialEq, Eq, Debug, Clone)]
