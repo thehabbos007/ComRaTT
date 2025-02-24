@@ -206,11 +206,11 @@ impl Inference {
                     match (self.infer(context, left), self.infer(context, right)) {
                         ((left_ty, mut left_output), (right_ty, mut right_output)) => {
                             let Ok(_) = self.unify_ty_ty(left_ty.clone(), Type::TInt) else {
-                                panic!("")
+                                panic!("Failed to unify operand of primitive arithmetic operation with int type")
 
                             };
                             let Ok(_) = self.unify_ty_ty(left_ty.clone(), right_ty.clone()) else {
-                                panic!("")
+                                panic!("Failed to unify operands of primitive operations")
 
                             };
                             let mut constraints = Vec::new();
@@ -238,12 +238,12 @@ impl Inference {
                 Binop::Lt | Binop::Lte | Binop::Gt | Binop::Gte => {
                     match (self.infer(context, left), self.infer(context, right)) {
                         ((left_ty, mut left_output), (right_ty, mut right_output)) => {
-                            let Ok(_) = self.unify_ty_ty(left_ty.clone(), Type::TBool) else {
-                                panic!("")
+                            let Ok(_) = self.unify_ty_ty(left_ty.clone(), Type::TInt) else {
+                                panic!("Failed to unify operand of primitive comparison operation with bool type")
 
                             };
                             let Ok(_) = self.unify_ty_ty(left_ty.clone(), right_ty.clone()) else {
-                                panic!("")
+                                panic!("Failed to unify operands of primitive operations")
 
                             };
                             let mut constraints = Vec::new();
@@ -271,8 +271,12 @@ impl Inference {
 
                 Binop::Eq | Binop::Neq => {
                     match (self.infer(context, left), self.infer(context, right)) {
-                        ((Type::TInt, mut left_output), (Type::TInt, mut right_output)) | ((Type::TBool, mut left_output), (Type::TBool, mut right_output)) => {
-                            // TODO fix unification
+                        ((left_ty, mut left_output), (right_ty, mut right_output)) => {
+                            let Ok(_) = self.unify_ty_ty(left_ty.clone(), left_ty.clone()) else {
+                                panic!("Failed to unify operands of primitive operations")
+                            };
+                            // TODO: we might need to constrain this further.
+
                             let mut constraints = Vec::new();
                             constraints.append(&mut left_output.constraints);
                             constraints.append(&mut right_output.constraints);
@@ -1458,5 +1462,95 @@ mod tests {
         let (ret_ty, types) = tfun_len_n(tfun.clone(), 2);
         assert_eq!(ret_ty, Type::TBool);
         assert_eq!(types, vec![Type::TInt, Type::TInt]);
+    }
+
+    #[ignore = "We need to debug this issue"]
+    #[test]
+    fn infer_lambda_with_multiple_args_fails_rename() {
+        let expr = Expr::Lam(
+            vec!["x".to_owned(), "y".to_owned()],
+            Expr::Prim(
+                Binop::Eq,
+                Expr::Prim(
+                    Binop::Eq,
+                    Expr::Var("x".to_owned()).b(),
+                    Expr::Const(Const::CInt(42)).b(),
+                )
+                .b(),
+                Expr::Var("y".to_owned()).b(),
+            )
+            .b(),
+        );
+        let mut inference = Inference {
+            unification_table: InPlaceUnificationTable::default(),
+        };
+        let fun_type = Type::TFun(
+            Type::TInt.b(),
+            Type::TFun(Type::TBool.b(), Type::TBool.b()).b(),
+        );
+        let (ty, output) = inference.infer(&mut HashMap::new(), expr.b());
+        inference.unification(output.constraints).unwrap();
+        let (_, ty) = inference.substitute(ty);
+        let (_, texp) = inference.substitute_texp(output.texp);
+        assert_eq!(ty, fun_type);
+    }
+
+    #[test]
+    fn infer_primitive_equality_nested() {
+        let expr = Expr::Prim(
+            Binop::Eq,
+            Expr::Prim(
+                Binop::Eq,
+                Expr::Var("x".to_owned()).b(),
+                Expr::Const(Const::CInt(42)).b(),
+            )
+            .b(),
+            Expr::Var("y".to_owned()).b(),
+        );
+        let mut inference = Inference {
+            unification_table: InPlaceUnificationTable::default(),
+        };
+
+        let mut context: HashMap<String, Type> =
+            [("x".to_owned(), Type::TInt), ("y".to_owned(), Type::TInt)]
+                .into_iter()
+                .collect();
+
+        let (ty, output) = inference.infer(&mut context, expr.b());
+
+        inference.unification(output.constraints).unwrap();
+        let (_, ty) = inference.substitute(ty);
+        let (_, texp) = inference.substitute_texp(output.texp);
+        assert_eq!(ty, Type::TBool);
+    }
+
+    #[test]
+    fn infer_lambda_with_multiple_args_all_ints() {
+        let expr = Expr::Lam(
+            vec!["x".to_owned(), "y".to_owned()],
+            Expr::Prim(
+                Binop::Add,
+                Expr::Prim(
+                    Binop::Add,
+                    Expr::Var("x".to_owned()).b(),
+                    Expr::Const(Const::CInt(42)).b(),
+                )
+                .b(),
+                Expr::Var("y".to_owned()).b(),
+            )
+            .b(),
+        );
+        let mut inference = Inference {
+            unification_table: InPlaceUnificationTable::default(),
+        };
+        let fun_type = Type::TFun(
+            Type::TInt.b(),
+            Type::TFun(Type::TInt.b(), Type::TInt.b()).b(),
+        );
+        let (ty, output) = inference.infer(&mut HashMap::new(), expr.b());
+        inference.unification(output.constraints).unwrap();
+        let (_, ty) = inference.substitute(ty);
+        let (_, texp) = inference.substitute_texp(output.texp);
+        assert_eq!(ty, fun_type);
     }
 }
