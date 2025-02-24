@@ -28,27 +28,11 @@ impl TypeOutput {
     }
 }
 
-// TODO: implement infer etc. on this type
-// inspired thunderseethe
-// the current test setup does not really match
-// that, since the tests rely on directly calling infer..
-// woops, were allowed to call private stuff inside the module, nice
-// maybe &mut self is not entirely required. sanity check when it works.
 struct Inference {
     unification_table: InPlaceUnificationTable<TypeVar>,
 }
 
 impl Inference {
-    fn build_function_type(types: &[Type], ret_ty: Type) -> Type {
-        match types {
-            [] => ret_ty,
-            [ty, types @ ..] => Type::TFun(
-                ty.clone().b(),
-                Inference::build_function_type(types, ret_ty).b(),
-            ),
-        }
-    }
-
     fn fresh_ty_var(&mut self) -> TypeVar {
         self.unification_table.new_key(None)
     }
@@ -122,11 +106,9 @@ impl Inference {
                 self.infer(context, then),
                 self.infer(context, elseb),
             ) {
-                (
-                    (Type::TBool, mut cond_output),
-                    (then_ty, mut then_output),
-                    (else_ty, mut else_output),
-                ) if then_ty == else_ty => {
+                (mut cond_output, (then_ty, mut then_output), (else_ty, mut else_output))
+                    if then_ty == else_ty =>
+                {
                     let mut constraints = Vec::new();
                     constraints.append(&mut cond_output.constraints);
                     constraints.append(&mut then_output.constraints);
@@ -196,13 +178,12 @@ impl Inference {
             }
             Expr::App(fun, arg) => match self.infer(context, fun.clone()) {
                 (Type::TFun(ty, ret_ty), mut fun_output) => {
-                    let (_, mut arg_output) = self.check(context, arg, *ty.clone());
+                    let (arg_ty, mut arg_output) = self.infer(context, arg);
                     let ret_ty = Type::TVar(self.fresh_ty_var());
-                    let fun_ty = Type::TFun(ty.clone(), ret_ty.clone().b());
+                    let fun_ty = Type::TFun(arg_ty.b(), ret_ty.clone().b());
 
-                    let (fun_ty, fun_output) = self.check(context, fun, fun_ty);
-                    println!("Infer::App fun_ty");
-                    dbg!(fun_ty);
+                    let fun_output = self.check(context, fun, fun_ty);
+
                     return (
                         ret_ty.clone(),
                         TypeOutput::new(
@@ -223,18 +204,7 @@ impl Inference {
             Expr::Prim(op, left, right) => match op {
                 Binop::Add | Binop::Mul | Binop::Div | Binop::Sub => {
                     match (self.infer(context, left), self.infer(context, right)) {
-                        ((left_ty, mut left_output), (right_ty, mut right_output)) => {
-                            if let Ok(_) = self.unify_ty_ty(left_ty.clone(), right_ty.clone()) {
-                                dbg!("unification ok");
-                            }
-
-                            if let Ok(_) = self.unify_ty_ty(left_ty, Type::TInt) {
-                                dbg!("unification int ok");
-                            }
-
-                            if let Ok(_) = self.unify_ty_ty(right_ty, Type::TInt) {
-                                dbg!("unification right int ok");
-                            }
+                        ((Type::TInt, mut left_output), (Type::TInt, mut right_output)) => {
                             let mut constraints = Vec::new();
                             constraints.append(&mut left_output.constraints);
                             constraints.append(&mut right_output.constraints);
@@ -250,31 +220,38 @@ impl Inference {
                                     ),
                                 ),
                             )
-                        }
+                        },
+                        _ => panic!(
+                          "Failed to infer type of primitive expression. Use of operator {:?} is only allowed on either two int or two bool operands",
+                          op
+                        ),
                     }
                 }
-                Binop::Lt | Binop::Lte | Binop::Gt | Binop::Gte => match (
-                    self.check(context, left, Type::TInt),
-                    self.check(context, right, Type::TInt),
-                ) {
-                    ((_, mut left_output), (_, mut right_output)) => {
-                        let mut constraints = Vec::new();
-                        constraints.append(&mut left_output.constraints);
-                        constraints.append(&mut right_output.constraints);
-                        (
-                            Type::TBool,
-                            TypeOutput::new(
-                                constraints,
-                                TypedExpr::TPrim(
-                                    op,
-                                    left_output.texp.b(),
-                                    right_output.texp.b(),
-                                    Type::TBool,
+                Binop::Lt | Binop::Lte | Binop::Gt | Binop::Gte => {
+                    match (self.infer(context, left), self.infer(context, right)) {
+                        ((Type::TBool, mut left_output), (Type::TBool, mut right_output)) => {
+                            let mut constraints = Vec::new();
+                            constraints.append(&mut left_output.constraints);
+                            constraints.append(&mut right_output.constraints);
+                            (
+                                Type::TBool,
+                                TypeOutput::new(
+                                    constraints,
+                                    TypedExpr::TPrim(
+                                        op,
+                                        left_output.texp.b(),
+                                        right_output.texp.b(),
+                                        Type::TBool,
+                                    ),
                                 ),
-                            ),
-                        )
+                            )
+                        }
+                        _ => panic!(
+                          "Failed to infer type of primitive expression. Use of operator {:?} is only allowed on either two int or two bool operands",
+                          op
+                        ),
                     }
-                },
+                }
 
                 Binop::Eq | Binop::Neq => {
                     match (self.infer(context, left), self.infer(context, right)) {
@@ -315,13 +292,8 @@ impl Inference {
                 for (arg, ty_var) in args_with_types.clone() {
                     cloned_context.insert(arg, ty_var);
                 }
-                dbg!(&args_ty_vars);
-                dbg!(&body);
                 let (body_type, body_output) = self.infer(&mut cloned_context, body);
-                dbg!(body_output.texp.clone());
-                let lambda_type =
-                    Inference::build_function_type(args_ty_vars.as_slice(), body_type);
-                dbg!(lambda_type.clone());
+                let lambda_type = build_function_type(args_ty_vars.as_slice(), body_type);
                 let lambda = TypedExpr::TLam(
                     args_with_types.collect(),
                     body_output.texp.b(),
@@ -335,24 +307,27 @@ impl Inference {
         }
     }
 
-    fn check(
-        &mut self,
-        context: &mut HashMap<Sym, Type>,
-        expr: Box<Expr>,
-        ty: Type,
-    ) -> (Type, TypeOutput) {
-        match (expr, ty.clone()) {
-            (expr, _) => match self.infer(context, expr.b()) {
-                (inferred_type, inferred_output) if ty == inferred_type => {
-                    (inferred_type, inferred_output)
-                }
-                (inferred_type, inferred_output) => {
-                    dbg!(ty);
-                    dbg!(inferred_type);
+    fn check(&mut self, context: &mut HashMap<Sym, Type>, expr: Box<Expr>, ty: Type) -> TypeOutput {
+        match (expr.clone(), ty.clone()) {
+            (box Expr::Lam(mut args, body), Type::TFun(box from, box to)) => {
+                let mut cloned_context = context.clone();
+                // In practice lambdas only have 1 argument, so just take that single one
+                let arg = args.remove(0);
+                cloned_context.insert(arg.to_owned(), from.clone());
+                let body_output = self.check(&mut cloned_context, body, to.clone());
+                TypeOutput::new(
+                    body_output.constraints,
+                    TypedExpr::TLam(vec![(arg, from)], body_output.texp.b(), to),
+                )
+            }
 
-                    todo!()
-                }
-            },
+            (expr, expected_ty) => {
+                let (actual_ty, mut output) = self.infer(context, expr);
+                output
+                    .constraints
+                    .push(Constraint::TypeEqual(expected_ty, actual_ty));
+                output
+            }
         }
     }
 
@@ -461,24 +436,30 @@ impl Inference {
             }
             TypedExpr::TLam(args, body, ty) => {
                 let mut unbounds = BTreeSet::new();
+                let mut new_args = Vec::new();
                 for arg in args.clone() {
                     let (unbound, ty) = self.substitute(arg.1);
+                    new_args.push((arg.0, ty));
                     unbounds.extend(unbound);
                 }
                 let (unbound, body) = self.substitute_texp(*body.clone());
                 unbounds.extend(unbound);
-                (unbounds, TypedExpr::TLam(args, body.b(), ty))
+                let (_, ty) = self.substitute(ty);
+                (unbounds, TypedExpr::TLam(new_args, body.b(), ty))
             }
             TypedExpr::TApp(fun, args, ty) => {
                 let mut unbounds = BTreeSet::new();
                 let (unbound_fun, fun) = self.substitute_texp(*fun);
                 unbounds.extend(unbound_fun);
+                let mut new_args = Vec::new();
                 for arg in args.clone() {
                     let (unbound, arg_texp) = self.substitute_texp(arg);
+                    new_args.push(arg_texp);
                     unbounds.extend(unbound);
                 }
 
-                (unbounds, TypedExpr::TApp(fun.b(), args, ty))
+                let (_, ty) = self.substitute(ty);
+                (unbounds, TypedExpr::TApp(fun.b(), new_args, ty))
             }
             TypedExpr::TPrim(op, left, right, ty) => {
                 let (mut unbound_left, left) = self.substitute_texp(*left);
@@ -537,13 +518,7 @@ impl Inference {
                         cloned_context.insert(arg.to_owned(), typ);
                     }
 
-                    dbg!("Checking body");
-                    dbg!(body);
-                    dbg!("Against return type");
-                    dbg!(ret_ty.clone());
-                    let (body_type, body_output) =
-                        self.check(&mut cloned_context, body.clone(), ret_ty.clone());
-                    dbg!(body_type.clone());
+                    let (body_type, body_output) = self.infer(&mut cloned_context, body.clone());
 
                     // Constraint solving went well
                     if let Ok(_) = self.unification(body_output.constraints) {
@@ -563,132 +538,11 @@ impl Inference {
                         typed_toplevels.push(typed_toplevel);
                     }
                 }
-                Toplevel::FunDef(name, typ, args, body) if args.len() == 0 => {
-                    todo!("hans")
-                    /*
-                    let (body_type, body_output) = self.check(context, body.clone(), typ.clone());
-                    let typed_fun = TypedToplevel::TFunDef(
-                        name.to_owned(),
-                        vec![],
-                        body_output.texp.b(),
-                        body_type.clone(),
-                    );
-                    let mut cloned_context = context.clone();
-                    cloned_context.insert(name.to_owned(), body_type);
-                    */
-                    // acc.push((body_type, TypeOutput::new()));
-                    // self.infer_all_aux(rest, &mut cloned_context, acc)
-                    /*
-                    match self.check(context, body.clone(), *typ.clone()) {
-                        Some((fun_ty, typed_body)) => {
-                            let typed_fun = TypedExpr::TFunDef(
-                                name.to_owned(),
-                                vec![],
-                                typed_body.b(),
-                                fun_ty.clone(),
-                            );
-                            let mut cloned_context = context.clone();
-                            cloned_context.insert(name.to_owned(), fun_ty);
-                            acc.push(typed_fun);
-                            self.infer_all_aux(rest, &mut cloned_context, acc)
-                        }
-                        None => panic!("Error type checking function {} with no arguments", name),
-                    }
-                    */
-                }
                 _ => panic!("Error: Non-annotated function"),
             }
         }
 
-        vec![]
-    }
-
-    fn infer_all_aux_old(
-        &mut self,
-        toplevels: &[Toplevel],
-        context: &mut HashMap<Sym, Type>,
-        acc: &mut Vec<(Type, TypeOutput)>,
-    ) -> Vec<(Type, TypeOutput)> {
-        match toplevels {
-            [] => {
-                acc.reverse();
-                acc.to_vec()
-            }
-            [fexpr, rest @ ..] => match fexpr {
-                Toplevel::FunDef(name, ty @ Type::TFun(_, _), args, body) => {
-                    let (ret_ty, types) = tfun_len_n(ty.clone(), args.len());
-                    // args.clone() to avoid borrowing the strings, but is
-                    // it necessary? is some other way better?
-                    let args_with_types = args.clone().into_iter().zip(types.clone());
-                    let mut cloned_context = context.clone();
-                    cloned_context.insert(name.to_owned(), ty.clone());
-                    for (arg, typ) in args_with_types.clone() {
-                        cloned_context.insert(arg.to_owned(), typ);
-                    }
-
-                    let (body_type, body_output) =
-                        self.check(&mut cloned_context, body.clone(), ret_ty);
-                    let fun_type = Inference::build_function_type(types.as_slice(), body_type);
-                    let typed_fun = TypedToplevel::TFunDef(
-                        name.to_owned(),
-                        args_with_types.collect(),
-                        body_output.texp.b(),
-                        fun_type,
-                    );
-                    // TODO constraints
-                    // acc.push((fun_type, TypeOutput::new(vec![], typed_fun)));
-                    self.infer_all_aux_old(rest, &mut cloned_context, acc)
-
-                    /*
-                    match self.check(&mut cloned_context, body.clone(), ret_ty) {
-                        Some((body_ty, typed_body)) => {
-                            let fun_ty = build_function_type(types.as_slice(), body_ty);
-                            let typed_fun = TypedExpr::TFunDef(
-                                name.to_owned(),
-                                args_with_types.collect(),
-                                typed_body.b(),
-                                fun_ty,
-                            );
-                            acc.push(typed_fun);
-                            self.infer_all_aux(rest, &mut cloned_context, acc)
-                        }
-                        None => panic!("Error type checking function {}", name),
-                    }
-                    */
-                }
-                Toplevel::FunDef(name, typ, args, body) if args.len() == 0 => {
-                    let (body_type, body_output) = self.check(context, body.clone(), typ.clone());
-                    let typed_fun = TypedToplevel::TFunDef(
-                        name.to_owned(),
-                        vec![],
-                        body_output.texp.b(),
-                        body_type.clone(),
-                    );
-                    let mut cloned_context = context.clone();
-                    cloned_context.insert(name.to_owned(), body_type);
-                    // acc.push((body_type, TypeOutput::new()));
-                    self.infer_all_aux_old(rest, &mut cloned_context, acc)
-                    /*
-                    match self.check(context, body.clone(), *typ.clone()) {
-                        Some((fun_ty, typed_body)) => {
-                            let typed_fun = TypedExpr::TFunDef(
-                                name.to_owned(),
-                                vec![],
-                                typed_body.b(),
-                                fun_ty.clone(),
-                            );
-                            let mut cloned_context = context.clone();
-                            cloned_context.insert(name.to_owned(), fun_ty);
-                            acc.push(typed_fun);
-                            self.infer_all_aux(rest, &mut cloned_context, acc)
-                        }
-                        None => panic!("Error type checking function {} with no arguments", name),
-                    }
-                    */
-                }
-                _ => panic!("Error: Non-annotated function"),
-            },
-        }
+        typed_toplevels
     }
 }
 
@@ -704,48 +558,6 @@ fn get_with_custom_message(opt: Option<(Type, TypedExpr)>, message: String) -> (
         None => panic!("{}", message),
     }
 }
-
-fn tfun_len_n_rec(ty: Type, n: usize, acc: &mut Vec<Type>) -> (Type, Vec<Type>) {
-    match ty {
-        Type::TFun(ty, next_ty) if n > 0 => {
-            acc.push(*ty);
-            tfun_len_n_rec(*next_ty, n - 1, acc)
-        }
-        t if n == 0 => {
-            acc.reverse();
-            (t, acc.to_owned())
-        }
-        Type::TInt | Type::TBool | Type::TUnit => {
-            panic!("Attempted to traverse a non-TFun type at n = {}", n)
-        }
-        _ => panic!("Too many arguments for function"),
-    }
-}
-
-fn tfun_len_n(ty: Type, n: usize) -> (Type, Vec<Type>) {
-    tfun_len_n_rec(ty, n, &mut Vec::new())
-}
-
-fn build_function_type(types: &[Type], ret_ty: Type) -> Type {
-    match types {
-        [] => ret_ty,
-        [ty, types @ ..] => Type::TFun(ty.clone().b(), build_function_type(types, ret_ty).b()),
-    }
-}
-
-/*
-pub fn infer_all(toplevels: Vec<Toplevel>) -> TypedProg { // Result<(TypedExpr, u32), TypeError> {
-    let mut inference = Inference {
-        unification_table: InPlaceUnificationTable::default(),
-    };
-    let inferences =
-        inference.infer_all_aux(toplevels.as_slice(), &mut HashMap::new(), &mut Vec::new());
-
-    // PLACEHOLDER
-    // Err(TypeError::TypeNotEqual(Type::TInt, Type::TUnit))
-    todo!()
-}
-*/
 
 pub fn infer_all(prog: Prog) -> TypedProg {
     let toplevels = prog.0;
@@ -764,7 +576,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn hans() {
+    fn infer_lambda() {
         let lambda = Expr::Lam(
             vec!["x".to_owned()],
             Expr::Prim(
@@ -780,11 +592,46 @@ mod tests {
         };
 
         let (ty, output) = inference.infer(&mut HashMap::new(), lambda.b());
-        dbg!(ty);
     }
 
     #[test]
-    fn infer() {
+    fn infer_returned_lambda() {
+        let fun_type = Type::TFun(
+            Type::TInt.b(),
+            Type::TFun(Type::TInt.b(), Type::TInt.b()).b(),
+        );
+        let fun_args = vec!["x".to_owned()];
+        let fun_body = Expr::Lam(
+            vec!["y".to_owned()],
+            Expr::Prim(
+                Binop::Add,
+                Expr::Var("x".to_owned()).b(),
+                Expr::Var("y".to_owned()).b(),
+            )
+            .b(),
+        );
+        let fun = Toplevel::FunDef(
+            "curried_add".to_owned(),
+            fun_type.clone(),
+            fun_args,
+            fun_body.b(),
+        );
+
+        let expected_fun_type = Type::TFun(Type::TInt.b(), Type::TInt.b());
+
+        let inferred = infer_all(vec![fun].into());
+        assert_eq!(inferred.len(), 1);
+        match inferred[0].clone() {
+            TypedToplevel::TFunDef(name, args, box body, ty) => {
+                assert_eq!(name, "curried_add");
+                assert_eq!(args, vec![("x".to_owned(), Type::TInt)]);
+                assert_eq!(ty, expected_fun_type);
+            }
+        }
+    }
+
+    #[test]
+    fn infer_toplevel_with_applied_lambda_in_body() {
         let fun_type = Type::TFun(Type::TInt.b(), Type::TInt.b());
         let lambda = Expr::Lam(
             vec!["y".to_owned()],
@@ -795,7 +642,7 @@ mod tests {
             )
             .b(),
         );
-        let fun_body = Expr::App(Expr::Var("x".to_owned()).b(), lambda.b());
+        let fun_body = Expr::App(lambda.b(), Expr::Var("x".to_owned()).b());
         let fundef = Toplevel::FunDef(
             "test".to_owned(),
             fun_type,
@@ -806,8 +653,15 @@ mod tests {
         let prog = Prog(vec![fundef]);
 
         let inferred = infer_all(prog);
-        dbg!(inferred.len());
-        panic!("{:?}", inferred)
+        assert_eq!(inferred.len(), 1);
+        let typed_toplevel = inferred[0].clone();
+        match typed_toplevel {
+            TypedToplevel::TFunDef(name, args, body, ty) => {
+                assert_eq!(name, "test".to_owned());
+                assert_eq!(args.len(), 1);
+                assert_eq!(ty, Type::TInt);
+            }
+        }
     }
 
     /*
