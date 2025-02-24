@@ -12,12 +12,12 @@ use crate::{
     types::*,
 };
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 enum Constraint {
     TypeEqual(Type, Type),
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 struct TypeOutput {
     constraints: Vec<Constraint>,
     texp: TypedExpr,
