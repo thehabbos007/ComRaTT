@@ -1370,10 +1370,9 @@ mod tests {
             unification_table: InPlaceUnificationTable::default(),
         };
         let (ty, output) = inference.infer(&mut context, expr.b());
-        dbg!(&output);
+        inference.unification(output.constraints).unwrap();
         let (_, ty) = inference.substitute(ty);
         let (_, texp) = inference.substitute_texp(output.texp);
-        dbg!(&ty);
         assert_eq!(ty, Type::TInt);
         assert_eq!(texp, expected_outer_app);
     }
