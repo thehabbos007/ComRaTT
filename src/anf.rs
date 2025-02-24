@@ -3,8 +3,6 @@ use crate::types::Sym;
 use std::collections::BTreeSet;
 use std::ops::Deref;
 
-type Param = (Sym, Type);
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AExpr {
     Const(Const, Type),

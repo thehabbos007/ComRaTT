@@ -270,6 +270,7 @@ impl<'a> AnfWasmEmitter<'a> {
             Type::TUnit => ValType::I32,
             Type::TFun(_, _) => panic!("Function types not supported as value types"),
             Type::TProduct(_) => panic!("Product types not supported as value types"),
+            Type::TVar(_) => panic!("Type variables not supported as value types"),
         }
     }
 }

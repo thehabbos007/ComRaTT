@@ -89,7 +89,7 @@ macro_rules! assert_typed_expr {
 
 pub fn final_type(ty: &Type) -> Type {
     match ty {
-        Type::TInt | Type::TBool | Type::TUnit => ty.clone(),
+        Type::TInt | Type::TBool | Type::TUnit | Type::TVar(_) => ty.clone(),
         Type::TFun(_, t2) => final_type(t2),
         Type::TProduct(ts) => final_type_tproduct(ts),
     }

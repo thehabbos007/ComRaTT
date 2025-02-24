@@ -1,3 +1,4 @@
+use ena::unify::{EqUnifyValue, UnifyKey};
 use std::ops::Deref;
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
@@ -42,6 +43,24 @@ impl Expr {
     }
 }
 
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Debug)]
+pub struct TypeVar(pub u32);
+impl UnifyKey for TypeVar {
+    type Value = Option<Type>;
+
+    fn index(&self) -> u32 {
+        self.0
+    }
+
+    fn from_index(u: u32) -> Self {
+        Self(u)
+    }
+
+    fn tag() -> &'static str {
+        "TypeVar"
+    }
+}
+
 #[derive(PartialEq, Eq, Debug, Clone, Hash, PartialOrd, Ord)]
 pub enum Type {
     TInt,
@@ -49,11 +68,39 @@ pub enum Type {
     TUnit,
     TFun(Box<Type>, Box<Type>),
     TProduct(Vec<Type>),
+    TVar(TypeVar),
 }
+
+impl EqUnifyValue for Type {}
 
 impl Type {
     pub fn b(self) -> Box<Self> {
         Box::new(self)
+    }
+
+    pub fn occurs_check(&self, var: TypeVar) -> Result<(), Type> {
+        match self {
+            Type::TInt => Ok(()),
+            Type::TBool => Ok(()),
+            Type::TUnit => Ok(()),
+            Type::TVar(v) => {
+                if *v == var {
+                    Err(Type::TVar(*v))
+                } else {
+                    Ok(())
+                }
+            }
+            Type::TFun(from, to) => {
+                from.occurs_check(var).map_err(|_| self.clone())?;
+                to.occurs_check(var).map_err(|_| self.clone())
+            }
+            Type::TProduct(ts) => {
+                for t in ts {
+                    t.occurs_check(var).map_err(|_| self.clone())?
+                }
+                Ok(())
+            }
+        }
     }
 }
 

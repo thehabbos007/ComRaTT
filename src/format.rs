@@ -126,6 +126,7 @@ impl Type {
             Type::TInt => "int".to_string(),
             Type::TBool => "bool".to_string(),
             Type::TUnit => "()".to_string(),
+            Type::TVar(type_var) => format!("TVar {}", type_var.0),
             Type::TFun(t1, t2) => {
                 let t1_str = match **t1 {
                     Type::TFun(_, _) => format!("({})", t1.to_string()),
