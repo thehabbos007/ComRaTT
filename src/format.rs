@@ -233,6 +233,8 @@ impl Toplevel {
                     body.to_string()
                 )
             }
+            Toplevel::Channel(channel) => format!("chan {channel};"),
+            Toplevel::Output(out, expr) => format!("{} <- {}", out, expr.to_string()),
         }
     }
 }

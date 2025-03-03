@@ -117,6 +117,9 @@ pub enum TokenKind {
     #[token("let")]
     Let,
 
+    #[token("def")]
+    Def,
+
     #[token("in")]
     In,
 

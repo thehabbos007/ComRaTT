@@ -107,6 +107,8 @@ impl Type {
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub enum Toplevel {
     FunDef(String, Type, Vec<String>, Box<Expr>),
+    Channel(String),
+    Output(String, Box<Expr>),
 }
 
 #[derive(PartialEq, Eq, Debug, Clone)]

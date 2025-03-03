@@ -218,7 +218,7 @@ fn fundef<'a>(input: &mut Input<'a>) -> Result<Toplevel> {
             preceded(TokenKind::Colon, typ).context(StrContext::Expected(
                 StrContextValue::Description("function type annotation"),
             )),
-            preceded(TokenKind::Let, TokenKind::Ident).context(StrContext::Expected(
+            preceded(TokenKind::Def, TokenKind::Ident).context(StrContext::Expected(
                 StrContextValue::Description("binding name"),
             )),
             repeat(0.., TokenKind::Ident)
@@ -249,17 +249,6 @@ pub fn prog<'a>(input: &mut Input<'a>) -> Result<Prog> {
         )))
         .parse_next(input)
 }
-
-// impl std::str::FromStr for Prog {
-//     type Err = ComRaTTError;
-
-//     fn from_str(input: &str) -> Result<Self, Self::Err> {
-//         prog.parse(input).map_err(|e| {
-//             eprintln!("Full parse error: {:?}", e);
-//             ComRaTTError::from_parse(e, input)
-//         })
-//     }
-// }
 
 #[cfg(test)]
 mod tests {
@@ -475,7 +464,7 @@ mod tests {
 
     #[test]
     fn test_function_def() {
-        let input = "id: int -> int let id x = x;";
+        let input = "id: int -> int def id x = x;";
         let tokens = tokenize(input);
         let mut token_slice = TokenSlice::new(&tokens);
         assert_eq!(
@@ -493,10 +482,10 @@ mod tests {
     fn test_program_many_def() {
         let input = r#"
           id: int -> int
-          let id x = x;
+          def id x = x;
 
           const: int
-          let const y = 42;
+          def const y = 42;
         "#;
         let tokens = tokenize(input);
         let mut token_slice = TokenSlice::new(&tokens);
@@ -509,14 +498,14 @@ mod tests {
     fn test_is_prime() {
         let input = r#"
             mod_op : int -> int -> int
-            let mod_op n m =
+            def mod_op n m =
               n - ((n / m) * m);
 
             check_prime_helper : int -> int -> bool
-            let check_prime_helper n divisor = false;
+            def check_prime_helper n divisor = false;
 
             main : int -> bool
-            let main x = is_prime x;
+            def main x = is_prime x;
             "#;
 
         let tokens = tokenize(input);

@@ -562,7 +562,7 @@ impl Inference {
                         panic!("Error: Unsolved constraints");
                     }
                 }
-                _ => panic!("Error: Non-annotated function"),
+                _ => panic!("Error: Cannot infer channel/output"),
             }
         }
 

@@ -1,9 +1,9 @@
 mod_op : int -> int -> int
-let mod_op n m =
+def mod_op n m =
   n - ((n / m) * m);
 
 check_prime_helper : int -> int -> bool
-let check_prime_helper n divisor =
+def check_prime_helper n divisor =
   if (divisor * divisor > n)
   then true
   else
@@ -12,10 +12,10 @@ let check_prime_helper n divisor =
      else (check_prime_helper n (divisor + 1)));
 
 is_prime : int -> bool
-let is_prime n =
+def is_prime n =
   if (n <= 1)
   then false
   else (check_prime_helper n 2);
 
 main : int -> bool
-let main x = is_prime x;
+def main x = is_prime x;
