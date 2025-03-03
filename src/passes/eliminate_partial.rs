@@ -15,8 +15,14 @@ impl Pass for PartialElimination {
         let defs = prog.0;
         let defs = defs
             .into_iter()
-            .map(|TypedToplevel::TFunDef(name, args, body, typ)| {
-                TypedToplevel::TFunDef(name, args, body.map_box(|b| self.eliminate_partial(b)), typ)
+            .map(|def| match def {
+                TypedToplevel::TFunDef(name, args, body, typ) => TypedToplevel::TFunDef(
+                    name,
+                    args,
+                    body.map_box(|b| self.eliminate_partial(b)),
+                    typ,
+                ),
+                def => def,
             })
             .collect_vec();
 

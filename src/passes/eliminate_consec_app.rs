@@ -12,8 +12,14 @@ impl Pass for EliminateConsecApp {
         let defs = prog.0;
         let defs = defs
             .into_iter()
-            .map(|TypedToplevel::TFunDef(name, args, body, typ)| {
-                TypedToplevel::TFunDef(name, args, body.map_box(|b| self.eliminate_consec(b)), typ)
+            .map(|def| match def {
+                TypedToplevel::TFunDef(name, args, body, typ) => TypedToplevel::TFunDef(
+                    name,
+                    args,
+                    body.map_box(|b| self.eliminate_consec(b)),
+                    typ,
+                ),
+                def => def,
             })
             .collect_vec();
 

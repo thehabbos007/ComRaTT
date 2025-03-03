@@ -1,5 +1,6 @@
 #![feature(box_patterns)]
 #![feature(let_chains)]
+#![feature(assert_matches)]
 
 pub mod anf;
 pub mod backend;

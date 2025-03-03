@@ -120,6 +120,9 @@ pub enum TokenKind {
     #[token("def")]
     Def,
 
+    #[token("chan")]
+    Chan,
+
     #[token("in")]
     In,
 
@@ -175,7 +178,10 @@ pub enum TokenKind {
     Equal,
 
     #[token("->")]
-    Arrow,
+    RArrow,
+
+    #[token("<-")]
+    LArrow,
 
     #[token(":")]
     Colon,

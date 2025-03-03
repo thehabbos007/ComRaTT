@@ -48,8 +48,12 @@ impl TypedToplevel {
                 name.clone(),
                 typ.clone(),
                 args.clone().into_iter().map(|(name, _)| name).collect_vec(),
-                body.untyped().b(),
+                body.untyped(),
             ),
+            TypedToplevel::Channel(name) => Toplevel::Channel(name.to_owned()),
+            TypedToplevel::Output(name, typed_expr) => {
+                Toplevel::Output(name.to_owned(), typed_expr.untyped())
+            }
         }
     }
 
@@ -60,19 +64,7 @@ impl TypedToplevel {
 
 impl TypedProg {
     pub fn untyped(&self) -> Prog {
-        Prog(
-            self.0
-                .iter()
-                .map(|def| match def {
-                    TypedToplevel::TFunDef(name, args, body, typ) => Toplevel::FunDef(
-                        name.clone(),
-                        typ.clone(),
-                        args.clone().into_iter().map(|(name, _)| name).collect_vec(),
-                        body.untyped().b(),
-                    ),
-                })
-                .collect(),
-        )
+        Prog(self.0.iter().map(TypedToplevel::untyped).collect())
     }
 
     pub fn to_string(&self) -> String {
@@ -283,6 +275,8 @@ impl AnfToplevel {
                     body.to_string()
                 )
             }
+            AnfToplevel::Channel(name) => format!("channel {};", name),
+            AnfToplevel::Output(name, aexpr) => format!("{} <- {};", name, aexpr.to_string()),
         }
     }
 }

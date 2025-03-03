@@ -16,12 +16,15 @@ impl Pass for LambdaLift {
 
         let (lifted_defs, lifted_lambdas): (Vec<_>, Vec<_>) = defs
             .into_iter()
-            .map(|TypedToplevel::TFunDef(name, args, body, typ)| {
-                let (lifted_body, lambda_defs) = self.lambda_lift(&args, *body);
-                (
-                    TypedToplevel::TFunDef(name, args, lifted_body.b(), typ),
-                    lambda_defs,
-                )
+            .map(|def| match def {
+                TypedToplevel::TFunDef(name, args, body, typ) => {
+                    let (lifted_body, lambda_defs) = self.lambda_lift(&args, *body);
+                    (
+                        TypedToplevel::TFunDef(name, args, lifted_body.b(), typ),
+                        lambda_defs,
+                    )
+                }
+                def => (def, vec![]),
             })
             .unzip();
 
@@ -311,7 +314,9 @@ mod tests {
     ) {
         assert!(!globals.is_empty(), "Expected lifted functions");
 
-        let TypedToplevel::TFunDef(name, args, _, _) = &globals[0];
+        let TypedToplevel::TFunDef(name, args, _, _) = &globals[0] else {
+            panic!("Didn't get fun def")
+        };
 
         assert!(name.starts_with("#lambda"), "Expected lifted lambda name");
         assert_eq!(

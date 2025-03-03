@@ -50,12 +50,16 @@ impl TypedExpr {
 pub enum TypedToplevel {
     /// A function definition with (name, args and their types, body expression, return type)
     TFunDef(Sym, Vec<(Sym, Type)>, Box<TypedExpr>, Type),
+    Channel(String),
+    Output(String, Box<TypedExpr>),
 }
 
 impl TypedToplevel {
     pub fn get_type(&self) -> Type {
         match self {
             TypedToplevel::TFunDef(_, _, _, typ) => typ.clone(),
+            TypedToplevel::Channel(_) => panic!("Channel do not have types"),
+            TypedToplevel::Output(_, typed_expr) => typed_expr.ty(),
         }
     }
 }

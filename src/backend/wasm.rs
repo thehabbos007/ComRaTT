@@ -106,7 +106,9 @@ impl<'a> WasmEmitter<'a> {
     }
 
     fn forward_declare_functions(&mut self, def: &'a TypedToplevel) {
-        let TypedToplevel::TFunDef(name, args, _body, ret_type) = def;
+        let TypedToplevel::TFunDef(name, args, _body, ret_type) = def else {
+            return;
+        };
 
         let type_idx = self.register_function_type(name, args, ret_type);
         self.function_section.function(type_idx);
@@ -154,6 +156,9 @@ impl<'a> WasmEmitter<'a> {
                         .export("main", ExportKind::Func, func_idx);
                 }
             }
+
+            TypedToplevel::Channel(_) => {}
+            TypedToplevel::Output(_, _) => {}
         }
     }
 

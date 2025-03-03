@@ -1,5 +1,5 @@
 use itertools::Itertools;
-use winnow::combinator::opt;
+use winnow::combinator::{fail, opt};
 use winnow::error::{ContextError, StrContext, StrContextValue};
 use winnow::token::literal;
 use winnow::{
@@ -47,6 +47,11 @@ fn atomic_typ<'a>(input: &mut Input<'a>) -> Result<Type> {
         TokenKind::TInt.value(Type::TInt),
         TokenKind::Unit.value(Type::TUnit),
         delimited(TokenKind::LParen, typ, TokenKind::RParen),
+        fail.context(StrContext::Label("type"))
+            .context(StrContext::Expected(StrContextValue::StringLiteral("bool")))
+            .context(StrContext::Expected(StrContextValue::StringLiteral("int")))
+            .context(StrContext::Expected(StrContextValue::StringLiteral("()")))
+            .context(StrContext::Expected(StrContextValue::StringLiteral("->"))),
     ))
     .context(StrContext::Label("type"))
     .context(StrContext::Expected(StrContextValue::Description(
@@ -57,7 +62,7 @@ fn atomic_typ<'a>(input: &mut Input<'a>) -> Result<Type> {
 
 fn arrow_typ<'a>(input: &mut Input<'a>) -> Result<Type> {
     let t1 = atomic_typ.parse_next(input)?;
-    let t2 = opt(preceded(TokenKind::Arrow, arrow_typ)).parse_next(input)?;
+    let t2 = opt(preceded(TokenKind::RArrow, arrow_typ)).parse_next(input)?;
 
     Ok(match t2 {
         Some(t2) => Type::TFun(t1.b(), t2.b()),
@@ -82,6 +87,20 @@ fn simple_expr<'a>(input: &mut Input<'a>) -> Result<Expr> {
         TokenKind::False.value(Expr::Const(Const::CBool(false))),
         TokenKind::Unit.value(Expr::Const(Const::CUnit)),
         delimited(TokenKind::LParen, expr, TokenKind::RParen),
+        fail.context(StrContext::Label("simple expr"))
+            .context(StrContext::Expected(StrContextValue::StringLiteral(
+                "identifier",
+            )))
+            .context(StrContext::Expected(StrContextValue::StringLiteral(
+                "integer literal",
+            )))
+            .context(StrContext::Expected(StrContextValue::StringLiteral("true")))
+            .context(StrContext::Expected(StrContextValue::StringLiteral(
+                "false",
+            )))
+            .context(StrContext::Expected(StrContextValue::StringLiteral("()")))
+            .context(StrContext::Expected(StrContextValue::StringLiteral("(")))
+            .context(StrContext::Expected(StrContextValue::StringLiteral(")"))),
     ))
     .parse_next(input)
 }
@@ -91,6 +110,16 @@ fn atomic_expr<'a>(input: &mut Input<'a>) -> Result<Expr> {
         preceded(TokenKind::Delay, simple_expr).map(|e| Expr::Delay(e.b())),
         preceded(TokenKind::Advance, TokenKind::Ident).map(|t| Expr::Advance(t.text().to_string())),
         simple_expr,
+        fail.context(StrContext::Label("atomic expression"))
+            .context(StrContext::Expected(StrContextValue::StringLiteral(
+                "delay",
+            )))
+            .context(StrContext::Expected(StrContextValue::StringLiteral(
+                "advance",
+            )))
+            .context(StrContext::Expected(StrContextValue::StringLiteral(
+                "simple expression",
+            ))),
     ))
     .parse_next(input)
 }
@@ -112,6 +141,9 @@ fn mul_op<'a>(input: &mut Input<'a>) -> Result<Binop> {
     alt((
         TokenKind::Times.value(Binop::Mul),
         TokenKind::Div.value(Binop::Div),
+        fail.context(StrContext::Label("multiplicative operator"))
+            .context(StrContext::Expected(StrContextValue::StringLiteral("*")))
+            .context(StrContext::Expected(StrContextValue::StringLiteral("/"))),
     ))
     .parse_next(input)
 }
@@ -120,6 +152,9 @@ fn add_op<'a>(input: &mut Input<'a>) -> Result<Binop> {
     alt((
         TokenKind::Plus.value(Binop::Add),
         TokenKind::Minus.value(Binop::Sub),
+        fail.context(StrContext::Label("additive operator"))
+            .context(StrContext::Expected(StrContextValue::StringLiteral("+")))
+            .context(StrContext::Expected(StrContextValue::StringLiteral("-"))),
     ))
     .parse_next(input)
 }
@@ -132,6 +167,13 @@ fn compare<'a>(input: &mut Input<'a>) -> Result<Binop> {
         TokenKind::Gt.value(Binop::Gt),
         TokenKind::Gte.value(Binop::Gte),
         TokenKind::Neq.value(Binop::Neq),
+        fail.context(StrContext::Label("comparative operator"))
+            .context(StrContext::Expected(StrContextValue::StringLiteral("=")))
+            .context(StrContext::Expected(StrContextValue::StringLiteral("<")))
+            .context(StrContext::Expected(StrContextValue::StringLiteral("<=")))
+            .context(StrContext::Expected(StrContextValue::StringLiteral(">")))
+            .context(StrContext::Expected(StrContextValue::StringLiteral(">=")))
+            .context(StrContext::Expected(StrContextValue::StringLiteral("<>"))),
     ))
     .parse_next(input)
 }
@@ -185,7 +227,7 @@ fn expr<'a>(input: &mut Input<'a>) -> Result<Expr> {
             (
                 repeat(0.., TokenKind::Ident)
                     .map(|xs: Vec<&Token>| xs.into_iter().map(|x| x.text().to_string()).collect()),
-                preceded(TokenKind::Arrow, expr),
+                preceded(TokenKind::RArrow, expr),
             ),
         )
         .map(|(xs, e)| Expr::Lam(xs, Box::new(e))),
@@ -205,6 +247,13 @@ fn expr<'a>(input: &mut Input<'a>) -> Result<Expr> {
             )
         }),
         compare_expr,
+        fail.context(StrContext::Label("expr"))
+            .context(StrContext::Expected(StrContextValue::StringLiteral("let")))
+            .context(StrContext::Expected(StrContextValue::StringLiteral("fun")))
+            .context(StrContext::Expected(StrContextValue::StringLiteral("if")))
+            .context(StrContext::Expected(StrContextValue::StringLiteral(
+                "expression",
+            ))),
     ))
     .parse_next(input)
 }
@@ -232,7 +281,46 @@ fn fundef<'a>(input: &mut Input<'a>) -> Result<Toplevel> {
         ),
         TokenKind::Semi,
     )
-    .map(|(name, t, _def_name, args, e)| Toplevel::FunDef(name.text().to_string(), t, args, e.b()))
+    .map(|(name, t, _def_name, args, e)| Toplevel::FunDef(name.text().to_string(), t, args, e))
+    .context(StrContext::Label("function definition"))
+    .context(StrContext::Expected(StrContextValue::Description(
+        "function definition",
+    )));
+
+    parser.parse_next(input)
+}
+
+fn chan<'a>(input: &mut Input<'a>) -> Result<Toplevel> {
+    let mut parser = terminated(
+        (
+            preceded(TokenKind::Chan, TokenKind::Ident).context(StrContext::Expected(
+                StrContextValue::Description("binding name"),
+            )),
+        ),
+        TokenKind::Semi,
+    )
+    .map(|(name,)| Toplevel::Channel(name.text().to_string()))
+    .context(StrContext::Label("function definition"))
+    .context(StrContext::Expected(StrContextValue::Description(
+        "function definition",
+    )));
+
+    parser.parse_next(input)
+}
+
+fn output<'a>(input: &mut Input<'a>) -> Result<Toplevel> {
+    let mut parser = terminated(
+        (
+            TokenKind::Ident.context(StrContext::Expected(StrContextValue::Description(
+                "function name",
+            ))),
+            preceded(TokenKind::LArrow, expr).context(StrContext::Expected(
+                StrContextValue::Description("binding name"),
+            )),
+        ),
+        TokenKind::Semi,
+    )
+    .map(|(output, expr)| Toplevel::Output(output.text().to_string(), expr))
     .context(StrContext::Label("function definition"))
     .context(StrContext::Expected(StrContextValue::Description(
         "function definition",
@@ -242,7 +330,22 @@ fn fundef<'a>(input: &mut Input<'a>) -> Result<Toplevel> {
 }
 
 pub fn prog<'a>(input: &mut Input<'a>) -> Result<Prog> {
-    terminated(repeat(0.., fundef).map(Prog), TokenKind::EOF)
+    let toplevel = alt((
+        fundef,
+        chan,
+        output,
+        fail.context(StrContext::Label("toplevel"))
+            .context(StrContext::Expected(StrContextValue::StringLiteral(
+                "function definition",
+            )))
+            .context(StrContext::Expected(StrContextValue::StringLiteral(
+                "channel definition",
+            )))
+            .context(StrContext::Expected(StrContextValue::StringLiteral(
+                "output definition",
+            ))),
+    ));
+    terminated(repeat(0.., toplevel).map(Prog), TokenKind::EOF)
         .context(StrContext::Label("program"))
         .context(StrContext::Expected(StrContextValue::Description(
             "top level function definition",
@@ -473,25 +576,57 @@ mod tests {
                 "id".to_string(),
                 Type::TFun(Type::TInt.b(), Type::TInt.b()),
                 vec!["x".to_string()],
-                Box::new(Expr::Var("x".to_string()))
+                Expr::Var("x".to_string())
             ))
+        );
+    }
+
+    #[test]
+    fn test_chan_def() {
+        let input = "chan boo;";
+        let tokens = tokenize(input);
+        let mut token_slice = TokenSlice::new(&tokens);
+        assert_eq!(
+            chan.parse_next(&mut token_slice).unwrap(),
+            Toplevel::Channel("boo".to_owned())
+        );
+    }
+
+    #[test]
+    fn test_output() {
+        let input = "print <- 2 = 3;";
+        let tokens = tokenize(input);
+        let mut token_slice = TokenSlice::new(&tokens);
+        assert_eq!(
+            output.parse_next(&mut token_slice).unwrap(),
+            Toplevel::Output(
+                "print".to_owned(),
+                Expr::Prim(
+                    Binop::Eq,
+                    Expr::Const(Const::CInt(2)).b(),
+                    Expr::Const(Const::CInt(3)).b()
+                )
+            )
         );
     }
 
     #[test]
     fn test_program_many_def() {
         let input = r#"
+          chan cool;
+
           id: int -> int
           def id x = x;
 
           const: int
           def const y = 42;
+
+          print <- const 42;
         "#;
         let tokens = tokenize(input);
         let mut token_slice = TokenSlice::new(&tokens);
-        let result = prog.parse_next(&mut token_slice);
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap().0.len(), 2);
+        let result = prog.parse_next(&mut token_slice).unwrap();
+        assert_eq!(result.0.len(), 4);
     }
 
     #[test]

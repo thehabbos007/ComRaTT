@@ -119,6 +119,11 @@ impl Pass<TypedProg, AnfProg> for ANFConversion {
                     let anf_body = self.normalize(*body);
                     AnfToplevel::FunDef(name, args, anf_body, ty)
                 }
+                TypedToplevel::Channel(chan) => AnfToplevel::Channel(chan),
+                TypedToplevel::Output(name, body) => {
+                    let (aexpr, _) = self.normalize_atom(*body);
+                    AnfToplevel::Output(name, aexpr)
+                }
             })
             .collect();
         AnfProg(toplevel)
