@@ -178,23 +178,24 @@ impl Inference {
             }
             Expr::App(fun, arg) => match self.infer(context, fun.clone()) {
                 (ty, mut fun_output) => {
-                    let (arg_ty, mut arg_output) = self.infer(context, arg);
+                    let (fun_ty, fun_output) = self.infer(context, fun.clone());
+                    let (arg_ty, arg_output) = self.infer(context, arg);
+
                     let ret_ty = Type::TVar(self.fresh_ty_var());
-                    let fun_ty = Type::TFun(arg_ty.b(), ret_ty.clone().b());
+                    let mut constraints = fun_output.constraints;
+                    constraints.extend(arg_output.constraints);
+                    constraints.push(Constraint::TypeEqual(
+                        fun_ty,
+                        Type::TFun(arg_ty.b(), ret_ty.clone().b()),
+                    ));
 
-                    let fun_output = self.check(context, fun, fun_ty);
-
-                    return (
+                    (
                         ret_ty.clone(),
                         TypeOutput::new(
-                            arg_output
-                                .constraints
-                                .into_iter()
-                                .chain(fun_output.constraints)
-                                .collect(),
+                            constraints,
                             TypedExpr::TApp(fun_output.texp.b(), vec![arg_output.texp], ret_ty),
                         ),
-                    );
+                    )
                 }
                 (ty, _) => panic!(
                     "infer app: Type of function being applied was not TFun but {:?}",
