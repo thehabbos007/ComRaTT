@@ -41,12 +41,9 @@ impl CExpr {
     }
 
     pub fn traverse_locals<'a>(&'a self, locals: &mut BTreeSet<(&'a str, Type)>) {
-        match self {
-            CExpr::IfThenElse(_, then_branch, else_branch, _) => {
-                then_branch.traverse_locals(locals);
-                else_branch.traverse_locals(locals);
-            }
-            _ => {}
+        if let CExpr::IfThenElse(_, then_branch, else_branch, _) = self {
+            then_branch.traverse_locals(locals);
+            else_branch.traverse_locals(locals);
         }
     }
 }

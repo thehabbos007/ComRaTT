@@ -8,11 +8,11 @@ pub struct Range {
 
 impl Range {
     pub fn start(&self) -> usize {
-        self.start as usize
+        self.start
     }
 
     pub fn end(&self) -> usize {
-        self.end as usize
+        self.end
     }
 }
 
@@ -30,7 +30,7 @@ impl fmt::Display for Range {
 
 impl From<Range> for std::ops::Range<usize> {
     fn from(range: Range) -> std::ops::Range<usize> {
-        (range.start as usize)..(range.end as usize)
+        range.start..range.end
     }
 }
 

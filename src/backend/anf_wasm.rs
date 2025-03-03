@@ -255,7 +255,7 @@ impl<'a> AnfWasmEmitter<'a> {
             .map(|(_, ty)| self.wasm_type(ty))
             .collect::<Vec<_>>();
 
-        let results = vec![self.wasm_type(ret_type)];
+        let results = [self.wasm_type(ret_type)];
 
         let idx = self.type_map.len() as u32;
 

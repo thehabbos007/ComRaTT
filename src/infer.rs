@@ -67,13 +67,13 @@ impl Inference {
                 (Type::TProduct(types), type_output) if (idx as usize) < types.len() => {
                     let typ = types[idx as usize].clone();
                     // Propagate the constraints and create a typed access expression
-                    return (
+                    (
                         typ.clone(),
                         TypeOutput::new(
                             type_output.constraints,
                             TypedExpr::TAccess(type_output.texp.b(), idx, typ),
                         ),
-                    );
+                    )
                 }
                 // Is panic the right thing to do? The alternative is to create an insatisfiable constraint maybe?
                 _ => panic!("Type checking access with out-of-bounds index"),
@@ -92,13 +92,13 @@ impl Inference {
                             .unzip();
 
                     let tproduct = Type::TProduct(types);
-                    return (
+                    (
                         tproduct.clone(),
                         TypeOutput::new(
                             constraints.into_iter().flatten().collect(),
                             TypedExpr::TTuple(tyexps, tproduct),
                         ),
-                    );
+                    )
                 }
             }
             Expr::IfThenElse(condition, then, elseb) => match (
@@ -131,7 +131,7 @@ impl Inference {
             Expr::Delay(e) => {
                 // Call recursively, propagate constraints and generate a new '() -> ty'
                 let (ty, type_output) = self.infer(context, *e);
-                return (
+                (
                     Type::TFun(Type::TUnit.b(), ty.clone().b()),
                     TypeOutput::new(
                         type_output.constraints,
@@ -141,12 +141,12 @@ impl Inference {
                             Type::TFun(Type::TUnit.b(), ty.b()),
                         ),
                     ),
-                );
+                )
             }
             Expr::Advance(name) => match context.get(&name) {
                 Some(Type::TFun(box Type::TUnit, ty)) => {
                     let fun_type = Type::TFun(Type::TUnit.b(), ty.clone().b());
-                    return (
+                    (
                         *ty.clone(),
                         TypeOutput::new(
                             vec![],
@@ -156,7 +156,7 @@ impl Inference {
                                 *ty.clone(),
                             ),
                         ),
-                    );
+                    )
                 }
                 _ => panic!(""),
             },
@@ -168,13 +168,13 @@ impl Inference {
                 let mut constraints = Vec::new();
                 constraints.append(&mut rhs_output.constraints);
                 constraints.append(&mut body_output.constraints);
-                return (
+                (
                     body_type.clone(),
                     TypeOutput::new(
                         constraints,
                         TypedExpr::TLet(name, body_type, rhs_output.texp.b(), body_output.texp.b()),
                     ),
-                );
+                )
             }
             Expr::App(fun, arg) => match self.infer(context, *fun) {
                 (fun_ty, mut fun_output) => {
@@ -320,10 +320,10 @@ impl Inference {
                     body_output.texp.b(),
                     lambda_type.clone(),
                 );
-                return (
+                (
                     lambda_type,
                     TypeOutput::new(body_output.constraints, lambda),
-                );
+                )
             }
         }
     }
@@ -542,7 +542,7 @@ impl Inference {
                     let (body_type, body_output) = self.infer(&mut cloned_context, body);
 
                     // Constraint solving went well
-                    if let Ok(_) = self.unification(body_output.constraints) {
+                    if self.unification(body_output.constraints).is_ok() {
                         // Substitute types
                         let (mut unbound, ty) = self.substitute(body_type);
                         let (unbound_body, body) = self.substitute_texp(body_output.texp);

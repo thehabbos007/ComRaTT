@@ -11,7 +11,7 @@ use crate::{
 impl TypedExpr {
     pub fn untyped(&self) -> Expr {
         match self {
-            TypedExpr::TConst(c, _) => Expr::Const(c.clone()),
+            TypedExpr::TConst(c, _) => Expr::Const(*c),
             TypedExpr::TName(x, _) => Expr::Var(x.clone()),
             TypedExpr::TLam(args, body, _) => Expr::Lam(
                 args.clone().into_iter().map(|(name, _)| name).collect_vec(),
@@ -35,10 +35,6 @@ impl TypedExpr {
             TypedExpr::TAccess(e, i, _) => Expr::Access(e.untyped().b(), *i),
         }
     }
-
-    pub fn to_string(&self) -> String {
-        self.untyped().to_string()
-    }
 }
 
 impl TypedToplevel {
@@ -56,112 +52,82 @@ impl TypedToplevel {
             }
         }
     }
-
-    pub fn to_string(&self) -> String {
-        self.untyped().to_string()
-    }
 }
 
 impl TypedProg {
     pub fn untyped(&self) -> Prog {
         Prog(self.0.iter().map(TypedToplevel::untyped).collect())
     }
-
-    pub fn to_string(&self) -> String {
-        self.untyped().to_string()
-    }
-}
-
-impl Binop {
-    fn to_string(&self) -> String {
-        match self {
-            Binop::Add => "+".to_string(),
-            Binop::Mul => "*".to_string(),
-            Binop::Div => "/".to_string(),
-            Binop::Sub => "-".to_string(),
-            Binop::Eq => "=".to_string(),
-            Binop::Neq => "<>".to_string(),
-            Binop::Lt => "<".to_string(),
-            Binop::Lte => "<=".to_string(),
-            Binop::Gt => ">".to_string(),
-            Binop::Gte => ">=".to_string(),
-        }
-    }
 }
 
 impl Display for Binop {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.to_string())
-    }
-}
-
-impl Const {
-    fn to_string(&self) -> String {
-        match self {
-            Const::CInt(n) => n.to_string(),
-            Const::CBool(true) => "true".to_string(),
-            Const::CBool(false) => "false".to_string(),
-            Const::CUnit => "()".to_string(),
-        }
+        let str = match self {
+            Binop::Add => "+",
+            Binop::Mul => "*",
+            Binop::Div => "/",
+            Binop::Sub => "-",
+            Binop::Eq => "=",
+            Binop::Neq => "<>",
+            Binop::Lt => "<",
+            Binop::Lte => "<=",
+            Binop::Gt => ">",
+            Binop::Gte => ">=",
+        };
+        write!(f, "{}", str)
     }
 }
 
 impl Display for Const {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.to_string())
-    }
-}
-
-impl Type {
-    fn to_string(&self) -> String {
         match self {
-            Type::TInt => "int".to_string(),
-            Type::TBool => "bool".to_string(),
-            Type::TUnit => "()".to_string(),
-            Type::TVar(type_var) => format!("TVar {}", type_var.0),
-            Type::TFun(t1, t2) => {
-                let t1_str = match **t1 {
-                    Type::TFun(_, _) => format!("({})", t1.to_string()),
-                    _ => t1.to_string(),
-                };
-                format!("{} -> {}", t1_str, t2.to_string())
-            }
-            Type::TProduct(types) => {
-                format!(
-                    "({})",
-                    types
-                        .iter()
-                        .map(|t| t.to_string())
-                        .collect::<Vec<_>>()
-                        .join(" * ")
-                )
-            }
+            Const::CInt(n) => write!(f, "{}", n),
+            Const::CBool(true) => write!(f, "true"),
+            Const::CBool(false) => write!(f, "false"),
+            Const::CUnit => write!(f, "()"),
         }
     }
 }
 
 impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.to_string())
+        match self {
+            Type::TInt => write!(f, "int"),
+            Type::TBool => write!(f, "bool"),
+            Type::TUnit => write!(f, "()"),
+            Type::TVar(type_var) => write!(f, "TVar {}", type_var.0),
+            Type::TFun(t1, t2) => write!(f, "{} -> {}", t1, t2),
+            Type::TProduct(types) => {
+                write!(
+                    f,
+                    "({})",
+                    (types
+                        .iter()
+                        .map(|t| t.to_string())
+                        .collect::<Vec<_>>()
+                        .join(" * "))
+                )
+            }
+        }
     }
 }
 
 impl Expr {
-    fn to_string(&self) -> String {
+    fn print_to_str(&self) -> String {
         match self {
             Expr::Const(c) => c.to_string(),
             Expr::Var(x) => x.clone(),
             Expr::Lam(args, body) => {
-                format!("fun {} -> {}", args.join(" "), body.to_string())
+                format!("fun {} -> {}", args.join(" "), body)
             }
             Expr::App(e1, e2) => {
                 let e1_str = match **e1 {
-                    Expr::Lam(_, _) => format!("({})", e1.to_string()),
+                    Expr::Lam(_, _) => format!("({})", e1),
                     _ => e1.to_string(),
                 };
                 let e2_str = match **e2 {
                     Expr::App(_, _) | Expr::Lam(_, _) | Expr::Prim(_, _, _) => {
-                        format!("({})", e2.to_string())
+                        format!("({})", e2)
                     }
                     _ => e2.to_string(),
                 };
@@ -169,27 +135,22 @@ impl Expr {
             }
             Expr::Prim(op, e1, e2) => {
                 let e1_str = match **e1 {
-                    Expr::Prim(_, _, _) => format!("({})", e1.to_string()),
+                    Expr::Prim(_, _, _) => format!("({})", e1),
                     _ => e1.to_string(),
                 };
                 let e2_str = match **e2 {
-                    Expr::Prim(_, _, _) => format!("({})", e2.to_string()),
+                    Expr::Prim(_, _, _) => format!("({})", e2),
                     _ => e2.to_string(),
                 };
-                format!("{} {} {}", e1_str, op.to_string(), e2_str)
+                format!("{} {} {}", e1_str, op, e2_str)
             }
             Expr::Let(x, e1, e2) => {
-                format!("let {} = {} in {}", x, e1.to_string(), e2.to_string())
+                format!("let {} = {} in {}", x, e1, e2)
             }
             Expr::IfThenElse(cond, then_branch, else_branch) => {
-                format!(
-                    "if {} then {} else {}",
-                    cond.to_string(),
-                    then_branch.to_string(),
-                    else_branch.to_string()
-                )
+                format!("if {} then {} else {}", cond, then_branch, else_branch)
             }
-            Expr::Delay(e) => format!("delay {}", e.to_string()),
+            Expr::Delay(e) => format!("delay {}", e),
             Expr::Advance(x) => format!("advance {}", x),
             Expr::Tuple(exprs) => {
                 format!(
@@ -201,65 +162,63 @@ impl Expr {
                         .join(", ")
                 )
             }
-            Expr::Access(e, i) => format!("{}.{}", e.to_string(), i),
+            Expr::Access(e, i) => format!("{}.{}", e, i),
         }
     }
 }
 
 impl Display for Expr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.to_string())
+        write!(f, "{}", self.print_to_str())
     }
 }
 
 impl Toplevel {
-    fn to_string(&self) -> String {
+    fn print_to_str(&self) -> String {
         match self {
             Toplevel::FunDef(name, typ, args, body) => {
                 format!(
                     "{}: {}\nlet {} {} = {};\n",
                     name,
-                    typ.to_string(),
+                    typ,
                     name,
                     args.join(" "),
-                    body.to_string()
+                    body
                 )
             }
             Toplevel::Channel(channel) => format!("chan {channel};"),
-            Toplevel::Output(out, expr) => format!("{} <- {}", out, expr.to_string()),
+            Toplevel::Output(out, expr) => format!("{} <- {}", out, expr),
         }
     }
 }
 
 impl Display for Toplevel {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.to_string())
-    }
-}
-
-impl Prog {
-    pub fn to_string(&self) -> String {
-        self.0.iter().map(|def| def.to_string()).collect()
+        write!(f, "{}", self.print_to_str())
     }
 }
 
 impl Display for Prog {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.to_string())
+        for def in self.0.iter() {
+            writeln!(f, "{}", def)?;
+        }
+
+        Ok(())
     }
 }
 
-impl AnfProg {
-    pub fn to_string(&self) -> String {
-        self.iter()
-            .map(|t| t.to_string())
-            .collect::<Vec<_>>()
-            .join("\n")
+impl Display for AnfProg {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for p in self.iter() {
+            writeln!(f, "{}", p)?;
+        }
+
+        writeln!(f)
     }
 }
-
-impl AnfToplevel {
-    pub fn to_string(&self) -> String {
+impl Display for AnfToplevel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             AnfToplevel::FunDef(name, params, body, ret_ty) => {
                 let param_str = params
@@ -267,58 +226,46 @@ impl AnfToplevel {
                     .map(|(name, ty)| format!("{}: {}", name, ty))
                     .collect::<Vec<_>>()
                     .join(" ");
-                format!(
-                    "fun {}({}) : {} = {}",
-                    name,
-                    param_str,
-                    ret_ty,
-                    body.to_string()
-                )
+                writeln!(f, "fun {}({}) : {} =\n  {}", name, param_str, ret_ty, body)
             }
-            AnfToplevel::Channel(name) => format!("channel {};", name),
-            AnfToplevel::Output(name, aexpr) => format!("{} <- {};", name, aexpr.to_string()),
+            AnfToplevel::Channel(name) => writeln!(f, "channel {};", name),
+            AnfToplevel::Output(name, aexpr) => writeln!(f, "{} <- {};", name, aexpr),
         }
     }
 }
 
-impl AnfExpr {
-    pub fn to_string(&self) -> String {
+impl Display for AnfExpr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            AnfExpr::AExpr(a) => a.to_string(),
-            AnfExpr::CExp(c) => c.to_string(),
+            AnfExpr::AExpr(a) => write!(f, "{}", a),
+            AnfExpr::CExp(c) => write!(f, "{}", c),
             AnfExpr::Let(name, ty, val, body) => {
-                format!(
-                    "let {}: {} = {} in {}",
-                    name,
-                    ty,
-                    val.to_string(),
-                    body.to_string()
-                )
+                write!(f, "let {}: {} = {} in {}", name, ty, val, body)
             }
         }
     }
 }
 
-impl AExpr {
-    pub fn to_string(&self) -> String {
+impl Display for AExpr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            AExpr::Const(c, _) => c.to_string(),
-            AExpr::Var(s, _) => s.to_string(),
+            AExpr::Const(c, _) => write!(f, "{}", c),
+            AExpr::Var(s, _) => write!(f, "{}", s),
         }
     }
 }
 
-impl CExpr {
-    pub fn to_string(&self) -> String {
+impl Display for CExpr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            CExpr::Prim(op, a1, a2, _) => format!("{} {} {}", a1.to_string(), op, a2.to_string()),
-            CExpr::App(f, args, _) => {
+            CExpr::Prim(op, a1, a2, _) => write!(f, "{} {} {}", a1, op, a2),
+            CExpr::App(fun, args, _) => {
                 let args_str = args
                     .iter()
                     .map(|a| a.to_string())
                     .collect::<Vec<_>>()
                     .join(" ");
-                format!("{}({})", f.to_string(), args_str)
+                write!(f, "{}({})", fun, args_str)
             }
             CExpr::Tuple(elems, _) => {
                 let elems_str = elems
@@ -326,16 +273,11 @@ impl CExpr {
                     .map(|e| e.to_string())
                     .collect::<Vec<_>>()
                     .join(", ");
-                format!("({})", elems_str)
+                write!(f, "({})", elems_str)
             }
-            CExpr::Access(tup, idx, _) => format!("{}.{}", tup.to_string(), idx),
+            CExpr::Access(tup, idx, _) => write!(f, "{}.{}", tup, idx),
             CExpr::IfThenElse(cond, then_branch, else_branch, _) => {
-                format!(
-                    "if {} then {} else {}",
-                    cond.to_string(),
-                    then_branch.to_string(),
-                    else_branch.to_string()
-                )
+                write!(f, "if {} then {} else {}", cond, then_branch, else_branch)
             }
         }
     }

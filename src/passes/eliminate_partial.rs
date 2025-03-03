@@ -1,5 +1,7 @@
 use crate::source::Type;
-use crate::types::{final_type, TypedExpr, TypedProg, TypedToplevel};
+use crate::types::{
+    final_type, substitute_binding, unpack_type, TypedExpr, TypedProg, TypedToplevel,
+};
 use itertools::Itertools;
 use map_box::Map as _;
 
@@ -38,77 +40,6 @@ impl PartialElimination {
     fn unique_var_name(&mut self, x: &str) -> String {
         self.var_counter += 1;
         format!("#{x}_{}", self.var_counter)
-    }
-
-    fn substitute_binding(
-        &mut self,
-        bind_old: &str,
-        bind_new: &str,
-        aexpr: TypedExpr,
-    ) -> TypedExpr {
-        match aexpr {
-            TypedExpr::TName(binding, ty) if binding == bind_old => {
-                TypedExpr::TName(bind_new.to_string(), ty)
-            }
-            TypedExpr::TPrim(op, left, right, ty) => TypedExpr::TPrim(
-                op,
-                Box::new(self.substitute_binding(bind_old, bind_new, *left)),
-                Box::new(self.substitute_binding(bind_old, bind_new, *right)),
-                ty,
-            ),
-            TypedExpr::TLam(args, body, ty) => TypedExpr::TLam(
-                args,
-                Box::new(self.substitute_binding(bind_old, bind_new, *body)),
-                ty,
-            ),
-            TypedExpr::TApp(func, args, ty) => TypedExpr::TApp(
-                Box::new(self.substitute_binding(bind_old, bind_new, *func)),
-                args.into_iter()
-                    .map(|arg| self.substitute_binding(bind_old, bind_new, arg))
-                    .collect(),
-                ty,
-            ),
-            TypedExpr::TLet(name, ty, rhs, body) if name != bind_old => TypedExpr::TLet(
-                name,
-                ty,
-                Box::new(self.substitute_binding(bind_old, bind_new, *rhs)),
-                Box::new(self.substitute_binding(bind_old, bind_new, *body)),
-            ),
-            TypedExpr::TIfThenElse(condition, then_branch, else_branch, ty) => {
-                TypedExpr::TIfThenElse(
-                    Box::new(self.substitute_binding(bind_old, bind_new, *condition)),
-                    Box::new(self.substitute_binding(bind_old, bind_new, *then_branch)),
-                    Box::new(self.substitute_binding(bind_old, bind_new, *else_branch)),
-                    ty,
-                )
-            }
-            TypedExpr::TTuple(texps, ty) => TypedExpr::TTuple(
-                texps
-                    .into_iter()
-                    .map(|texp| self.substitute_binding(bind_old, bind_new, texp))
-                    .collect(),
-                ty,
-            ),
-            TypedExpr::TAccess(texp, idx, ty) => TypedExpr::TAccess(
-                Box::new(self.substitute_binding(bind_old, bind_new, *texp)),
-                idx,
-                ty,
-            ),
-            _ => aexpr,
-        }
-    }
-
-    fn unpack_type(&self, ty: &Type) -> Vec<Type> {
-        match ty {
-            Type::TInt | Type::TBool | Type::TUnit => vec![],
-            Type::TFun(t1, t2) => {
-                let mut types = vec![*t1.clone()];
-                types.extend(self.unpack_type(t2));
-                types
-            }
-            Type::TProduct(ts) => ts.clone(),
-            Type::TVar(_) => vec![],
-        }
     }
 
     fn generate_lambda_vars_and_app_vars(
@@ -150,7 +81,7 @@ impl PartialElimination {
                 typ,
             ),
             TypedExpr::TLet(bind_old, _, box TypedExpr::TName(bind_new, _), body) => {
-                self.substitute_binding(&bind_old, &bind_new, *body)
+                substitute_binding(&bind_old, &bind_new, *body)
             }
 
             TypedExpr::TLet(
@@ -159,7 +90,7 @@ impl PartialElimination {
                 box TypedExpr::TApp(lam, args, app_ty @ Type::TFun(_, _)),
                 body,
             ) => {
-                let eta_args = self.unpack_type(&app_ty);
+                let eta_args = unpack_type(&app_ty);
                 let (lambda_args, app_args) = self.generate_lambda_vars_and_app_vars(&eta_args);
                 let mut all_args = args;
                 all_args.extend(app_args);

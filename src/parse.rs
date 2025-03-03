@@ -41,7 +41,7 @@ pub fn text<'a, Registry>(
     move |input: &mut Input<'a>| literal(text).parse_next(input).map(|t| &t[0])
 }
 
-fn atomic_typ<'a>(input: &mut Input<'a>) -> Result<Type> {
+fn atomic_typ(input: &mut Input<'_>) -> Result<Type> {
     alt((
         TokenKind::TBool.value(Type::TBool),
         TokenKind::TInt.value(Type::TInt),
@@ -60,7 +60,7 @@ fn atomic_typ<'a>(input: &mut Input<'a>) -> Result<Type> {
     .parse_next(input)
 }
 
-fn arrow_typ<'a>(input: &mut Input<'a>) -> Result<Type> {
+fn arrow_typ(input: &mut Input<'_>) -> Result<Type> {
     let t1 = atomic_typ.parse_next(input)?;
     let t2 = opt(preceded(TokenKind::RArrow, arrow_typ)).parse_next(input)?;
 
@@ -70,7 +70,7 @@ fn arrow_typ<'a>(input: &mut Input<'a>) -> Result<Type> {
     })
 }
 
-fn typ<'a>(input: &mut Input<'a>) -> Result<Type> {
+fn typ(input: &mut Input<'_>) -> Result<Type> {
     arrow_typ
         .context(StrContext::Label("type"))
         .context(StrContext::Expected(StrContextValue::Description(
@@ -79,7 +79,7 @@ fn typ<'a>(input: &mut Input<'a>) -> Result<Type> {
         .parse_next(input)
 }
 
-fn simple_expr<'a>(input: &mut Input<'a>) -> Result<Expr> {
+fn simple_expr(input: &mut Input<'_>) -> Result<Expr> {
     alt((
         TokenKind::Ident.map(|t| Expr::Var(t.text().to_owned())),
         TokenKind::Int.try_map(|t| t.text().parse().map(|n| Expr::Const(Const::CInt(n)))),
@@ -105,7 +105,7 @@ fn simple_expr<'a>(input: &mut Input<'a>) -> Result<Expr> {
     .parse_next(input)
 }
 
-fn atomic_expr<'a>(input: &mut Input<'a>) -> Result<Expr> {
+fn atomic_expr(input: &mut Input<'_>) -> Result<Expr> {
     alt((
         preceded(TokenKind::Delay, simple_expr).map(|e| Expr::Delay(e.b())),
         preceded(TokenKind::Advance, TokenKind::Ident).map(|t| Expr::Advance(t.text().to_string())),
@@ -124,7 +124,7 @@ fn atomic_expr<'a>(input: &mut Input<'a>) -> Result<Expr> {
     .parse_next(input)
 }
 
-fn app_expr<'a>(input: &mut Input<'a>) -> Result<Expr> {
+fn app_expr(input: &mut Input<'_>) -> Result<Expr> {
     let first = atomic_expr.parse_next(input)?;
 
     // Try to parse a sequence of atomic expressions
@@ -137,7 +137,7 @@ fn app_expr<'a>(input: &mut Input<'a>) -> Result<Expr> {
     .parse_next(input)
 }
 
-fn mul_op<'a>(input: &mut Input<'a>) -> Result<Binop> {
+fn mul_op(input: &mut Input<'_>) -> Result<Binop> {
     alt((
         TokenKind::Times.value(Binop::Mul),
         TokenKind::Div.value(Binop::Div),
@@ -148,7 +148,7 @@ fn mul_op<'a>(input: &mut Input<'a>) -> Result<Binop> {
     .parse_next(input)
 }
 
-fn add_op<'a>(input: &mut Input<'a>) -> Result<Binop> {
+fn add_op(input: &mut Input<'_>) -> Result<Binop> {
     alt((
         TokenKind::Plus.value(Binop::Add),
         TokenKind::Minus.value(Binop::Sub),
@@ -159,7 +159,7 @@ fn add_op<'a>(input: &mut Input<'a>) -> Result<Binop> {
     .parse_next(input)
 }
 
-fn compare<'a>(input: &mut Input<'a>) -> Result<Binop> {
+fn compare(input: &mut Input<'_>) -> Result<Binop> {
     alt((
         TokenKind::Equal.value(Binop::Eq),
         TokenKind::Lt.value(Binop::Lt),
@@ -178,7 +178,7 @@ fn compare<'a>(input: &mut Input<'a>) -> Result<Binop> {
     .parse_next(input)
 }
 
-fn mul_expr<'a>(input: &mut Input<'a>) -> Result<Expr> {
+fn mul_expr(input: &mut Input<'_>) -> Result<Expr> {
     let first = app_expr.parse_next(input)?;
 
     repeat(0.., (mul_op, app_expr))
@@ -189,7 +189,7 @@ fn mul_expr<'a>(input: &mut Input<'a>) -> Result<Expr> {
         .parse_next(input)
 }
 
-fn add_expr<'a>(input: &mut Input<'a>) -> Result<Expr> {
+fn add_expr(input: &mut Input<'_>) -> Result<Expr> {
     let first = mul_expr.parse_next(input)?;
 
     repeat(0.., (add_op, mul_expr))
@@ -200,7 +200,7 @@ fn add_expr<'a>(input: &mut Input<'a>) -> Result<Expr> {
         .parse_next(input)
 }
 
-fn compare_expr<'a>(input: &mut Input<'a>) -> Result<Expr> {
+fn compare_expr(input: &mut Input<'_>) -> Result<Expr> {
     let first = add_expr.parse_next(input)?;
 
     repeat(0.., (compare, add_expr))
@@ -211,7 +211,7 @@ fn compare_expr<'a>(input: &mut Input<'a>) -> Result<Expr> {
         .parse_next(input)
 }
 
-fn expr<'a>(input: &mut Input<'a>) -> Result<Expr> {
+fn expr(input: &mut Input<'_>) -> Result<Expr> {
     alt((
         preceded(
             TokenKind::Let,
@@ -258,7 +258,7 @@ fn expr<'a>(input: &mut Input<'a>) -> Result<Expr> {
     .parse_next(input)
 }
 // Top-level parsers
-fn fundef<'a>(input: &mut Input<'a>) -> Result<Toplevel> {
+fn fundef(input: &mut Input<'_>) -> Result<Toplevel> {
     let mut parser = terminated(
         (
             TokenKind::Ident.context(StrContext::Expected(StrContextValue::Description(
@@ -290,7 +290,7 @@ fn fundef<'a>(input: &mut Input<'a>) -> Result<Toplevel> {
     parser.parse_next(input)
 }
 
-fn chan<'a>(input: &mut Input<'a>) -> Result<Toplevel> {
+fn chan(input: &mut Input<'_>) -> Result<Toplevel> {
     let mut parser = terminated(
         (
             preceded(TokenKind::Chan, TokenKind::Ident).context(StrContext::Expected(
@@ -308,7 +308,7 @@ fn chan<'a>(input: &mut Input<'a>) -> Result<Toplevel> {
     parser.parse_next(input)
 }
 
-fn output<'a>(input: &mut Input<'a>) -> Result<Toplevel> {
+fn output(input: &mut Input<'_>) -> Result<Toplevel> {
     let mut parser = terminated(
         (
             TokenKind::Ident.context(StrContext::Expected(StrContextValue::Description(
@@ -329,7 +329,7 @@ fn output<'a>(input: &mut Input<'a>) -> Result<Toplevel> {
     parser.parse_next(input)
 }
 
-pub fn prog<'a>(input: &mut Input<'a>) -> Result<Prog> {
+pub fn prog(input: &mut Input<'_>) -> Result<Prog> {
     let toplevel = alt((
         fundef,
         chan,
@@ -358,7 +358,7 @@ mod tests {
     use super::*;
     use crate::lexer::Tokenizer;
 
-    pub fn tokenize<'a>(input: &'a str) -> Vec<Token<'a>> {
+    pub fn tokenize(input: &str) -> Vec<Token<'_>> {
         Tokenizer::tokenize(input)
             .filter_map(|t| t.ok())
             .collect_vec()

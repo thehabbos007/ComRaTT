@@ -6,6 +6,12 @@ pub struct ANFConversion {
     counter: usize,
 }
 
+impl Default for ANFConversion {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ANFConversion {
     pub fn new() -> Self {
         ANFConversion { counter: 0 }

@@ -1,5 +1,5 @@
 use crate::source::Type;
-use crate::types::{TypedExpr, TypedProg, TypedToplevel};
+use crate::types::{find_free_vars, TypedExpr, TypedProg, TypedToplevel};
 use itertools::Itertools;
 use std::collections::HashSet;
 
@@ -38,6 +38,12 @@ impl Pass for LambdaLift {
     }
 }
 
+impl Default for LambdaLift {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl LambdaLift {
     pub fn new() -> Self {
         Self { counter: 0 }
@@ -49,61 +55,6 @@ impl LambdaLift {
     }
 
     // Find all free variables in an expression
-    fn find_free_vars(&self, expr: &TypedExpr, bound: &HashSet<String>) -> HashSet<String> {
-        match expr {
-            TypedExpr::TConst(_, _) => HashSet::new(),
-            TypedExpr::TName(name, _) => {
-                if bound.contains(name) {
-                    HashSet::new()
-                } else {
-                    let mut set = HashSet::new();
-                    set.insert(name.clone());
-                    set
-                }
-            }
-            TypedExpr::TPrim(_, left, right, _) => {
-                let mut left_free = self.find_free_vars(left, bound);
-                let right_free = self.find_free_vars(right, bound);
-                left_free.extend(right_free);
-                left_free
-            }
-            TypedExpr::TLam(args, body, _) => {
-                let mut new_bound = bound.clone();
-                for (name, _) in args {
-                    new_bound.insert(name.clone());
-                }
-                self.find_free_vars(body, &new_bound)
-            }
-            TypedExpr::TApp(fn_expr, args, _) => {
-                let mut free = self.find_free_vars(fn_expr, bound);
-                for arg in args {
-                    free.extend(self.find_free_vars(arg, bound));
-                }
-                free
-            }
-            TypedExpr::TLet(name, _, rhs, body) => {
-                let mut free = self.find_free_vars(rhs, bound);
-                let mut new_bound = bound.clone();
-                new_bound.insert(name.clone());
-                free.extend(self.find_free_vars(body, &new_bound));
-                free
-            }
-            TypedExpr::TIfThenElse(condition, then_branch, else_branch, _) => {
-                let mut free = self.find_free_vars(condition, bound);
-                free.extend(self.find_free_vars(then_branch, bound));
-                free.extend(self.find_free_vars(else_branch, bound));
-                free
-            }
-            TypedExpr::TTuple(exprs, _) => {
-                let mut free = HashSet::new();
-                for expr in exprs {
-                    free.extend(self.find_free_vars(expr, bound));
-                }
-                free
-            }
-            TypedExpr::TAccess(expr, _, _) => self.find_free_vars(expr, bound),
-        }
-    }
 
     fn lift_lambdas(
         &mut self,
@@ -126,7 +77,7 @@ impl LambdaLift {
 
             TypedExpr::TLam(args, body, typ) => {
                 let bound: HashSet<_> = args.iter().map(|(name, _)| name.clone()).collect();
-                let free_vars = self.find_free_vars(&body, &bound);
+                let free_vars = find_free_vars(&body, &bound);
                 let free_vars_with_types = free_vars
                     .iter()
                     .filter_map(|name| {
