@@ -128,7 +128,7 @@ impl Inference {
                 }
                 _ => panic!("Failed to infer type of IfThenElse"),
             },
-            Expr::Delay(e) => {
+            Expr::Delay(e, _) => {
                 // Call recursively, propagate constraints and generate a new '() -> ty'
                 let (ty, type_output) = self.infer(context, *e);
                 (
@@ -927,7 +927,7 @@ mod tests {
 
     #[test]
     fn infer_delay_produces_thunk() {
-        let expr = Expr::Delay(Expr::Const(Const::CInt(42)).b());
+        let expr = Expr::Delay(Expr::Const(Const::CInt(42)).b(), vec!["hey".to_owned()]);
         let mut inference = Inference {
             unification_table: InPlaceUnificationTable::default(),
         };

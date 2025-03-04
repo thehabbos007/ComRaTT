@@ -105,9 +105,20 @@ fn simple_expr(input: &mut Input<'_>) -> Result<Expr> {
     .parse_next(input)
 }
 
+fn braced_idents(input: &mut Input<'_>) -> Result<Vec<String>> {
+    delimited(
+        TokenKind::LBrace,
+        repeat(1.., TokenKind::Ident),
+        TokenKind::RBrace,
+    )
+    .map(|e: Vec<_>| e.into_iter().map(|t| t.text().to_string()).collect())
+    .parse_next(input)
+}
+
 fn atomic_expr(input: &mut Input<'_>) -> Result<Expr> {
     alt((
-        preceded(TokenKind::Delay, simple_expr).map(|e| Expr::Delay(e.b())),
+        preceded(TokenKind::Delay, (braced_idents, simple_expr))
+            .map(|(c, e)| Expr::Delay(e.b(), c)),
         preceded(TokenKind::Advance, TokenKind::Ident).map(|t| Expr::Advance(t.text().to_string())),
         simple_expr,
         fail.context(StrContext::Label("atomic expression"))
@@ -457,11 +468,14 @@ mod tests {
             ))
         );
 
-        let tokens = tokenize("delay x");
+        let tokens = tokenize("delay {banan} x");
         let mut token_slice = TokenSlice::new(&tokens);
         assert_eq!(
             expr.parse_next(&mut token_slice),
-            Ok(Expr::Delay(Box::new(Expr::Var("x".to_string()))))
+            Ok(Expr::Delay(
+                Box::new(Expr::Var("x".to_string())),
+                vec!["banan".to_owned()]
+            ))
         );
 
         let tokens = tokenize("advance x");

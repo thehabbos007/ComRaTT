@@ -174,6 +174,12 @@ pub enum TokenKind {
     #[token(")")]
     RParen,
 
+    #[token("{")]
+    LBrace,
+
+    #[token("}")]
+    RBrace,
+
     #[token("=")]
     Equal,
 

@@ -31,7 +31,7 @@ pub enum Expr {
     Prim(Binop, Box<Expr>, Box<Expr>),
     Let(String, Box<Expr>, Box<Expr>),
     IfThenElse(Box<Expr>, Box<Expr>, Box<Expr>),
-    Delay(Box<Expr>),
+    Delay(Box<Expr>, Vec<String>),
     Advance(String),
     Tuple(Vec<Expr>),
     Access(Box<Expr>, i32),

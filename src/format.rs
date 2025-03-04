@@ -150,7 +150,7 @@ impl Expr {
             Expr::IfThenElse(cond, then_branch, else_branch) => {
                 format!("if {} then {} else {}", cond, then_branch, else_branch)
             }
-            Expr::Delay(e) => format!("delay {}", e),
+            Expr::Delay(e, c) => format!("delay {{{}}} {}", c.join(" "), e),
             Expr::Advance(x) => format!("advance {}", x),
             Expr::Tuple(exprs) => {
                 format!(
