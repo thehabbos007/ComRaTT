@@ -115,6 +115,8 @@ impl<'a> WasmEmitter<'a> {
 
         let func_idx = self.func_map.len() as u32;
         self.func_map.insert(name.as_str(), func_idx);
+
+        self.export_section.export(name, ExportKind::Func, func_idx);
     }
 
     fn process_function(&mut self, def: &'a TypedToplevel) {
@@ -148,13 +150,6 @@ impl<'a> WasmEmitter<'a> {
                 func.instruction(&Instruction::End);
 
                 self.code_section.function(&func);
-
-                if name == "main" {
-                    let func_idx = self.func_map[name.as_str()];
-
-                    self.export_section
-                        .export("main", ExportKind::Func, func_idx);
-                }
             }
 
             TypedToplevel::Channel(_) => {}
