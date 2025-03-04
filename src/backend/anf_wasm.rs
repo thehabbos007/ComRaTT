@@ -97,7 +97,9 @@ impl<'a> AnfWasmEmitter<'a> {
     }
 
     fn forward_declare_functions(&mut self, def: &'a AnfToplevel) {
-        let AnfToplevel::FunDef(name, args, _body, ret_type) = def;
+        let AnfToplevel::FunDef(name, args, _body, ret_type) = def else {
+            return;
+        };
 
         let type_idx = self.register_function_type(name, args, ret_type);
         self.function_section.function(type_idx);
@@ -142,6 +144,8 @@ impl<'a> AnfWasmEmitter<'a> {
                         .export("main", ExportKind::Func, func_idx);
                 }
             }
+            AnfToplevel::Channel(_) => {}
+            AnfToplevel::Output(_, _) => {}
         }
     }
 
@@ -251,7 +255,7 @@ impl<'a> AnfWasmEmitter<'a> {
             .map(|(_, ty)| self.wasm_type(ty))
             .collect::<Vec<_>>();
 
-        let results = vec![self.wasm_type(ret_type)];
+        let results = [self.wasm_type(ret_type)];
 
         let idx = self.type_map.len() as u32;
 

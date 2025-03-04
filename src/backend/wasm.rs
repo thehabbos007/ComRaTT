@@ -106,7 +106,9 @@ impl<'a> WasmEmitter<'a> {
     }
 
     fn forward_declare_functions(&mut self, def: &'a TypedToplevel) {
-        let TypedToplevel::TFunDef(name, args, _body, ret_type) = def;
+        let TypedToplevel::TFunDef(name, args, _body, ret_type) = def else {
+            return;
+        };
 
         let type_idx = self.register_function_type(name, args, ret_type);
         self.function_section.function(type_idx);
@@ -123,12 +125,12 @@ impl<'a> WasmEmitter<'a> {
                 self.next_local = 0;
 
                 for (i, (arg_name, _)) in args.iter().enumerate() {
-                    self.locals_map.insert(&arg_name, i as u32);
+                    self.locals_map.insert(arg_name, i as u32);
                 }
                 self.next_local = args.len() as u32;
 
                 let mut local_types = Vec::new();
-                traverse_locals(&body, &mut local_types);
+                traverse_locals(body, &mut local_types);
                 local_types.dedup();
 
                 for (i, (arg_name, _)) in local_types.iter().enumerate() {
@@ -154,6 +156,9 @@ impl<'a> WasmEmitter<'a> {
                         .export("main", ExportKind::Func, func_idx);
                 }
             }
+
+            TypedToplevel::Channel(_) => {}
+            TypedToplevel::Output(_, _) => {}
         }
     }
 
@@ -172,7 +177,7 @@ impl<'a> WasmEmitter<'a> {
             .map(|(_, ty)| self.wasm_type(ty))
             .collect::<Vec<_>>();
 
-        let results = vec![self.wasm_type(ret_type)];
+        let results = [self.wasm_type(ret_type)];
 
         let idx = self.type_map.len() as u32;
 

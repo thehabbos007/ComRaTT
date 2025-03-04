@@ -17,24 +17,24 @@ pub fn run_program_passes(prog: TypedProg) -> TypedProg {
     let prog = eliminate_consec.run(prog);
 
     let mut lambda_lift = lambda_lift::LambdaLift::new();
-    let prog = lambda_lift.run(prog);
+    
 
-    prog
+    lambda_lift.run(prog)
 }
 
 pub fn run_program_passes_anf(prog: TypedProg) -> AnfProg {
     let prog = run_program_passes(prog);
 
     let mut anf = anf::ANFConversion::new();
-    let prog = anf.run(prog);
+    
 
-    prog
+    anf.run(prog)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::source::{Binop, Const, Expr, Type};
+    use crate::source::{Binop, Const, Type};
     use crate::types::{TypedExpr, TypedToplevel};
 
     #[test]

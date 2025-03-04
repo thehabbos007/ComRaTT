@@ -6,6 +6,12 @@ pub struct ANFConversion {
     counter: usize,
 }
 
+impl Default for ANFConversion {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ANFConversion {
     pub fn new() -> Self {
         ANFConversion { counter: 0 }
@@ -118,6 +124,11 @@ impl Pass<TypedProg, AnfProg> for ANFConversion {
                 TypedToplevel::TFunDef(name, args, body, ty) => {
                     let anf_body = self.normalize(*body);
                     AnfToplevel::FunDef(name, args, anf_body, ty)
+                }
+                TypedToplevel::Channel(chan) => AnfToplevel::Channel(chan),
+                TypedToplevel::Output(name, body) => {
+                    let (aexpr, _) = self.normalize_atom(*body);
+                    AnfToplevel::Output(name, aexpr)
                 }
             })
             .collect();

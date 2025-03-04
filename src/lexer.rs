@@ -42,7 +42,7 @@ impl PartialEq<TokenKind> for Token<'_> {
     }
 }
 
-impl<'a> Location for Token<'a> {
+impl Location for Token<'_> {
     #[inline(always)]
     fn current_token_start(&self) -> usize {
         self.span.start()
@@ -83,7 +83,7 @@ impl<'a> Iterator for Tokenizer<'a> {
             Some(Err(_)) => {
                 let span = Range::from(self.lexer.span().start..self.source.len());
                 let message = "failed to recognize the rest tokens".to_owned();
-                Some(Err(ComRaTTError::from_span(message, span, &self.source)))
+                Some(Err(ComRaTTError::from_span(message, span, self.source)))
             }
             Some(Ok(kind)) => Some(Ok(Token {
                 source: self.source,
@@ -116,6 +116,12 @@ pub enum TokenKind {
 
     #[token("let")]
     Let,
+
+    #[token("def")]
+    Def,
+
+    #[token("chan")]
+    Chan,
 
     #[token("in")]
     In,
@@ -172,7 +178,10 @@ pub enum TokenKind {
     Equal,
 
     #[token("->")]
-    Arrow,
+    RArrow,
+
+    #[token("<-")]
+    LArrow,
 
     #[token(":")]
     Colon,

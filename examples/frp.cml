@@ -1,8 +1,8 @@
 add : int -> int -> int
-let add x y = x + y;
+def add x y = x + y;
 
 main : int
-let main =
+def main =
   let x = 4 in
   let b = delay (add x 3) in
   advance b;

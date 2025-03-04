@@ -1,12 +1,12 @@
+use comratt::backend::{compile_anf_to_wasm, compile_to_wasm};
+use comratt::infer::infer_all;
+use comratt::passes::{run_program_passes, run_program_passes_anf};
+use comratt::source::Prog;
+use comratt::types::TypedProg;
 use lexopt::Arg;
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{self, Read as _, Write};
-use ComRaTT::backend::{compile_anf_to_wasm, compile_to_wasm};
-use ComRaTT::infer::infer_all;
-use ComRaTT::passes::{run_program_passes, run_program_passes_anf};
-use ComRaTT::source::Prog;
-use ComRaTT::types::TypedProg;
 
 struct Args {
     input: Option<OsString>,

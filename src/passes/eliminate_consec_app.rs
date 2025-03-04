@@ -12,8 +12,11 @@ impl Pass for EliminateConsecApp {
         let defs = prog.0;
         let defs = defs
             .into_iter()
-            .map(|TypedToplevel::TFunDef(name, args, body, typ)| {
-                TypedToplevel::TFunDef(name, args, body.map_box(|b| self.eliminate_consec(b)), typ)
+            .map(|def| match def {
+                TypedToplevel::TFunDef(name, args, body, typ) => {
+                    TypedToplevel::TFunDef(name, args, body.map_box(eliminate_consec), typ)
+                }
+                def => def,
             })
             .collect_vec();
 
@@ -23,59 +26,55 @@ impl Pass for EliminateConsecApp {
 
 impl EliminateConsecApp {
     pub fn new() -> Self {
-        Default::default()
+        Self
     }
 
     pub fn eliminate_consec(&mut self, expr: TypedExpr) -> TypedExpr {
-        match expr {
-            TypedExpr::TConst(_, _) => expr,
-            TypedExpr::TName(_, _) => expr,
-            TypedExpr::TPrim(op, left, right, typ) => TypedExpr::TPrim(
-                op,
-                Box::new(self.eliminate_consec(*left)),
-                Box::new(self.eliminate_consec(*right)),
-                typ,
-            ),
-            TypedExpr::TLet(name, typ, rhs, body) => TypedExpr::TLet(
-                name,
-                typ,
-                Box::new(self.eliminate_consec(*rhs)),
-                Box::new(self.eliminate_consec(*body)),
-            ),
-            // An application where the "body" is itself an application
-            TypedExpr::TApp(box TypedExpr::TApp(box f, mut args1, ty1), mut args2, _) => {
-                args1.append(&mut args2);
-                let resulting_expr = TypedExpr::TApp(f.b(), args1, final_type(&ty1));
-                self.eliminate_consec(resulting_expr)
-            }
-            TypedExpr::TApp(fn_expr, args, typ) => TypedExpr::TApp(
-                Box::new(self.eliminate_consec(*fn_expr)),
-                args.into_iter()
-                    .map(|arg| self.eliminate_consec(arg))
-                    .collect(),
-                typ,
-            ),
-            TypedExpr::TLam(args, body, typ) => {
-                TypedExpr::TLam(args, Box::new(self.eliminate_consec(*body)), typ)
-            }
-            TypedExpr::TIfThenElse(condition, then_branch, else_branch, typ) => {
-                TypedExpr::TIfThenElse(
-                    Box::new(self.eliminate_consec(*condition)),
-                    Box::new(self.eliminate_consec(*then_branch)),
-                    Box::new(self.eliminate_consec(*else_branch)),
-                    typ,
-                )
-            }
-            TypedExpr::TTuple(texps, typ) => TypedExpr::TTuple(
-                texps
-                    .into_iter()
-                    .map(|texp| self.eliminate_consec(texp))
-                    .collect(),
-                typ,
-            ),
-            TypedExpr::TAccess(texp, idx, typ) => {
-                TypedExpr::TAccess(Box::new(self.eliminate_consec(*texp)), idx, typ)
-            }
+        eliminate_consec(expr)
+    }
+}
+
+fn eliminate_consec(expr: TypedExpr) -> TypedExpr {
+    match expr {
+        TypedExpr::TConst(_, _) => expr,
+        TypedExpr::TName(_, _) => expr,
+        TypedExpr::TPrim(op, left, right, typ) => TypedExpr::TPrim(
+            op,
+            Box::new(eliminate_consec(*left)),
+            Box::new(eliminate_consec(*right)),
+            typ,
+        ),
+        TypedExpr::TLet(name, typ, rhs, body) => TypedExpr::TLet(
+            name,
+            typ,
+            Box::new(eliminate_consec(*rhs)),
+            Box::new(eliminate_consec(*body)),
+        ),
+        // An application where the "body" is itself an application
+        TypedExpr::TApp(box TypedExpr::TApp(box f, mut args1, ty1), mut args2, _) => {
+            args1.append(&mut args2);
+            let resulting_expr = TypedExpr::TApp(f.b(), args1, final_type(&ty1));
+            eliminate_consec(resulting_expr)
+        }
+        TypedExpr::TApp(fn_expr, args, typ) => TypedExpr::TApp(
+            Box::new(eliminate_consec(*fn_expr)),
+            args.into_iter().map(eliminate_consec).collect(),
+            typ,
+        ),
+        TypedExpr::TLam(args, body, typ) => {
+            TypedExpr::TLam(args, Box::new(eliminate_consec(*body)), typ)
+        }
+        TypedExpr::TIfThenElse(condition, then_branch, else_branch, typ) => TypedExpr::TIfThenElse(
+            Box::new(eliminate_consec(*condition)),
+            Box::new(eliminate_consec(*then_branch)),
+            Box::new(eliminate_consec(*else_branch)),
+            typ,
+        ),
+        TypedExpr::TTuple(texps, typ) => {
+            TypedExpr::TTuple(texps.into_iter().map(eliminate_consec).collect(), typ)
+        }
+        TypedExpr::TAccess(texp, idx, typ) => {
+            TypedExpr::TAccess(Box::new(eliminate_consec(*texp)), idx, typ)
         }
     }
 }
