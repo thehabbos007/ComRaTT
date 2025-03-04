@@ -106,13 +106,12 @@ impl Inference {
                 self.infer(context, *then),
                 self.infer(context, *elseb),
             ) {
-                (mut cond_output, (then_ty, mut then_output), (else_ty, mut else_output))
-                    if then_ty == else_ty =>
-                {
+                (mut cond_output, (then_ty, mut then_output), (else_ty, mut else_output)) => {
                     let mut constraints = Vec::new();
                     constraints.append(&mut cond_output.constraints);
                     constraints.append(&mut then_output.constraints);
                     constraints.append(&mut else_output.constraints);
+                    constraints.append(&mut vec![Constraint::TypeEqual(then_ty.clone(), else_ty)]);
                     (
                         then_ty.clone(),
                         TypeOutput::new(
@@ -363,7 +362,7 @@ impl Inference {
                 Type::TFun(from.b(), to.b())
             }
             Type::TProduct(ts) => {
-                let normalized = ts.into_iter().map(|t| self.normalize_ty(t));
+                let normalized = ts.iter().map(|t| self.normalize_ty(t));
                 Type::TProduct(normalized.collect())
             }
             Type::TVar(v) => match self.unification_table.probe_value(*v) {
@@ -530,11 +529,11 @@ impl Inference {
         let mut typed_toplevels = Vec::new();
         for toplevel in toplevels {
             match toplevel {
-                Toplevel::FunDef(name, ty @ Type::TFun(_, _), args, body) => {
-                    let (ret_ty, types) = tfun_len_n(ty.clone(), args.len());
+                Toplevel::FunDef(name, fun_ty @ Type::TFun(_, _), args, body) => {
+                    let (ret_ty, types) = tfun_len_n(fun_ty.clone(), args.len());
                     let args_with_types = args.into_iter().zip(types.into_iter());
                     let mut cloned_context = context.clone();
-                    cloned_context.insert(name.to_owned(), ty);
+                    cloned_context.insert(name.to_owned(), fun_ty.clone());
                     for (arg, typ) in args_with_types.clone() {
                         cloned_context.insert(arg.to_owned(), typ);
                     }
@@ -555,7 +554,7 @@ impl Inference {
                             ret_ty,
                         );
 
-                        context.insert(name.to_owned(), ty);
+                        context.insert(name.to_owned(), fun_ty);
                         typed_toplevels.push(typed_toplevel);
                     } else {
                         panic!(
@@ -658,7 +657,7 @@ mod tests {
         assert_matches!(inferred[0].clone(),
             TypedToplevel::TFunDef(name, args, box body, ty)
             if name == "curried_add" &&
-               args.as_slice() == &[("x".to_owned(), Type::TInt)] &&
+               args == [("x".to_owned(), Type::TInt)] &&
                ty == expected_fun_type
         );
     }
@@ -686,7 +685,7 @@ mod tests {
         assert_matches!(inferred[0].clone(),
             TypedToplevel::TFunDef(name, args, box body, ty)
             if name == "test" &&
-               args.as_slice() == &[("x".to_owned(), Type::TInt)] &&
+               args == [("x".to_owned(), Type::TInt)] &&
                ty == Type::TInt
         );
     }
@@ -741,7 +740,7 @@ mod tests {
         assert_matches!(inferred.0[0].clone(),
             TypedToplevel::TFunDef(name, args, box body, ty)
             if name == "test" &&
-               args.as_slice() == &[("x".to_owned(), Type::TInt)] &&
+               args == [("x".to_owned(), Type::TInt)] &&
                ty == Type::TInt &&
                body == expected_body
         );
@@ -773,7 +772,7 @@ mod tests {
         assert_matches!(inferred.0[0].clone(),
             TypedToplevel::TFunDef(name, args, box body, ty)
             if name == "test" &&
-               args.as_slice() == &[("x".to_owned(), Type::TInt)] &&
+               args == [("x".to_owned(), Type::TInt)] &&
                ty == Type::TBool &&
                body == expected_body
         );
