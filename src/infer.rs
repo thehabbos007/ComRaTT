@@ -205,11 +205,11 @@ impl Inference {
                 Binop::Add | Binop::Mul | Binop::Div | Binop::Sub => {
                     match (self.infer(context, *left), self.infer(context, *right)) {
                         ((left_ty, mut left_output), (right_ty, mut right_output)) => {
-                            let Ok(_) = self.unify_ty_ty(left_ty.clone(), Type::TInt) else {
+                            let Ok(_) = self.unify_ty_ty(&left_ty, &Type::TInt) else {
                                 panic!("Failed to unify operand of primitive arithmetic operation with int type")
 
                             };
-                            let Ok(_) = self.unify_ty_ty(left_ty.clone(), right_ty.clone()) else {
+                            let Ok(_) = self.unify_ty_ty(&left_ty, &right_ty) else {
                                 panic!("Failed to unify operands of primitive operations")
 
                             };
@@ -238,11 +238,11 @@ impl Inference {
                 Binop::Lt | Binop::Lte | Binop::Gt | Binop::Gte => {
                     match (self.infer(context, *left), self.infer(context, *right)) {
                         ((left_ty, mut left_output), (right_ty, mut right_output)) => {
-                            let Ok(_) = self.unify_ty_ty(left_ty.clone(), Type::TInt) else {
+                            let Ok(_) = self.unify_ty_ty(&left_ty, &Type::TInt) else {
                                 panic!("Failed to unify operand of primitive comparison operation with bool type")
 
                             };
-                            let Ok(_) = self.unify_ty_ty(left_ty.clone(), right_ty.clone()) else {
+                            let Ok(_) = self.unify_ty_ty(&left_ty, &right_ty) else {
                                 panic!("Failed to unify operands of primitive operations")
 
                             };
@@ -272,7 +272,7 @@ impl Inference {
                 Binop::Eq | Binop::Neq => {
                     match (self.infer(context, *left), self.infer(context, *right)) {
                         ((left_ty, mut left_output), (right_ty, mut right_output)) => {
-                            let Ok(_) = self.unify_ty_ty(left_ty.clone(), left_ty.clone()) else {
+                            let Ok(_) = self.unify_ty_ty(&left_ty, &left_ty) else {
                                 panic!("Failed to unify operands of primitive operations")
                             };
                             // TODO: we might need to constrain this further.
@@ -352,28 +352,28 @@ impl Inference {
         }
     }
 
-    fn normalize_ty(&mut self, ty: Type) -> Type {
+    fn normalize_ty(&mut self, ty: &Type) -> Type {
         match ty {
             Type::TInt => Type::TInt,
             Type::TBool => Type::TBool,
             Type::TUnit => Type::TUnit,
             Type::TFun(from, to) => {
-                let from = self.normalize_ty(*from);
-                let to = self.normalize_ty(*to);
+                let from = self.normalize_ty(from);
+                let to = self.normalize_ty(to);
                 Type::TFun(from.b(), to.b())
             }
             Type::TProduct(ts) => {
                 let normalized = ts.into_iter().map(|t| self.normalize_ty(t));
                 Type::TProduct(normalized.collect())
             }
-            Type::TVar(v) => match self.unification_table.probe_value(v) {
-                Some(ty) => self.normalize_ty(ty),
-                None => Type::TVar(self.unification_table.find(v)),
+            Type::TVar(v) => match self.unification_table.probe_value(*v) {
+                Some(ty) => self.normalize_ty(&ty),
+                None => Type::TVar(self.unification_table.find(*v)),
             },
         }
     }
 
-    fn unify_ty_ty(&mut self, unnorm_left: Type, unnorm_right: Type) -> Result<(), TypeError> {
+    fn unify_ty_ty(&mut self, unnorm_left: &Type, unnorm_right: &Type) -> Result<(), TypeError> {
         let left = self.normalize_ty(unnorm_left);
         let right = self.normalize_ty(unnorm_right);
         match (left, right) {
@@ -381,13 +381,13 @@ impl Inference {
             (Type::TBool, Type::TBool) => Ok(()),
             (Type::TUnit, Type::TUnit) => Ok(()),
             (Type::TFun(fst_from, fst_to), Type::TFun(snd_from, snd_to)) => {
-                self.unify_ty_ty(*fst_from, *snd_from)?;
-                self.unify_ty_ty(*fst_to, *snd_to)
+                self.unify_ty_ty(fst_from.as_ref(), snd_from.as_ref())?;
+                self.unify_ty_ty(fst_to.as_ref(), snd_to.as_ref())
             }
             (Type::TProduct(fst_ts), Type::TProduct(snd_ts)) => {
                 let zipped = fst_ts.into_iter().zip(snd_ts);
                 zipped.for_each(|(fst, snd)| {
-                    self.unify_ty_ty(fst, snd);
+                    self.unify_ty_ty(&fst, &snd);
                 });
                 Ok(())
             }
@@ -406,7 +406,7 @@ impl Inference {
         }
     }
 
-    fn unification(&mut self, constraints: Vec<Constraint>) -> Result<(), TypeError> {
+    fn unification(&mut self, constraints: &[Constraint]) -> Result<(), TypeError> {
         for constraint in constraints {
             match constraint {
                 Constraint::TypeEqual(left, right) => self.unify_ty_ty(left, right)?,
@@ -542,7 +542,7 @@ impl Inference {
                     let (body_type, body_output) = self.infer(&mut cloned_context, body);
 
                     // Constraint solving went well
-                    if self.unification(body_output.constraints).is_ok() {
+                    if self.unification(&body_output.constraints).is_ok() {
                         // Substitute types
                         let (mut unbound, ty) = self.substitute(body_type);
                         let (unbound_body, body) = self.substitute_texp(body_output.texp);
@@ -558,7 +558,10 @@ impl Inference {
                         context.insert(name.to_owned(), ty);
                         typed_toplevels.push(typed_toplevel);
                     } else {
-                        panic!("Error: Unsolved constraints");
+                        panic!(
+                            "Error: Unsolved constraints: {:#?}",
+                            body_output.constraints
+                        );
                     }
                 }
                 Toplevel::Channel(name) => {
@@ -1374,7 +1377,7 @@ mod tests {
             unification_table: InPlaceUnificationTable::default(),
         };
         let (ty, output) = inference.infer(&mut context, expr);
-        inference.unification(output.constraints).unwrap();
+        inference.unification(&output.constraints).unwrap();
         let (_, ty) = inference.substitute(ty);
         let (_, texp) = inference.substitute_texp(output.texp);
         assert_eq!(ty, Type::TInt);
@@ -1396,7 +1399,7 @@ mod tests {
 
         let (ty, output) = inference.infer(&mut context, expr);
 
-        inference.unification(output.constraints).unwrap();
+        inference.unification(&output.constraints).unwrap();
     }
 
     #[test]
@@ -1411,7 +1414,7 @@ mod tests {
             unification_table: InPlaceUnificationTable::default(),
         };
         let (ty, output) = inference.infer(&mut context, expr);
-        inference.unification(output.constraints).unwrap();
+        inference.unification(&output.constraints).unwrap();
         let (_, ty) = inference.substitute(ty);
         assert_eq!(ty, Type::TInt);
         let (_, texp) = inference.substitute_texp(output.texp);
@@ -1489,7 +1492,7 @@ mod tests {
             Type::TFun(Type::TBool.b(), Type::TBool.b()).b(),
         );
         let (ty, output) = inference.infer(&mut HashMap::new(), expr);
-        inference.unification(output.constraints).unwrap();
+        inference.unification(&output.constraints).unwrap();
         let (_, ty) = inference.substitute(ty);
         let (_, texp) = inference.substitute_texp(output.texp);
         assert_eq!(ty, fun_type);
@@ -1518,7 +1521,7 @@ mod tests {
 
         let (ty, output) = inference.infer(&mut context, expr);
 
-        inference.unification(output.constraints).unwrap();
+        inference.unification(&output.constraints).unwrap();
         let (_, ty) = inference.substitute(ty);
         let (_, texp) = inference.substitute_texp(output.texp);
         assert_eq!(ty, Type::TBool);
@@ -1548,7 +1551,7 @@ mod tests {
             Type::TFun(Type::TInt.b(), Type::TInt.b()).b(),
         );
         let (ty, output) = inference.infer(&mut HashMap::new(), expr);
-        inference.unification(output.constraints).unwrap();
+        inference.unification(&output.constraints).unwrap();
         let (_, ty) = inference.substitute(ty);
         let (_, texp) = inference.substitute_texp(output.texp);
         assert_eq!(ty, fun_type);
