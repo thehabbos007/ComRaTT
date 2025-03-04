@@ -2,7 +2,8 @@ use itertools::Itertools;
 use std::collections::HashMap;
 use wasm_encoder::{
     BlockType, CodeSection, ElementSection, ExportKind, ExportSection, Function, FunctionSection,
-    GlobalSection, Instruction, MemorySection, MemoryType, Module, TypeSection, ValType,
+    GlobalSection, IndirectNameMap, Instruction, MemorySection, MemoryType, Module, NameMap,
+    NameSection, TypeSection, ValType,
 };
 
 use crate::source::{Binop, Const, Type};
@@ -16,6 +17,11 @@ pub struct WasmEmitter<'a> {
     code_section: CodeSection,
     global_section: GlobalSection,
     element_section: ElementSection,
+
+    // Debug info
+    function_name_map: NameMap,
+    type_name_map: NameMap,
+    locals_name_map: IndirectNameMap,
 
     type_map: HashMap<&'a str, u32>,
     func_map: HashMap<&'a str, u32>,
@@ -36,6 +42,10 @@ impl<'a> WasmEmitter<'a> {
             code_section: CodeSection::new(),
             global_section: GlobalSection::new(),
             element_section: ElementSection::new(),
+
+            function_name_map: NameMap::new(),
+            type_name_map: NameMap::new(),
+            locals_name_map: IndirectNameMap::new(),
 
             type_map: HashMap::new(),
             func_map: HashMap::new(),
@@ -101,6 +111,11 @@ impl<'a> WasmEmitter<'a> {
             module.section(&self.code_section);
         }
         // <Data section would be here>
+        let mut name_section = NameSection::new();
+        name_section.functions(&self.function_name_map);
+        name_section.locals(&self.locals_name_map);
+        name_section.types(&self.type_name_map);
+        module.section(&name_section);
 
         module.finish()
     }
@@ -115,6 +130,12 @@ impl<'a> WasmEmitter<'a> {
 
         let func_idx = self.func_map.len() as u32;
         self.func_map.insert(name.as_str(), func_idx);
+
+        self.export_section.export(name, ExportKind::Func, func_idx);
+
+        // Debug info
+        self.function_name_map.append(func_idx, name);
+        self.type_name_map.append(type_idx, name);
     }
 
     fn process_function(&mut self, def: &'a TypedToplevel) {
@@ -149,12 +170,15 @@ impl<'a> WasmEmitter<'a> {
 
                 self.code_section.function(&func);
 
-                if name == "main" {
-                    let func_idx = self.func_map[name.as_str()];
-
-                    self.export_section
-                        .export("main", ExportKind::Func, func_idx);
-                }
+                let mut locals_name_map = NameMap::new();
+                self.locals_map
+                    .iter()
+                    .sorted_by_key(|l| l.1)
+                    .for_each(|(name, idx)| {
+                        locals_name_map.append(*idx, name);
+                    });
+                let func_idx = self.func_map[name.as_str()];
+                self.locals_name_map.append(func_idx, &locals_name_map)
             }
 
             TypedToplevel::Channel(_) => {}
@@ -302,7 +326,7 @@ mod tests {
 
         let parser = Parser::new(0);
         for payload in parser.parse_all(bytes) {
-            payload.unwrap();
+            let p = payload.unwrap();
         }
     }
 

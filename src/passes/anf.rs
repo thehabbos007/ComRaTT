@@ -107,8 +107,9 @@ impl ANFConversion {
             let ty = match &bound_expr {
                 AnfExpr::AExpr(ae) => ae.ty(),
                 AnfExpr::CExp(ce) => ce.ty(),
-                AnfExpr::Let(_, ty, _, _) => ty.clone(),
+                AnfExpr::Let(_, _, _, aexpr) => aexpr.ty(),
             };
+
             result = AnfExpr::Let(name, ty, Box::new(bound_expr), Box::new(result));
         }
         result

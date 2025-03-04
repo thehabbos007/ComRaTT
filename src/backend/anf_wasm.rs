@@ -1,6 +1,7 @@
 use wasm_encoder::{
     BlockType, CodeSection, ElementSection, ExportKind, ExportSection, Function, FunctionSection,
-    GlobalSection, Instruction, MemorySection, MemoryType, Module, TypeSection, ValType,
+    GlobalSection, IndirectNameMap, Instruction, MemorySection, MemoryType, Module, NameMap,
+    NameSection, TypeSection, ValType,
 };
 
 use itertools::Itertools;
@@ -17,6 +18,11 @@ pub struct AnfWasmEmitter<'a> {
     code_section: CodeSection,
     global_section: GlobalSection,
     element_section: ElementSection,
+
+    // Debug info
+    function_name_map: NameMap,
+    type_name_map: NameMap,
+    locals_name_map: IndirectNameMap,
 
     type_map: HashMap<&'a str, u32>,
     func_map: HashMap<&'a str, u32>,
@@ -37,6 +43,10 @@ impl<'a> AnfWasmEmitter<'a> {
             code_section: CodeSection::new(),
             global_section: GlobalSection::new(),
             element_section: ElementSection::new(),
+
+            function_name_map: NameMap::new(),
+            type_name_map: NameMap::new(),
+            locals_name_map: IndirectNameMap::new(),
 
             type_map: HashMap::new(),
             func_map: HashMap::new(),
@@ -92,6 +102,11 @@ impl<'a> AnfWasmEmitter<'a> {
             module.section(&self.code_section);
         }
         // <Data section would be here>
+        let mut name_section = NameSection::new();
+        name_section.functions(&self.function_name_map);
+        name_section.locals(&self.locals_name_map);
+        name_section.types(&self.type_name_map);
+        module.section(&name_section);
 
         module.finish()
     }
@@ -103,9 +118,16 @@ impl<'a> AnfWasmEmitter<'a> {
 
         let type_idx = self.register_function_type(name, args, ret_type);
         self.function_section.function(type_idx);
+        // debug info
 
         let func_idx = self.func_map.len() as u32;
         self.func_map.insert(name.as_str(), func_idx);
+
+        self.export_section.export(name, ExportKind::Func, func_idx);
+
+        // Debug info
+        self.function_name_map.append(func_idx, name);
+        self.type_name_map.append(type_idx, name);
     }
 
     fn process_function(&mut self, def: &'a AnfToplevel) {
@@ -138,11 +160,15 @@ impl<'a> AnfWasmEmitter<'a> {
 
                 self.code_section.function(&func);
 
-                if name == "main" {
-                    let func_idx = self.func_map[name.as_str()];
-                    self.export_section
-                        .export("main", ExportKind::Func, func_idx);
-                }
+                let mut locals_name_map = NameMap::new();
+                self.locals_map
+                    .iter()
+                    .sorted_by_key(|l| l.1)
+                    .for_each(|(name, idx)| {
+                        locals_name_map.append(*idx, name);
+                    });
+                let func_idx = self.func_map[name.as_str()];
+                self.locals_name_map.append(func_idx, &locals_name_map)
             }
             AnfToplevel::Channel(_) => {}
             AnfToplevel::Output(_, _) => {}
@@ -228,6 +254,7 @@ impl<'a> AnfWasmEmitter<'a> {
 
                 let result_type = BlockType::Result(self.wasm_type(typ));
 
+                // func.instruction(&Instruction::I32WrapI64);
                 func.instruction(&Instruction::If(result_type));
                 self.compile_anf_expr(func, then_br);
                 func.instruction(&Instruction::Else);
@@ -285,7 +312,10 @@ mod tests {
 
     use super::*;
     use crate::anf::{AExpr, AnfExpr, AnfProg, AnfToplevel, CExpr};
+    use crate::passes::anf::ANFConversion;
+    use crate::passes::Pass as _;
     use crate::source::{Binop, Const, Type};
+    use crate::types::{TypedExpr, TypedProg, TypedToplevel};
     use wasmparser::Parser;
 
     fn validate_wasm(bytes: &[u8]) {
@@ -517,6 +547,41 @@ mod tests {
 
         let mut emitter = AnfWasmEmitter::new(&prog);
         emitter.emit();
+    }
+
+    #[test]
+    fn test_complex_if_then_else() {
+        let prog = TypedProg(vec![TypedToplevel::TFunDef(
+            "test".into(),
+            vec![("n".into(), Type::TInt)],
+            TypedExpr::TIfThenElse(
+                TypedExpr::TPrim(
+                    Binop::Gt,
+                    TypedExpr::TPrim(
+                        Binop::Mul,
+                        TypedExpr::TName("n".into(), Type::TInt).b(),
+                        TypedExpr::TName("n".into(), Type::TInt).b(),
+                        Type::TInt,
+                    )
+                    .b(),
+                    TypedExpr::TConst(Const::CInt(2), Type::TInt).b(),
+                    Type::TBool,
+                )
+                .b(),
+                TypedExpr::TConst(Const::CBool(true), Type::TBool).b(),
+                TypedExpr::TConst(Const::CBool(false), Type::TBool).b(),
+                Type::TBool,
+            )
+            .b(),
+            Type::TBool,
+        )]);
+
+        let prog = ANFConversion::new().run(prog);
+
+        let mut emitter = AnfWasmEmitter::new(&prog);
+        let wasm = emitter.emit();
+
+        validate_wasm(&wasm);
     }
 
     #[test]

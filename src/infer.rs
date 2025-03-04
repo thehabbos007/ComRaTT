@@ -1185,7 +1185,10 @@ mod tests {
         let mut inference = Inference {
             unification_table: InPlaceUnificationTable::default(),
         };
-        inference.infer(&mut HashMap::new(), expr);
+        let (expr, output) = inference.infer(&mut HashMap::new(), expr);
+        inference
+            .unification(&output.constraints)
+            .expect("failure since branches have different types");
     }
 
     #[test]

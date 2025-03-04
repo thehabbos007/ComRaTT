@@ -69,6 +69,14 @@ impl AnfExpr {
             _ => {}
         }
     }
+
+    pub fn ty(&self) -> Type {
+        match self {
+            AnfExpr::AExpr(expr) => expr.ty(),
+            AnfExpr::CExp(expr) => expr.ty(),
+            AnfExpr::Let(_, _, _, body) => body.ty(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

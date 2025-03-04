@@ -17,7 +17,6 @@ pub fn run_program_passes(prog: TypedProg) -> TypedProg {
     let prog = eliminate_consec.run(prog);
 
     let mut lambda_lift = lambda_lift::LambdaLift::new();
-    
 
     lambda_lift.run(prog)
 }
@@ -26,7 +25,6 @@ pub fn run_program_passes_anf(prog: TypedProg) -> AnfProg {
     let prog = run_program_passes(prog);
 
     let mut anf = anf::ANFConversion::new();
-    
 
     anf.run(prog)
 }
