@@ -28,29 +28,50 @@ impl TypeOutput {
     }
 }
 
-#[derive(Debug, Clone)]
+type Clock = HashSet<Sym>;
 
+type Binding = (Type, Option<Clock>);
+
+#[derive(Debug, Clone)]
 enum Context {
     // Bindings
-    Bindings(HashMap<Sym, Type>),
+    Bindings(HashMap<Sym, Binding>),
     // Bindings, the clock for the tick and the bindings after the tick
-    Tick(HashMap<Sym, Type>, HashSet<Sym>, HashMap<Sym, Type>),
+    Tick(HashMap<Sym, Binding>, Clock, HashMap<Sym, Binding>),
 }
 
 impl Context {
-    fn get(&self, key: &Sym) -> Option<&Type> {
+    fn get(&self, key: &Sym) -> Option<&Binding> {
         match self {
             Context::Bindings(bindings) => bindings.get(key),
             Context::Tick(bindings, _, tick_bindings) => {
-                bindings.get(key).or_else(|| tick_bindings.get(key))
+                tick_bindings.get(key).or_else(|| bindings.get(key))
             }
         }
     }
 
-    fn insert(&mut self, key: Sym, value: Type) -> Option<Type> {
+    fn insert(&mut self, binding_name: Sym, value: Type) -> Option<Binding> {
         match self {
-            Context::Bindings(bindings) => bindings.insert(key, value),
-            Context::Tick(bindings, _, _) => bindings.insert(key, value),
+            Context::Bindings(bindings) => bindings.insert(binding_name, (value, None)),
+            Context::Tick(_, _, bindings) => bindings.insert(binding_name, (value, None)),
+        }
+    }
+
+    fn insert_clock(&mut self, binding_name: Sym, value: Type, clock: Clock) -> Option<Binding> {
+        match self {
+            Context::Bindings(bindings) => bindings.insert(binding_name, (value, Some(clock))),
+            Context::Tick(_, _, bindings) => bindings.insert(binding_name, (value, Some(clock))),
+        }
+    }
+
+    fn binding_clock(&self, binding_name: Sym) -> Option<Clock> {
+        match self {
+            Context::Bindings(bindings) => bindings
+                .get(&binding_name)
+                .and_then(|(_, clock)| clock.clone()),
+            Context::Tick(bindings, clock, _) => bindings
+                .get(&binding_name)
+                .and_then(|(_, clock)| clock.clone()),
         }
     }
 
@@ -61,6 +82,13 @@ impl Context {
                 .then_some(())
                 .ok_or(TypeError::NotUnderTick),
             _ => Err(TypeError::NotUnderTick),
+        }
+    }
+
+    fn promote_tick(self, clock: &HashSet<Sym>) -> Self {
+        match self {
+            Context::Bindings(bindings) => Context::Tick(bindings, clock.clone(), HashMap::new()),
+            Context::Tick(_, tick, _) => panic!("Already under a tick with clock [{:?}]", tick),
         }
     }
 }
@@ -170,7 +198,9 @@ impl Inference {
                 }
                 _ => panic!("Failed to infer type of IfThenElse"),
             },
-            Expr::Delay(e, _) => {
+            Expr::Delay(e, clock) => {
+                // Introduce a tick given the clock
+                let context = context.promote_tick(&clock);
                 // Call recursively, propagate constraints and generate a new '() -> ty'
                 let (ty, type_output) = self.infer(context, *e);
                 (
@@ -185,6 +215,7 @@ impl Inference {
                     ),
                 )
             }
+            // advance must look only in the left bindings i.e. before the tick (going back in time)
             Expr::Advance(name) => match context.get(&name) {
                 Some(Type::TFun(box Type::TUnit, ty)) => {
                     let fun_type = Type::TFun(Type::TUnit.b(), ty.clone().b());
@@ -200,8 +231,10 @@ impl Inference {
                         ),
                     )
                 }
-                _ => panic!(""),
+                _ => panic!("Cannot advance arbitrary exprs"),
             },
+            // TODO we must not allow functions under a tick
+            // also, if there is a tick we need to insert to the right of the tick
             Expr::Let(name, rhs, body) => {
                 let (rhs_type, mut rhs_output) = self.infer(context.clone(), *rhs);
                 let _ = context.insert(name.clone(), rhs_type);
