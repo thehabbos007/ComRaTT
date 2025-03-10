@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use itertools::Itertools;
 use winnow::combinator::{fail, opt};
 use winnow::error::{ContextError, StrContext, StrContextValue};
@@ -118,7 +120,7 @@ fn braced_idents(input: &mut Input<'_>) -> Result<Vec<String>> {
 fn atomic_expr(input: &mut Input<'_>) -> Result<Expr> {
     alt((
         preceded(TokenKind::Delay, (braced_idents, simple_expr))
-            .map(|(c, e)| Expr::Delay(e.b(), c)),
+            .map(|(c, e)| Expr::Delay(e.b(), HashSet::from_iter(c))),
         preceded(TokenKind::Advance, TokenKind::Ident).map(|t| Expr::Advance(t.text().to_string())),
         simple_expr,
         fail.context(StrContext::Label("atomic expression"))
