@@ -1,7 +1,7 @@
 #![allow(unused)]
 
 use std::{
-    collections::{BTreeSet, HashMap},
+    collections::{BTreeSet, HashMap, HashSet},
     ops::Deref,
 };
 
@@ -28,6 +28,49 @@ impl TypeOutput {
     }
 }
 
+#[derive(Debug, Clone)]
+
+enum Context {
+    // Bindings
+    Bindings(HashMap<Sym, Type>),
+    // Bindings, the clock for the tick and the bindings after the tick
+    Tick(HashMap<Sym, Type>, HashSet<Sym>, HashMap<Sym, Type>),
+}
+
+impl Context {
+    fn get(&self, key: &Sym) -> Option<&Type> {
+        match self {
+            Context::Bindings(bindings) => bindings.get(key),
+            Context::Tick(bindings, _, tick_bindings) => {
+                bindings.get(key).or_else(|| tick_bindings.get(key))
+            }
+        }
+    }
+
+    fn insert(&mut self, key: Sym, value: Type) -> Option<Type> {
+        match self {
+            Context::Bindings(bindings) => bindings.insert(key, value),
+            Context::Tick(bindings, _, _) => bindings.insert(key, value),
+        }
+    }
+
+    fn is_under_tick(&self, clock: &HashSet<Sym>) -> Result<(), TypeError> {
+        match self {
+            Context::Tick(_, tick, _) => clock
+                .is_subset(tick)
+                .then_some(())
+                .ok_or(TypeError::NotUnderTick),
+            _ => Err(TypeError::NotUnderTick),
+        }
+    }
+}
+
+impl From<HashMap<Sym, Type>> for Context {
+    fn from(value: HashMap<Sym, Type>) -> Self {
+        Context::Bindings(value)
+    }
+}
+
 struct Inference {
     unification_table: InPlaceUnificationTable<TypeVar>,
 }
@@ -37,7 +80,7 @@ impl Inference {
         self.unification_table.new_key(None)
     }
 
-    fn infer(&mut self, context: &mut HashMap<Sym, Type>, expr: Expr) -> (Type, TypeOutput) {
+    fn infer(&mut self, mut context: Context, expr: Expr) -> (Type, TypeOutput) {
         match expr {
             Expr::Const(c) => match c {
                 Const::CInt(_) => (
@@ -83,7 +126,7 @@ impl Inference {
                     // Is panic the right thing to do? The alternative is to create an insatisfiable constraint maybe?
                     panic!("Type checking tuple with less than 2 elements")
                 } else {
-                    let inferred = ts.into_iter().map(|t| self.infer(context, t));
+                    let inferred = ts.into_iter().map(|t| self.infer(context.clone(), t));
                     let (types, type_outputs): (Vec<Type>, Vec<TypeOutput>) = inferred.unzip();
                     let (constraints, tyexps): (Vec<Vec<Constraint>>, Vec<TypedExpr>) =
                         type_outputs
@@ -102,8 +145,8 @@ impl Inference {
                 }
             }
             Expr::IfThenElse(condition, then, elseb) => match (
-                self.check(context, condition, Type::TBool),
-                self.infer(context, *then),
+                self.check(context.clone(), condition, Type::TBool),
+                self.infer(context.clone(), *then),
                 self.infer(context, *elseb),
             ) {
                 (mut cond_output, (then_ty, mut then_output), (else_ty, mut else_output)) => {
@@ -160,8 +203,7 @@ impl Inference {
                 _ => panic!(""),
             },
             Expr::Let(name, rhs, body) => {
-                let (rhs_type, mut rhs_output) = self.infer(context, *rhs);
-                // Should this mutate the existing context or clone it?
+                let (rhs_type, mut rhs_output) = self.infer(context.clone(), *rhs);
                 let _ = context.insert(name.clone(), rhs_type);
                 let (body_type, mut body_output) = self.infer(context, *body);
                 let mut constraints = Vec::new();
@@ -175,7 +217,7 @@ impl Inference {
                     ),
                 )
             }
-            Expr::App(fun, arg) => match self.infer(context, *fun) {
+            Expr::App(fun, arg) => match self.infer(context.clone(), *fun) {
                 (fun_ty, mut fun_output) => {
                     let (arg_ty, arg_output) = self.infer(context, *arg);
 
@@ -202,7 +244,7 @@ impl Inference {
             },
             Expr::Prim(op, left, right) => match op {
                 Binop::Add | Binop::Mul | Binop::Div | Binop::Sub => {
-                    match (self.infer(context, *left), self.infer(context, *right)) {
+                    match (self.infer(context.clone(), *left), self.infer(context, *right)) {
                         ((left_ty, mut left_output), (right_ty, mut right_output)) => {
                             let Ok(_) = self.unify_ty_ty(&left_ty, &Type::TInt) else {
                                 panic!("Failed to unify operand of primitive arithmetic operation with int type")
@@ -235,7 +277,7 @@ impl Inference {
                     }
                 }
                 Binop::Lt | Binop::Lte | Binop::Gt | Binop::Gte => {
-                    match (self.infer(context, *left), self.infer(context, *right)) {
+                    match (self.infer(context.clone(), *left), self.infer(context, *right)) {
                         ((left_ty, mut left_output), (right_ty, mut right_output)) => {
                             let Ok(_) = self.unify_ty_ty(&left_ty, &Type::TInt) else {
                                 panic!("Failed to unify operand of primitive comparison operation with bool type")
@@ -269,7 +311,7 @@ impl Inference {
                 }
 
                 Binop::Eq | Binop::Neq => {
-                    match (self.infer(context, *left), self.infer(context, *right)) {
+                    match (self.infer(context.clone(), *left), self.infer(context, *right)) {
                         ((left_ty, mut left_output), (right_ty, mut right_output)) => {
                             let Ok(_) = self.unify_ty_ty(&left_ty, &left_ty) else {
                                 panic!("Failed to unify operands of primitive operations")
@@ -307,12 +349,10 @@ impl Inference {
                 }
                 let args_with_types = args.into_iter().zip(args_ty_vars.clone());
                 // Add them to the context
-                // TODO is cloning the context necessary here?
-                let mut cloned_context = context.clone();
                 for (arg, ty_var) in args_with_types.clone() {
-                    cloned_context.insert(arg, ty_var);
+                    context.insert(arg, ty_var);
                 }
-                let (body_type, body_output) = self.infer(&mut cloned_context, *body);
+                let (body_type, body_output) = self.infer(context, *body);
                 let lambda_type = build_function_type(args_ty_vars.as_slice(), body_type);
                 let lambda = TypedExpr::TLam(
                     args_with_types.collect(),
@@ -327,14 +367,13 @@ impl Inference {
         }
     }
 
-    fn check(&mut self, context: &mut HashMap<Sym, Type>, expr: Box<Expr>, ty: Type) -> TypeOutput {
+    fn check(&mut self, mut context: Context, expr: Box<Expr>, ty: Type) -> TypeOutput {
         match (expr.clone(), ty.clone()) {
             (box Expr::Lam(mut args, body), Type::TFun(box from, box to)) => {
-                let mut cloned_context = context.clone();
                 // In practice lambdas only have 1 argument, so just take that single one
                 let arg = args.remove(0);
-                cloned_context.insert(arg.to_owned(), from.clone());
-                let body_output = self.check(&mut cloned_context, body, to.clone());
+                context.insert(arg.to_owned(), from.clone());
+                let body_output = self.check(context, body, to.clone());
                 TypeOutput::new(
                     body_output.constraints,
                     TypedExpr::TLam(vec![(arg, from)], body_output.texp.b(), to),
@@ -524,21 +563,37 @@ impl Inference {
     fn infer_all_toplevels(
         &mut self,
         toplevels: Vec<Toplevel>,
-        context: &mut HashMap<Sym, Type>,
+        mut context: Context,
     ) -> Vec<TypedToplevel> {
         let mut typed_toplevels = Vec::new();
+        for toplevel in &toplevels {
+            match toplevel {
+                Toplevel::FunDef(name, fun_ty @ Type::TFun(_, _), args, body) => {
+                    context.insert(name.to_owned(), fun_ty.clone());
+                }
+                Toplevel::Channel(name) => {
+                    typed_toplevels.push(TypedToplevel::Channel(name.to_owned()))
+                }
+                Toplevel::Output(_, _) => {
+                    unimplemented!()
+                }
+                _ => panic!("Error: FunDefs must be functions with at least 1 argument"),
+            }
+        }
+
         for toplevel in toplevels {
             match toplevel {
                 Toplevel::FunDef(name, fun_ty @ Type::TFun(_, _), args, body) => {
                     let (ret_ty, types) = tfun_len_n(fun_ty.clone(), args.len());
                     let args_with_types = args.into_iter().zip(types.into_iter());
-                    let mut cloned_context = context.clone();
-                    cloned_context.insert(name.to_owned(), fun_ty.clone());
+
+                    let mut context = context.clone();
+                    context.insert(name.to_owned(), fun_ty.clone());
                     for (arg, typ) in args_with_types.clone() {
-                        cloned_context.insert(arg.to_owned(), typ);
+                        context.insert(arg.to_owned(), typ);
                     }
 
-                    let (body_type, body_output) = self.infer(&mut cloned_context, body);
+                    let (body_type, body_output) = self.infer(context, body);
 
                     // Constraint solving went well
                     if self.unification(&body_output.constraints).is_ok() {
@@ -554,7 +609,6 @@ impl Inference {
                             ret_ty,
                         );
 
-                        context.insert(name.to_owned(), fun_ty);
                         typed_toplevels.push(typed_toplevel);
                     } else {
                         panic!(
@@ -563,12 +617,8 @@ impl Inference {
                         );
                     }
                 }
-                Toplevel::Channel(name) => {
-                    typed_toplevels.push(TypedToplevel::Channel(name.to_owned()))
-                }
-                Toplevel::Output(name, expr) => {
-                    todo!()
-                }
+                Toplevel::Channel(name) => {}
+                Toplevel::Output(name, expr) => {}
                 _ => panic!("Error: FunDefs must be functions with at least 1 argument"),
             }
         }
@@ -581,6 +631,7 @@ impl Inference {
 pub enum TypeError {
     TypeNotEqual(Type, Type),
     InfiniteType(TypeVar, Type),
+    NotUnderTick,
 }
 
 fn get_with_custom_message(opt: Option<(Type, TypedExpr)>, message: String) -> (Type, TypedExpr) {
@@ -597,7 +648,7 @@ pub fn infer_all(prog: Prog) -> TypedProg {
         unification_table: InPlaceUnificationTable::default(),
     };
 
-    let typed_toplevels = inference.infer_all_toplevels(toplevels, &mut HashMap::new());
+    let typed_toplevels = inference.infer_all_toplevels(toplevels, HashMap::new().into());
 
     TypedProg(typed_toplevels)
 }
@@ -624,7 +675,7 @@ mod tests {
             unification_table: InPlaceUnificationTable::default(),
         };
 
-        let (ty, output) = inference.infer(&mut HashMap::new(), lambda);
+        let (ty, output) = inference.infer(HashMap::new().into(), lambda);
     }
 
     #[test]
@@ -794,7 +845,7 @@ mod tests {
         let mut inference = Inference {
             unification_table: InPlaceUnificationTable::default(),
         };
-        let (ty, output) = inference.infer(&mut HashMap::new(), expr);
+        let (ty, output) = inference.infer(HashMap::new().into(), expr);
         assert_eq!(ty, Type::TInt);
         assert_eq!(output.texp, TypedExpr::TConst(Const::CInt(42), Type::TInt));
     }
@@ -838,7 +889,7 @@ mod tests {
         let mut inference = Inference {
             unification_table: InPlaceUnificationTable::default(),
         };
-        let (ty, output) = inference.infer(&mut HashMap::new(), inner_access);
+        let (ty, output) = inference.infer(HashMap::new().into(), inner_access);
         assert_eq!(ty, Type::TBool);
         assert_eq!(output.texp, expected_texp);
     }
@@ -853,7 +904,7 @@ mod tests {
         let mut inference = Inference {
             unification_table: InPlaceUnificationTable::default(),
         };
-        let (ty, output) = inference.infer(&mut HashMap::new(), expr);
+        let (ty, output) = inference.infer(HashMap::new().into(), expr);
         assert_eq!(ty, Type::TInt);
         assert_eq!(
             output.texp,
@@ -883,7 +934,7 @@ mod tests {
         let mut inference = Inference {
             unification_table: InPlaceUnificationTable::default(),
         };
-        inference.infer(&mut HashMap::new(), expr);
+        inference.infer(HashMap::new().into(), expr);
     }
 
     #[test]
@@ -900,7 +951,7 @@ mod tests {
         let mut inference = Inference {
             unification_table: InPlaceUnificationTable::default(),
         };
-        let (ty, output) = inference.infer(&mut context, expr);
+        let (ty, output) = inference.infer(context.into(), expr);
         assert_eq!(ty, Type::TInt);
         assert_eq!(output.texp, expected_texp);
     }
@@ -912,7 +963,7 @@ mod tests {
         let mut inference = Inference {
             unification_table: InPlaceUnificationTable::default(),
         };
-        inference.infer(&mut HashMap::new(), expr);
+        inference.infer(HashMap::new().into(), expr);
     }
 
     #[test]
@@ -924,7 +975,7 @@ mod tests {
         let mut inference = Inference {
             unification_table: InPlaceUnificationTable::default(),
         };
-        inference.infer(&mut context, expr);
+        inference.infer(context.into(), expr);
     }
 
     #[test]
@@ -933,7 +984,7 @@ mod tests {
         let mut inference = Inference {
             unification_table: InPlaceUnificationTable::default(),
         };
-        let (ty, output) = inference.infer(&mut HashMap::new(), expr);
+        let (ty, output) = inference.infer(HashMap::new().into(), expr);
         let expected_texp = TypedExpr::TLam(
             vec![("#advance_unit".to_owned(), Type::TUnit)],
             TypedExpr::TConst(Const::CInt(42), Type::TInt).b(),
@@ -954,7 +1005,7 @@ mod tests {
         let mut inference = Inference {
             unification_table: InPlaceUnificationTable::default(),
         };
-        inference.infer(&mut HashMap::new(), expr);
+        inference.infer(HashMap::new().into(), expr);
     }
 
     #[test]
@@ -1039,7 +1090,7 @@ mod tests {
         let mut inference = Inference {
             unification_table: InPlaceUnificationTable::default(),
         };
-        let (ty, output) = inference.infer(&mut HashMap::new(), expr);
+        let (ty, output) = inference.infer(HashMap::new().into(), expr);
         assert_eq!(ty, Type::TInt);
         assert_eq!(output.texp, expected_texp);
     }
@@ -1071,7 +1122,7 @@ mod tests {
         let mut inference = Inference {
             unification_table: InPlaceUnificationTable::default(),
         };
-        let (ty, output) = inference.infer(&mut HashMap::new(), expr);
+        let (ty, output) = inference.infer(HashMap::new().into(), expr);
         assert_eq!(ty, expected_type);
         assert_eq!(output.texp, expected_texp);
     }
@@ -1103,7 +1154,7 @@ mod tests {
         let mut inference = Inference {
             unification_table: InPlaceUnificationTable::default(),
         };
-        let (ty, output) = inference.infer(&mut HashMap::new(), expr);
+        let (ty, output) = inference.infer(HashMap::new().into(), expr);
         assert_eq!(ty, expected_type);
         assert_eq!(output.texp, expected_texp);
     }
@@ -1127,7 +1178,7 @@ mod tests {
         let mut inference = Inference {
             unification_table: InPlaceUnificationTable::default(),
         };
-        let (ty, output) = inference.infer(&mut HashMap::new(), expr);
+        let (ty, output) = inference.infer(HashMap::new().into(), expr);
         assert_eq!(ty, expected_type);
         assert_eq!(output.texp, expected_texp);
     }
@@ -1149,7 +1200,7 @@ mod tests {
         let mut inference = Inference {
             unification_table: InPlaceUnificationTable::default(),
         };
-        let (ty, output) = inference.infer(&mut HashMap::new(), expr);
+        let (ty, output) = inference.infer(HashMap::new().into(), expr);
         assert_eq!(ty, expected_type);
         assert_eq!(output.texp, expected_texp);
     }
@@ -1161,7 +1212,7 @@ mod tests {
         let mut inference = Inference {
             unification_table: InPlaceUnificationTable::default(),
         };
-        inference.infer(&mut HashMap::new(), expr);
+        inference.infer(HashMap::new().into(), expr);
     }
 
     #[test]
@@ -1171,7 +1222,7 @@ mod tests {
         let mut inference = Inference {
             unification_table: InPlaceUnificationTable::default(),
         };
-        inference.infer(&mut HashMap::new(), expr);
+        inference.infer(HashMap::new().into(), expr);
     }
 
     #[test]
@@ -1185,7 +1236,7 @@ mod tests {
         let mut inference = Inference {
             unification_table: InPlaceUnificationTable::default(),
         };
-        let (expr, output) = inference.infer(&mut HashMap::new(), expr);
+        let (expr, output) = inference.infer(HashMap::new().into(), expr);
         inference
             .unification(&output.constraints)
             .expect("failure since branches have different types");
@@ -1201,7 +1252,7 @@ mod tests {
         let mut inference = Inference {
             unification_table: InPlaceUnificationTable::default(),
         };
-        let (ty, output) = inference.infer(&mut HashMap::new(), expr);
+        let (ty, output) = inference.infer(HashMap::new().into(), expr);
         assert_eq!(ty, Type::TInt);
         assert_eq!(
             output.texp,
@@ -1222,7 +1273,7 @@ mod tests {
         let mut inference = Inference {
             unification_table: InPlaceUnificationTable::default(),
         };
-        let (ty, output) = inference.infer(context, expr);
+        let (ty, output) = inference.infer(context.clone().into(), expr);
         assert_eq!(ty, Type::TInt);
         assert_eq!(output.texp, TypedExpr::TName("x".to_owned(), Type::TInt));
     }
@@ -1234,7 +1285,7 @@ mod tests {
         let mut inference = Inference {
             unification_table: InPlaceUnificationTable::default(),
         };
-        inference.infer(&mut HashMap::new(), expr);
+        inference.infer(HashMap::new().into(), expr);
     }
 
     #[test]
@@ -1252,7 +1303,7 @@ mod tests {
         let mut inference = Inference {
             unification_table: InPlaceUnificationTable::default(),
         };
-        let (ty, output) = inference.infer(&mut HashMap::new(), expr);
+        let (ty, output) = inference.infer(HashMap::new().into(), expr);
         assert_eq!(ty, Type::TInt);
         assert_eq!(
             output.texp,
@@ -1281,7 +1332,7 @@ mod tests {
         let mut inference = Inference {
             unification_table: InPlaceUnificationTable::default(),
         };
-        let (ty, output) = inference.infer(&mut HashMap::new(), expr);
+        let (ty, output) = inference.infer(HashMap::new().into(), expr);
         assert_eq!(ty, Type::TInt);
         assert_eq!(
             output.texp,
@@ -1310,7 +1361,7 @@ mod tests {
         let mut inference = Inference {
             unification_table: InPlaceUnificationTable::default(),
         };
-        let (ty, output) = inference.infer(&mut HashMap::new(), expr);
+        let (ty, output) = inference.infer(HashMap::new().into(), expr);
         assert_eq!(ty, Type::TInt);
         assert_eq!(output.texp, expected_texp);
     }
@@ -1341,7 +1392,7 @@ mod tests {
             unification_table: InPlaceUnificationTable::default(),
         };
         let output = inference.check(
-            &mut HashMap::new(),
+            HashMap::new().into(),
             expr.b(),
             Type::TFun(Type::TInt.b(), Type::TInt.b()),
         );
@@ -1378,7 +1429,7 @@ mod tests {
         let mut inference = Inference {
             unification_table: InPlaceUnificationTable::default(),
         };
-        let (ty, output) = inference.infer(&mut context, expr);
+        let (ty, output) = inference.infer(context.into(), expr);
         inference.unification(&output.constraints).unwrap();
         let (_, ty) = inference.substitute(ty);
         let (_, texp) = inference.substitute_texp(output.texp);
@@ -1399,7 +1450,7 @@ mod tests {
             unification_table: InPlaceUnificationTable::default(),
         };
 
-        let (ty, output) = inference.infer(&mut context, expr);
+        let (ty, output) = inference.infer(context.into(), expr);
 
         inference.unification(&output.constraints).unwrap();
     }
@@ -1415,7 +1466,7 @@ mod tests {
         let mut inference = Inference {
             unification_table: InPlaceUnificationTable::default(),
         };
-        let (ty, output) = inference.infer(&mut context, expr);
+        let (ty, output) = inference.infer(context.into(), expr);
         inference.unification(&output.constraints).unwrap();
         let (_, ty) = inference.substitute(ty);
         assert_eq!(ty, Type::TInt);
@@ -1493,7 +1544,7 @@ mod tests {
             Type::TInt.b(),
             Type::TFun(Type::TBool.b(), Type::TBool.b()).b(),
         );
-        let (ty, output) = inference.infer(&mut HashMap::new(), expr);
+        let (ty, output) = inference.infer(HashMap::new().into(), expr);
         inference.unification(&output.constraints).unwrap();
         let (_, ty) = inference.substitute(ty);
         let (_, texp) = inference.substitute_texp(output.texp);
@@ -1521,7 +1572,7 @@ mod tests {
                 .into_iter()
                 .collect();
 
-        let (ty, output) = inference.infer(&mut context, expr);
+        let (ty, output) = inference.infer(context.into(), expr);
 
         inference.unification(&output.constraints).unwrap();
         let (_, ty) = inference.substitute(ty);
@@ -1552,7 +1603,7 @@ mod tests {
             Type::TInt.b(),
             Type::TFun(Type::TInt.b(), Type::TInt.b()).b(),
         );
-        let (ty, output) = inference.infer(&mut HashMap::new(), expr);
+        let (ty, output) = inference.infer(HashMap::new().into(), expr);
         inference.unification(&output.constraints).unwrap();
         let (_, ty) = inference.substitute(ty);
         let (_, texp) = inference.substitute_texp(output.texp);
