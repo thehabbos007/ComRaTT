@@ -50,6 +50,27 @@ impl Context {
         }
     }
 
+    fn attempt_advance(&self, key: &Sym) -> Type {
+        match self {
+            Context::Bindings(_) => panic!(
+                "Tried to advance name {} without a tick in the context",
+                key
+            ),
+            Context::Tick(bindings, delayed_comp_clock, _) => {
+                if let Some((ty, clock_opt)) = bindings.get(key) {
+                    if let Some(clock) = clock_opt {
+                        if clock.is_subset(delayed_comp_clock) {
+                            return ty.clone();
+                        }
+                        panic!("Tried to advance name {} with clock not part of tick", key);
+                    }
+                    panic!("Tried to advance name {} without clock", key);
+                }
+                panic!("Tried to advance nonexisting name {}", key);
+            }
+        }
+    }
+
     fn insert(&mut self, binding_name: Sym, value: Type) -> Option<Binding> {
         match self {
             Context::Bindings(bindings) => bindings.insert(binding_name, (value, None)),
@@ -216,8 +237,10 @@ impl Inference {
                 )
             }
             // advance must look only in the left bindings i.e. before the tick (going back in time)
-            Expr::Advance(name) => match context.get(&name) {
-                Some((Type::TFun(box Type::TUnit, ty), _)) => {
+            // also the clock related to the name being advanced must be correct wrt. the delayed computation.
+            // this is handled by attempt_advance
+            Expr::Advance(name) => match context.attempt_advance(&name) {
+                Type::TFun(box Type::TUnit, ty) => {
                     let fun_type = Type::TFun(Type::TUnit.b(), ty.clone().b());
                     (
                         *ty.clone(),
@@ -970,9 +993,14 @@ mod tests {
         inference.infer(HashMap::new().into(), expr);
     }
 
-    // TODO We need to reconsider the delay/advance testcases
     #[test]
-    fn infer_advance_name_bound_to_thunk_in_context() {
+    fn infer_advance_name_bound_and_valid_tick() {}
+    #[test]
+    fn infer_advance_name_bound_and_invalid_tick() {}
+
+    #[test]
+    #[should_panic]
+    fn infer_advance_name_bound_to_thunk_in_context_but_no_tick() {
         let expr = Expr::Advance("x".to_owned());
         let mut context = HashMap::new();
         let fun_type = Type::TFun(Type::TUnit.b(), Type::TInt.b());
