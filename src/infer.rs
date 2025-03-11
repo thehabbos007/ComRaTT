@@ -93,8 +93,8 @@ impl Context {
     }
 }
 
-impl From<HashMap<Sym, Type>> for Context {
-    fn from(value: HashMap<Sym, Type>) -> Self {
+impl From<HashMap<Sym, Binding>> for Context {
+    fn from(value: HashMap<Sym, Binding>) -> Self {
         Context::Bindings(value)
     }
 }
@@ -125,7 +125,7 @@ impl Inference {
                 ),
             },
             Expr::Var(name) => {
-                if let Some(ty) = context.get(&name) {
+                if let Some((ty, _)) = context.get(&name) {
                     (
                         ty.clone(),
                         TypeOutput::new(vec![], TypedExpr::TName(name, ty.clone())),
@@ -217,7 +217,7 @@ impl Inference {
             }
             // advance must look only in the left bindings i.e. before the tick (going back in time)
             Expr::Advance(name) => match context.get(&name) {
-                Some(Type::TFun(box Type::TUnit, ty)) => {
+                Some((Type::TFun(box Type::TUnit, ty), _)) => {
                     let fun_type = Type::TFun(Type::TUnit.b(), ty.clone().b());
                     (
                         *ty.clone(),
@@ -970,12 +970,13 @@ mod tests {
         inference.infer(HashMap::new().into(), expr);
     }
 
+    // TODO We need to reconsider the delay/advance testcases
     #[test]
     fn infer_advance_name_bound_to_thunk_in_context() {
         let expr = Expr::Advance("x".to_owned());
         let mut context = HashMap::new();
         let fun_type = Type::TFun(Type::TUnit.b(), Type::TInt.b());
-        context.insert("x".to_owned(), fun_type.clone());
+        context.insert("x".to_owned(), (fun_type.clone(), None));
         let expected_texp = TypedExpr::TApp(
             TypedExpr::TName("x".to_owned(), fun_type).b(),
             vec![TypedExpr::TConst(Const::CUnit, Type::TUnit)],
@@ -989,6 +990,7 @@ mod tests {
         assert_eq!(output.texp, expected_texp);
     }
 
+    // TODO We need to reconsider the delay/advance testcases
     #[test]
     #[should_panic]
     fn infer_advance_name_not_bound_in_context_should_panic() {
@@ -999,12 +1001,13 @@ mod tests {
         inference.infer(HashMap::new().into(), expr);
     }
 
+    // TODO We need to reconsider the delay/advance testcases
     #[test]
     #[should_panic]
     fn infer_advance_name_not_bound_to_thunk_in_context_should_panic() {
         let expr = Expr::Advance("x".to_owned());
         let mut context = HashMap::new();
-        context.insert("x".to_owned(), Type::TInt);
+        context.insert("x".to_owned(), (Type::TInt, None));
         let mut inference = Inference {
             unification_table: InPlaceUnificationTable::default(),
         };
@@ -1013,7 +1016,10 @@ mod tests {
 
     #[test]
     fn infer_delay_produces_thunk() {
-        let expr = Expr::Delay(Expr::Const(Const::CInt(42)).b(), vec!["hey".to_owned()]);
+        let expr = Expr::Delay(
+            Expr::Const(Const::CInt(42)).b(),
+            HashSet::from(["hey".to_owned()]),
+        );
         let mut inference = Inference {
             unification_table: InPlaceUnificationTable::default(),
         };
@@ -1302,7 +1308,7 @@ mod tests {
     fn infer_var_in_context() {
         let expr = Expr::Var("x".to_owned());
         let context = &mut HashMap::new();
-        context.insert("x".to_owned(), Type::TInt);
+        context.insert("x".to_owned(), (Type::TInt, None));
         let mut inference = Inference {
             unification_table: InPlaceUnificationTable::default(),
         };
@@ -1446,7 +1452,7 @@ mod tests {
             Type::TInt.b(),
             Type::TFun(Type::TInt.b(), Type::TInt.b()).b(),
         );
-        let mut context = HashMap::from([("f".to_owned(), inner_fun_type.clone())]);
+        let mut context = HashMap::from([("f".to_owned(), (inner_fun_type.clone(), None))]);
         let expected_inner_fun = TypedExpr::TName("f".to_owned(), inner_fun_type.clone());
         let expected_inner_app = TypedExpr::TApp(
             expected_inner_fun.clone().b(),
@@ -1478,7 +1484,10 @@ mod tests {
             Expr::Const(Const::CInt(42)).b(),
         );
         let mut context = HashMap::new();
-        context.insert("f".to_owned(), Type::TFun(Type::TBool.b(), Type::TInt.b()));
+        context.insert(
+            "f".to_owned(),
+            (Type::TFun(Type::TBool.b(), Type::TInt.b()), None),
+        );
         let mut inference = Inference {
             unification_table: InPlaceUnificationTable::default(),
         };
@@ -1495,7 +1504,10 @@ mod tests {
             Expr::Const(Const::CInt(42)).b(),
         );
         let mut context = HashMap::new();
-        context.insert("f".to_owned(), Type::TFun(Type::TInt.b(), Type::TInt.b()));
+        context.insert(
+            "f".to_owned(),
+            (Type::TFun(Type::TInt.b(), Type::TInt.b()), None),
+        );
         let mut inference = Inference {
             unification_table: InPlaceUnificationTable::default(),
         };
@@ -1600,10 +1612,12 @@ mod tests {
             unification_table: InPlaceUnificationTable::default(),
         };
 
-        let mut context: HashMap<String, Type> =
-            [("x".to_owned(), Type::TInt), ("y".to_owned(), Type::TInt)]
-                .into_iter()
-                .collect();
+        let mut context: HashMap<Sym, Binding> = [
+            ("x".to_owned(), (Type::TInt, None)),
+            ("y".to_owned(), (Type::TInt, None)),
+        ]
+        .into_iter()
+        .collect();
 
         let (ty, output) = inference.infer(context.into(), expr);
 

@@ -476,7 +476,7 @@ mod tests {
             expr.parse_next(&mut token_slice),
             Ok(Expr::Delay(
                 Box::new(Expr::Var("x".to_string())),
-                vec!["banan".to_owned()]
+                HashSet::from(["banan".to_owned()])
             ))
         );
 
