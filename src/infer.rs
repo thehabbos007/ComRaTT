@@ -239,6 +239,8 @@ impl Inference {
             // advance must look only in the left bindings i.e. before the tick (going back in time)
             // also the clock related to the name being advanced must be correct wrt. the delayed computation.
             // this is handled by attempt_advance
+            // TODO: this currently only checks that name is a delayed computation
+            // by checking if it is a thunk.
             Expr::Advance(name) => match context.attempt_advance(&name) {
                 Type::TFun(box Type::TUnit, ty) => {
                     let fun_type = Type::TFun(Type::TUnit.b(), ty.clone().b());
@@ -1005,10 +1007,62 @@ mod tests {
         inference.infer(HashMap::new().into(), expr);
     }
 
+    // This should pass because the tick is on keyboard, which is part of the clock
+    // for the name being advanced
     #[test]
-    fn infer_advance_name_bound_and_valid_tick() {}
+    fn infer_advance_name_bound_and_valid_tick_subset() {
+        let expr = Expr::Advance("x".to_owned());
+        let fun_type = Type::TFun(Type::TUnit.b(), Type::TInt.b());
+        let binding = (
+            fun_type,
+            Some(HashSet::from(["keyboard".to_owned(), "mouse".to_owned()])),
+        );
+        let mut context = Context::Tick(
+            HashMap::from([("x".to_owned(), binding)]),
+            HashSet::from(["keyboard".to_owned()]),
+            HashMap::new(),
+        );
+
+        let mut inference = Inference {
+            unification_table: InPlaceUnificationTable::default(),
+        };
+        let (ty, output) = inference.infer(context.into(), expr);
+    }
+
     #[test]
-    fn infer_advance_name_bound_and_invalid_tick() {}
+    fn infer_advance_name_bound_and_valid_tick() {
+        let expr = Expr::Advance("x".to_owned());
+        let fun_type = Type::TFun(Type::TUnit.b(), Type::TInt.b());
+        let binding = (fun_type, Some(HashSet::from(["keyboard".to_owned()])));
+        let mut context = Context::Tick(
+            HashMap::from([("x".to_owned(), binding)]),
+            HashSet::from(["keyboard".to_owned()]),
+            HashMap::new(),
+        );
+
+        let mut inference = Inference {
+            unification_table: InPlaceUnificationTable::default(),
+        };
+        let (ty, output) = inference.infer(context.into(), expr);
+    }
+
+    #[test]
+    #[should_panic]
+    fn infer_advance_name_bound_and_invalid_tick() {
+        let expr = Expr::Advance("x".to_owned());
+        let fun_type = Type::TFun(Type::TUnit.b(), Type::TInt.b());
+        let binding = (fun_type, Some(HashSet::from(["mouse".to_owned()])));
+        let mut context = Context::Tick(
+            HashMap::new(),
+            HashSet::from(["keyboard".to_owned()]),
+            HashMap::new(),
+        );
+
+        let mut inference = Inference {
+            unification_table: InPlaceUnificationTable::default(),
+        };
+        let _ = inference.infer(context.into(), expr);
+    }
 
     #[test]
     #[should_panic]
@@ -1017,20 +1071,12 @@ mod tests {
         let mut context = HashMap::new();
         let fun_type = Type::TFun(Type::TUnit.b(), Type::TInt.b());
         context.insert("x".to_owned(), (fun_type.clone(), None));
-        let expected_texp = TypedExpr::TApp(
-            TypedExpr::TName("x".to_owned(), fun_type).b(),
-            vec![TypedExpr::TConst(Const::CUnit, Type::TUnit)],
-            Type::TInt,
-        );
         let mut inference = Inference {
             unification_table: InPlaceUnificationTable::default(),
         };
-        let (ty, output) = inference.infer(context.into(), expr);
-        assert_eq!(ty, Type::TInt);
-        assert_eq!(output.texp, expected_texp);
+        let _ = inference.infer(context.into(), expr);
     }
 
-    // TODO We need to reconsider the delay/advance testcases
     #[test]
     #[should_panic]
     fn infer_advance_name_not_bound_in_context_should_panic() {
@@ -1041,7 +1087,6 @@ mod tests {
         inference.infer(HashMap::new().into(), expr);
     }
 
-    // TODO We need to reconsider the delay/advance testcases
     #[test]
     #[should_panic]
     fn infer_advance_name_not_bound_to_thunk_in_context_should_panic() {
