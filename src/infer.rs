@@ -56,10 +56,10 @@ impl Context {
                 "Tried to advance name {} without a tick in the context",
                 key
             ),
-            Context::Tick(bindings, delayed_comp_clock, _) => {
+            Context::Tick(bindings, tick_clock, _) => {
                 if let Some((ty, clock_opt)) = bindings.get(key) {
                     if let Some(clock) = clock_opt {
-                        if clock.is_subset(delayed_comp_clock) {
+                        if tick_clock.is_subset(clock) {
                             return ty.clone();
                         }
                         panic!("Tried to advance name {} with clock not part of tick", key);
