@@ -20,3 +20,7 @@ wasmparser = "0.225.0"
 wasmprinter = "0.225.0"
 wat = "1.225.0"
 ena = "0.14.3"
+
+[dev-dependencies]
+wasmtime-wast = "30"
+wasmtime = "30"

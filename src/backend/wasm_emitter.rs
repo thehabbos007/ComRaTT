@@ -37,7 +37,7 @@ const MALLOC_BODY: &str = r#"
 (module
     (global $next_ptr (mut i32) (i32.const 0))
     (type $malloc (func (param i32) (result i32)))
-    (func $malloc (param $size i32) (result i32)
+    (func $malloc (export "malloc") (param $size i32) (result i32)
         ;; Define a local to hold the current value i.e. the beginning
         ;; of this new allocation
         (local $old i32)
@@ -97,27 +97,15 @@ impl WasmEmitter<'_> {
     pub fn finalize_emit(mut self) -> Vec<u8> {
         self.module.section(&self.type_section);
         self.module.section(&ImportSection::new());
-        // if !self.function_section.is_empty() {
         self.module.section(&self.function_section);
-        // }
         // <Table section would be here>
-        // if !self.memory_section.is_empty() {
         self.module.section(&self.memory_section);
-        // }
-        // if !self.global_section.is_empty() {
         self.module.section(&self.global_section);
-        // }
-        // if !self.export_section.is_empty() {
         self.module.section(&self.export_section);
-        // }
         // <Start section would be here>
-        // if !self.element_section.is_empty() {
         self.module.section(&self.element_section);
-        // }
         // <Data count section here>
-        // if !self.code_section.is_empty() {
         self.module.section(&self.code_section);
-        // }
         // <Data section would be here>
         self.module.section(&self.name_section);
 
@@ -179,6 +167,8 @@ impl WasmEmitter<'_> {
 mod tests {
     use super::*;
     use wasmparser::{validate, Validator};
+    use wasmtime::Store;
+    use wasmtime_wast::WastContext;
 
     #[test]
     fn parse_malloc() {
@@ -195,10 +185,32 @@ mod tests {
         // Finalize the module
         let wasm_bytes = emitter.finalize_emit();
 
+        // let rasm = wasmprinter::print_bytes(&wasm_bytes)?;
+        // panic!("{rasm}");
+
         // Validate the generated WASM
         let mut validator = Validator::new();
         validator.validate_all(&wasm_bytes)?;
 
         Ok(())
+    }
+
+    #[test]
+    fn malloc_test() {
+        let test = r#"
+        (assert_return (invoke "malloc" (i32.const 8)) (i32.const 0))
+        (assert_return (invoke "malloc" (i32.const 16)) (i32.const 8))
+        (assert_return (invoke "malloc" (i32.const 1)) (i32.const 24))
+        "#;
+
+        let malloc_test = format!("{MALLOC_BODY}{test}");
+        test_wast(malloc_test);
+    }
+
+    fn test_wast(wast: String) {
+        let engine = wasmtime::Engine::default();
+        let store = wasmtime::Store::new(&engine, ());
+        let mut ctx = WastContext::new(store);
+        ctx.run_buffer("inline_test", wast.as_bytes()).unwrap();
     }
 }
