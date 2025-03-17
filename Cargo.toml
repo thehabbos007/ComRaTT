@@ -8,6 +8,7 @@ name = "comratt"
 path = "src/bin.rs"
 
 [dependencies]
+anyhow = "1"
 winnow = "0.7"
 annotate-snippets = "0.11"
 lexopt = "0.3"
@@ -17,4 +18,5 @@ itertools = "0.14.0"
 wasm-encoder = { version = "0.225.0", features = ["wasmparser"] }
 wasmparser = "0.225.0"
 wasmprinter = "0.225.0"
+wat = "1.225.0"
 ena = "0.14.3"

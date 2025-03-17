@@ -1,80 +1,41 @@
 use itertools::Itertools;
-use std::collections::HashMap;
-use wasm_encoder::{
-    BlockType, CodeSection, ElementSection, ExportKind, ExportSection, Function, FunctionSection,
-    GlobalSection, IndirectNameMap, Instruction, MemorySection, MemoryType, Module, NameMap,
-    NameSection, TypeSection, ValType,
-};
+use std::ops::{Deref, DerefMut};
+use wasm_encoder::{BlockType, ExportKind, Function, Instruction, NameMap, ValType};
 
 use crate::source::{Binop, Const, Type};
 use crate::types::{traverse_locals, TypedExpr, TypedProg, TypedToplevel};
 
-pub struct WasmEmitter<'a> {
-    type_section: TypeSection,
-    function_section: FunctionSection,
-    export_section: ExportSection,
-    memory_section: MemorySection,
-    code_section: CodeSection,
-    global_section: GlobalSection,
-    element_section: ElementSection,
+use super::wasm_emitter::WasmEmitter;
 
-    // Debug info
-    function_name_map: NameMap,
-    type_name_map: NameMap,
-    locals_name_map: IndirectNameMap,
-
-    type_map: HashMap<&'a str, u32>,
-    func_map: HashMap<&'a str, u32>,
-
-    locals_map: HashMap<&'a str, u32>,
-    next_local: u32,
+pub struct BareWasmEmitter<'a> {
+    wasm_emitter: WasmEmitter<'a>,
 
     prog: &'a TypedProg,
 }
 
-impl<'a> WasmEmitter<'a> {
+impl<'a> Deref for BareWasmEmitter<'a> {
+    type Target = WasmEmitter<'a>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.wasm_emitter
+    }
+}
+impl DerefMut for BareWasmEmitter<'_> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.wasm_emitter
+    }
+}
+
+impl<'a> BareWasmEmitter<'a> {
     pub fn new(prog: &'a TypedProg) -> Self {
         Self {
-            type_section: TypeSection::new(),
-            function_section: FunctionSection::new(),
-            export_section: ExportSection::new(),
-            memory_section: MemorySection::new(),
-            code_section: CodeSection::new(),
-            global_section: GlobalSection::new(),
-            element_section: ElementSection::new(),
-
-            function_name_map: NameMap::new(),
-            type_name_map: NameMap::new(),
-            locals_name_map: IndirectNameMap::new(),
-
-            type_map: HashMap::new(),
-            func_map: HashMap::new(),
-
-            locals_map: HashMap::new(),
-            next_local: 0,
-
+            wasm_emitter: WasmEmitter::new(),
             prog,
         }
     }
 
-    pub fn emit(&mut self) -> Vec<u8> {
-        // Now heap
-        self.memory_section.memory(MemoryType {
-            minimum: 1,
-            maximum: None,
-            memory64: false,
-            shared: false,
-            page_size_log2: None,
-        });
-
-        // Later heap
-        self.memory_section.memory(MemoryType {
-            minimum: 1,
-            maximum: None,
-            memory64: false,
-            shared: false,
-            page_size_log2: None,
-        });
+    pub fn emit(mut self) -> Vec<u8> {
+        self.prepare_emit();
 
         for def in &self.prog.0 {
             self.forward_declare_functions(def);
@@ -84,40 +45,7 @@ impl<'a> WasmEmitter<'a> {
             self.process_function(def);
         }
 
-        let mut module = Module::new();
-        if !self.type_section.is_empty() {
-            module.section(&self.type_section);
-        }
-        // <Import section would be here>
-        if !self.function_section.is_empty() {
-            module.section(&self.function_section);
-        }
-        // <Table section would be here>
-        if !self.memory_section.is_empty() {
-            module.section(&self.memory_section);
-        }
-        if !self.global_section.is_empty() {
-            module.section(&self.global_section);
-        }
-        if !self.export_section.is_empty() {
-            module.section(&self.export_section);
-        }
-        // <Start section would be here>
-        if !self.element_section.is_empty() {
-            module.section(&self.element_section);
-        }
-        // <Data count section here>
-        if !self.code_section.is_empty() {
-            module.section(&self.code_section);
-        }
-        // <Data section would be here>
-        let mut name_section = NameSection::new();
-        name_section.functions(&self.function_name_map);
-        name_section.locals(&self.locals_name_map);
-        name_section.types(&self.type_name_map);
-        module.section(&name_section);
-
-        module.finish()
+        self.wasm_emitter.finalize_emit()
     }
 
     fn forward_declare_functions(&mut self, def: &'a TypedToplevel) {
@@ -126,9 +54,8 @@ impl<'a> WasmEmitter<'a> {
         };
 
         let type_idx = self.register_function_type(name, args, ret_type);
+        let func_idx = self.function_section.len();
         self.function_section.function(type_idx);
-
-        let func_idx = self.func_map.len() as u32;
         self.func_map.insert(name.as_str(), func_idx);
 
         self.export_section.export(name, ExportKind::Func, func_idx);
@@ -155,7 +82,8 @@ impl<'a> WasmEmitter<'a> {
                 local_types.dedup();
 
                 for (i, (arg_name, _)) in local_types.iter().enumerate() {
-                    self.locals_map.insert(arg_name, self.next_local + i as u32);
+                    let idx = self.next_local + i as u32;
+                    self.locals_map.insert(arg_name, idx);
                 }
                 self.next_local += local_types.len() as u32;
 
@@ -192,10 +120,6 @@ impl<'a> WasmEmitter<'a> {
         args: &[(String, Type)],
         ret_type: &Type,
     ) -> u32 {
-        if let Some(&idx) = self.type_map.get(&name) {
-            return idx;
-        }
-
         let params = args
             .iter()
             .map(|(_, ty)| self.wasm_type(ty))
@@ -203,7 +127,7 @@ impl<'a> WasmEmitter<'a> {
 
         let results = [self.wasm_type(ret_type)];
 
-        let idx = self.type_map.len() as u32;
+        let idx = self.type_section.len();
 
         self.type_section
             .ty()
@@ -339,7 +263,7 @@ mod tests {
             Type::TInt,
         )]);
 
-        let mut emitter = WasmEmitter::new(&prog);
+        let mut emitter = BareWasmEmitter::new(&prog);
         let wasm = emitter.emit();
 
         validate_wasm(&wasm);
@@ -359,7 +283,7 @@ mod tests {
             Type::TInt,
         )]);
 
-        let mut emitter = WasmEmitter::new(&prog);
+        let mut emitter = BareWasmEmitter::new(&prog);
         let wasm = emitter.emit();
 
         validate_wasm(&wasm);
@@ -379,7 +303,7 @@ mod tests {
             Type::TInt,
         )]);
 
-        let mut emitter = WasmEmitter::new(&prog);
+        let mut emitter = BareWasmEmitter::new(&prog);
         let wasm = emitter.emit();
 
         validate_wasm(&wasm);
@@ -411,7 +335,7 @@ mod tests {
             ),
         ]);
 
-        let mut emitter = WasmEmitter::new(&prog);
+        let mut emitter = BareWasmEmitter::new(&prog);
         let wasm = emitter.emit();
 
         validate_wasm(&wasm);
@@ -431,7 +355,7 @@ mod tests {
             Type::TInt,
         )]);
 
-        let mut emitter = WasmEmitter::new(&prog);
+        let mut emitter = BareWasmEmitter::new(&prog);
         let wasm = emitter.emit();
 
         validate_wasm(&wasm);
@@ -451,7 +375,7 @@ mod tests {
             Type::TBool,
         )]);
 
-        let mut emitter = WasmEmitter::new(&prog);
+        let mut emitter = BareWasmEmitter::new(&prog);
         let wasm = emitter.emit();
 
         validate_wasm(&wasm);
@@ -467,7 +391,7 @@ mod tests {
             Type::TProduct(vec![]),
         )]);
 
-        let mut emitter = WasmEmitter::new(&prog);
+        let mut emitter = BareWasmEmitter::new(&prog);
         emitter.emit();
     }
 
@@ -484,7 +408,7 @@ mod tests {
             Type::TFun(Box::new(Type::TUnit), Box::new(Type::TUnit)),
         )]);
 
-        let mut emitter = WasmEmitter::new(&prog);
+        let mut emitter = BareWasmEmitter::new(&prog);
         emitter.emit();
     }
 
@@ -525,7 +449,7 @@ mod tests {
             ),
         ]);
 
-        let mut emitter = WasmEmitter::new(&prog);
+        let mut emitter = BareWasmEmitter::new(&prog);
         let wasm = emitter.emit();
 
         validate_wasm(&wasm);
@@ -550,7 +474,7 @@ mod tests {
             Type::TInt,
         )]);
 
-        let mut emitter = WasmEmitter::new(&prog);
+        let mut emitter = BareWasmEmitter::new(&prog);
         let wasm = emitter.emit();
 
         validate_wasm(&wasm);
@@ -580,7 +504,7 @@ mod tests {
             Type::TInt,
         )]);
 
-        let mut emitter = WasmEmitter::new(&prog);
+        let mut emitter = BareWasmEmitter::new(&prog);
         let wasm = emitter.emit();
 
         validate_wasm(&wasm);
@@ -596,7 +520,7 @@ mod tests {
             Type::TInt,
         )]);
 
-        let mut emitter = WasmEmitter::new(&prog);
+        let mut emitter = BareWasmEmitter::new(&prog);
         let wasm = emitter.emit();
 
         validate_wasm(&wasm);
@@ -626,7 +550,7 @@ mod tests {
             Type::TInt,
         )]);
 
-        let mut emitter = WasmEmitter::new(&prog);
+        let mut emitter = BareWasmEmitter::new(&prog);
         let wasm = emitter.emit();
         validate_wasm(&wasm);
 

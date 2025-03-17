@@ -1,8 +1,9 @@
 pub mod anf_wasm;
 pub mod wasm;
+pub mod wasm_emitter;
 
 pub fn compile_to_wasm(prog: &crate::types::TypedProg) -> Vec<u8> {
-    let mut emitter = wasm::WasmEmitter::new(prog);
+    let mut emitter = wasm::BareWasmEmitter::new(prog);
     emitter.emit()
 }
 
