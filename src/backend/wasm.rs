@@ -263,7 +263,7 @@ mod tests {
             Type::TInt,
         )]);
 
-        let mut emitter = BareWasmEmitter::new(&prog);
+        let emitter = BareWasmEmitter::new(&prog);
         let wasm = emitter.emit();
 
         validate_wasm(&wasm);
@@ -283,7 +283,7 @@ mod tests {
             Type::TInt,
         )]);
 
-        let mut emitter = BareWasmEmitter::new(&prog);
+        let emitter = BareWasmEmitter::new(&prog);
         let wasm = emitter.emit();
 
         validate_wasm(&wasm);
@@ -303,7 +303,7 @@ mod tests {
             Type::TInt,
         )]);
 
-        let mut emitter = BareWasmEmitter::new(&prog);
+        let emitter = BareWasmEmitter::new(&prog);
         let wasm = emitter.emit();
 
         validate_wasm(&wasm);
@@ -335,7 +335,7 @@ mod tests {
             ),
         ]);
 
-        let mut emitter = BareWasmEmitter::new(&prog);
+        let emitter = BareWasmEmitter::new(&prog);
         let wasm = emitter.emit();
 
         validate_wasm(&wasm);
@@ -355,7 +355,7 @@ mod tests {
             Type::TInt,
         )]);
 
-        let mut emitter = BareWasmEmitter::new(&prog);
+        let emitter = BareWasmEmitter::new(&prog);
         let wasm = emitter.emit();
 
         validate_wasm(&wasm);
@@ -375,7 +375,7 @@ mod tests {
             Type::TBool,
         )]);
 
-        let mut emitter = BareWasmEmitter::new(&prog);
+        let emitter = BareWasmEmitter::new(&prog);
         let wasm = emitter.emit();
 
         validate_wasm(&wasm);
@@ -391,7 +391,7 @@ mod tests {
             Type::TProduct(vec![]),
         )]);
 
-        let mut emitter = BareWasmEmitter::new(&prog);
+        let emitter = BareWasmEmitter::new(&prog);
         emitter.emit();
     }
 
@@ -408,7 +408,7 @@ mod tests {
             Type::TFun(Box::new(Type::TUnit), Box::new(Type::TUnit)),
         )]);
 
-        let mut emitter = BareWasmEmitter::new(&prog);
+        let emitter = BareWasmEmitter::new(&prog);
         emitter.emit();
     }
 
@@ -449,7 +449,7 @@ mod tests {
             ),
         ]);
 
-        let mut emitter = BareWasmEmitter::new(&prog);
+        let emitter = BareWasmEmitter::new(&prog);
         let wasm = emitter.emit();
 
         validate_wasm(&wasm);
@@ -474,7 +474,7 @@ mod tests {
             Type::TInt,
         )]);
 
-        let mut emitter = BareWasmEmitter::new(&prog);
+        let emitter = BareWasmEmitter::new(&prog);
         let wasm = emitter.emit();
 
         validate_wasm(&wasm);
@@ -504,7 +504,7 @@ mod tests {
             Type::TInt,
         )]);
 
-        let mut emitter = BareWasmEmitter::new(&prog);
+        let emitter = BareWasmEmitter::new(&prog);
         let wasm = emitter.emit();
 
         validate_wasm(&wasm);
@@ -520,7 +520,7 @@ mod tests {
             Type::TInt,
         )]);
 
-        let mut emitter = BareWasmEmitter::new(&prog);
+        let emitter = BareWasmEmitter::new(&prog);
         let wasm = emitter.emit();
 
         validate_wasm(&wasm);
@@ -550,7 +550,7 @@ mod tests {
             Type::TInt,
         )]);
 
-        let mut emitter = BareWasmEmitter::new(&prog);
+        let emitter = BareWasmEmitter::new(&prog);
         let wasm = emitter.emit();
         validate_wasm(&wasm);
 

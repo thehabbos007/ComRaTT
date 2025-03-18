@@ -1,14 +1,12 @@
 use anyhow::{Context, Result};
 use wasm_encoder::{
-    reencode::{utils::parse_type_section, Reencode, RoundtripReencoder},
-    BlockType, CodeSection, ElementSection, ExportKind, ExportSection, Function, FunctionSection,
-    GlobalSection, ImportSection, IndirectNameMap, Instruction, MemorySection, MemoryType, Module,
-    NameMap, NameSection, StorageType, TypeSection, ValType,
+    reencode::{Reencode, RoundtripReencoder}, CodeSection, ElementSection, ExportSection, FunctionSection,
+    GlobalSection, ImportSection, IndirectNameMap, MemorySection, MemoryType, Module,
+    NameMap, NameSection, TypeSection,
 };
 
-use itertools::Itertools;
-use std::collections::{BTreeSet, HashMap};
-use wasmparser::{BinaryReader, FunctionSectionReader, Payload};
+use std::collections::HashMap;
+use wasmparser::Payload;
 
 pub struct WasmEmitter<'a> {
     pub module: Module,
@@ -65,6 +63,12 @@ const ALLOCATE_CLOSURE: &str = r#"
 // After doing this, make sure to check if arity is 0 and call in that case
 const POPULATE_CLOSURE: &str = r#"
 "#;
+
+impl Default for WasmEmitter<'_> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl WasmEmitter<'_> {
     pub fn new() -> Self {
@@ -175,8 +179,8 @@ impl WasmEmitter<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use wasmparser::{validate, Validator};
-    use wasmtime::Store;
+    use wasmparser::Validator;
+    
     use wasmtime_wast::WastContext;
 
     #[test]

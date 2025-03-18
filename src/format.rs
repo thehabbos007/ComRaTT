@@ -264,7 +264,7 @@ impl Display for CExpr {
                     .iter()
                     .map(|a| a.to_string())
                     .collect::<Vec<_>>()
-                    .join(" ");
+                    .join(", ");
                 write!(f, "{}({})", fun, args_str)
             }
             CExpr::Tuple(elems, _) => {
