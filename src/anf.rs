@@ -7,8 +7,7 @@ use std::ops::Deref;
 pub enum AExpr {
     Const(Const, Type),
     Var(Sym, Type),
-    // Lambdas are lifted to top-level functions, so we don't need this..
-    // Lam(..)
+    Lam(Vec<(Sym, Type)>, Box<AnfExpr>, Type),
 }
 
 impl AExpr {
@@ -16,6 +15,7 @@ impl AExpr {
         match self {
             AExpr::Const(_, ty) => ty.clone(),
             AExpr::Var(_, ty) => ty.clone(),
+            AExpr::Lam(.., ty) => ty.clone(),
         }
     }
 }

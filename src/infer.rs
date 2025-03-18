@@ -559,7 +559,8 @@ impl Inference {
                 }
                 let (unbound, body) = self.substitute_texp(*body.clone());
                 unbounds.extend(unbound);
-                let (_, ty) = self.substitute(ty);
+                let (unbound, ty) = self.substitute(ty);
+                unbounds.extend(unbound);
                 (unbounds, TypedExpr::TLam(new_args, body.b(), ty))
             }
             TypedExpr::TApp(fun, args, ty) => {
@@ -573,7 +574,8 @@ impl Inference {
                     unbounds.extend(unbound);
                 }
 
-                let (_, ty) = self.substitute(ty);
+                let (unbound, ty) = self.substitute(ty);
+                unbounds.extend(unbound);
                 (unbounds, TypedExpr::TApp(fun.b(), new_args, ty))
             }
             TypedExpr::TPrim(op, left, right, ty) => {

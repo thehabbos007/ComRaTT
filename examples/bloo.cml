@@ -1,0 +1,11 @@
+hans : int -> int -> int
+def hans x y = x - y;
+
+bloo : int -> int -> int -> int -> int
+def bloo x y z =
+    let hans = fun x y -> x + y in
+    let grete = hans 2 in
+    fun w -> (grete x) + y + z + w;
+
+main: int -> int
+def main x = bloo x x x 5;

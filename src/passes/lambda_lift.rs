@@ -78,45 +78,46 @@ impl LambdaLift {
             }
 
             TypedExpr::TLam(args, body, typ) => {
-                let bound: HashSet<_> = args.iter().map(|(name, _)| name.clone()).collect();
-                let free_vars = find_free_vars(&body, &bound);
-                let free_vars_with_types = free_vars
-                    .iter()
-                    .filter_map(|name| {
-                        ctx.iter()
-                            .find(|(n, _)| n == name)
-                            .map(|(name, typ)| (name.clone(), typ.clone()))
-                    })
-                    .collect_vec();
+                let bound: HashSet<_> = args.iter().cloned().collect();
+                let free_vars_with_types = find_free_vars(&body, &bound);
+                // let free_vars_with_types = free_vars
+                //     .iter()
+                //     .filter_map(|name| {
+                //         ctx.iter()
+                //             .find(|(n, _)| n == name)
+                //             .map(|(name, typ)| (name.clone(), typ.clone()))
+                //     })
+                //     .collect_vec();
+
+                let fun_name = self.unique_name("lambda");
+                let orig_arg_len = args.len();
+                let new_args = free_vars_with_types.clone();
+                let (return_typ, _) = tfun_len_n(typ.clone(), orig_arg_len);
+                let mut new_args = new_args.iter().cloned().collect_vec();
+                new_args.extend(args);
+
+                let (lifted_body, mut lifted_defs) = self.lift_lambdas(*body, new_args.as_slice());
+
+                let lambda_def = TypedToplevel::TFunDef(
+                    fun_name.clone(),
+                    new_args.clone(),
+                    Box::new(lifted_body),
+                    return_typ.clone(),
+                );
+
+                let substitute_typ = build_function_type(
+                    &new_args.clone().into_iter().map(|(_, ty)| ty).collect_vec(),
+                    return_typ,
+                );
+
+                lifted_defs.push(lambda_def);
 
                 if free_vars_with_types.is_empty() {
-                    let (lifted_body, lifted_defs) = self.lift_lambdas(*body, ctx);
-                    let lambda = TypedExpr::TLam(args, Box::new(lifted_body), typ);
-                    (lambda, lifted_defs)
+                    (
+                        TypedExpr::TName(fun_name, substitute_typ.clone()),
+                        lifted_defs,
+                    )
                 } else {
-                    let fun_name = self.unique_name("lambda");
-                    let orig_arg_len = args.len();
-                    let mut new_args = free_vars_with_types.clone();
-                    new_args.extend(args);
-
-                    let (return_typ, _) = tfun_len_n(typ.clone(), orig_arg_len);
-
-                    let (lifted_body, mut lifted_defs) = self.lift_lambdas(*body, &new_args);
-
-                    let lambda_def = TypedToplevel::TFunDef(
-                        fun_name.clone(),
-                        new_args.clone(),
-                        Box::new(lifted_body),
-                        return_typ.clone(),
-                    );
-
-                    let substitute_typ = build_function_type(
-                        &new_args.clone().into_iter().map(|(_, ty)| ty).collect_vec(),
-                        return_typ,
-                    );
-
-                    lifted_defs.push(lambda_def);
-
                     let app_args: Vec<_> = free_vars_with_types
                         .iter()
                         .map(|(name, typ)| TypedExpr::TName(name.clone(), typ.clone()))

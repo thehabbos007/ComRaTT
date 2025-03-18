@@ -159,6 +159,7 @@ impl<'a> AnfWasmEmitter<'a> {
                     panic!("Undefined variable: {}", name);
                 }
             }
+            AExpr::Lam(..) => todo!(),
         }
     }
 

@@ -73,8 +73,19 @@ impl PartialElimination {
             TypedExpr::TLam(args, body, typ) => {
                 TypedExpr::TLam(args, Box::new(self.eliminate_partial(*body)), typ)
             }
+            TypedExpr::TApp(fun_expr, args, app_ty @ Type::TFun(_, _)) => {
+                let eta_args = unpack_type(&app_ty);
+                let (lambda_args, app_args) = self.generate_lambda_vars_and_app_vars(&eta_args);
+                let mut all_args = args;
+                all_args.extend(app_args);
+                TypedExpr::TLam(
+                    lambda_args,
+                    Box::new(TypedExpr::TApp(fun_expr, all_args, final_type(&app_ty))),
+                    app_ty.clone(),
+                )
+            }
             TypedExpr::TApp(fn_expr, args, typ) => TypedExpr::TApp(
-                Box::new(self.eliminate_partial(*fn_expr)),
+                fn_expr,
                 args.into_iter()
                     .map(|arg| self.eliminate_partial(arg))
                     .collect(),
@@ -82,29 +93,6 @@ impl PartialElimination {
             ),
             TypedExpr::TLet(bind_old, _, box TypedExpr::TName(bind_new, _), body) => {
                 substitute_binding(&bind_old, &bind_new, *body)
-            }
-
-            TypedExpr::TLet(
-                name,
-                typ,
-                box TypedExpr::TApp(lam, args, app_ty @ Type::TFun(_, _)),
-                body,
-            ) => {
-                let eta_args = unpack_type(&app_ty);
-                let (lambda_args, app_args) = self.generate_lambda_vars_and_app_vars(&eta_args);
-                let mut all_args = args;
-                all_args.extend(app_args);
-                let new_lam = TypedExpr::TLam(
-                    lambda_args,
-                    Box::new(TypedExpr::TApp(lam, all_args, final_type(&app_ty))),
-                    typ.clone(),
-                );
-                TypedExpr::TLet(
-                    name,
-                    typ,
-                    Box::new(new_lam),
-                    Box::new(self.eliminate_partial(*body)),
-                )
             }
             TypedExpr::TLet(name, typ, rhs, body) => TypedExpr::TLet(
                 name,

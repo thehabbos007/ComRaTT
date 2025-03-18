@@ -208,6 +208,74 @@ impl Display for Prog {
     }
 }
 
+impl Display for TypedExpr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TypedExpr::TConst(c, _) => write!(f, "{}", c),
+            TypedExpr::TName(x, _) => write!(f, "{}", x),
+            TypedExpr::TLam(args, body, ty) => {
+                let args_str = args
+                    .iter()
+                    .map(|(name, _)| name.clone())
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                write!(f, "(fun {} -> {} : {})", args_str, body, ty)
+            }
+            TypedExpr::TApp(e, args, ty) => {
+                let args_str = args
+                    .iter()
+                    .map(|a| a.to_string())
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                write!(f, "{} ({}) : {}", e, args_str, ty)
+            }
+            TypedExpr::TPrim(op, e1, e2, _) => write!(f, "{} {} {}", e1, op, e2),
+            TypedExpr::TLet(x, _, e1, e2) => {
+                write!(f, "let {} = {} in {}", x, e1, e2)
+            }
+            TypedExpr::TIfThenElse(cond, then_branch, else_branch, _) => {
+                write!(f, "if {} then {} else {}", cond, then_branch, else_branch)
+            }
+            TypedExpr::TTuple(exprs, _) => {
+                let exprs_str = exprs
+                    .iter()
+                    .map(|e| e.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                write!(f, "({})", exprs_str)
+            }
+            TypedExpr::TAccess(e, i, _) => write!(f, "{}.{}", e, i),
+        }
+    }
+}
+
+impl Display for TypedToplevel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TypedToplevel::TFunDef(name, params, body, ret_ty) => {
+                let param_str = params
+                    .iter()
+                    .map(|(name, ty)| format!("{}: {}", name, ty))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                writeln!(f, "def {}({}) : {} =\n  {}", name, param_str, ret_ty, body)
+            }
+            TypedToplevel::Channel(name) => writeln!(f, "channel {};", name),
+            TypedToplevel::Output(name, expr) => writeln!(f, "{} <- {};", name, expr),
+        }
+    }
+}
+
+impl Display for TypedProg {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for p in self.0.iter() {
+            writeln!(f, "{}", p)?;
+        }
+
+        writeln!(f)
+    }
+}
+
 impl Display for AnfProg {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for p in self.iter() {
@@ -225,7 +293,7 @@ impl Display for AnfToplevel {
                     .iter()
                     .map(|(name, ty)| format!("{}: {}", name, ty))
                     .collect::<Vec<_>>()
-                    .join(" ");
+                    .join(", ");
                 writeln!(f, "def {}({}) : {} =\n  {}", name, param_str, ret_ty, body)
             }
             AnfToplevel::Channel(name) => writeln!(f, "channel {};", name),
@@ -239,8 +307,8 @@ impl Display for AnfExpr {
         match self {
             AnfExpr::AExpr(a) => write!(f, "{}", a),
             AnfExpr::CExp(c) => write!(f, "{}", c),
-            AnfExpr::Let(name, ty, val, body) => {
-                write!(f, "let {}: {} = {} in {}", name, ty, val, body)
+            AnfExpr::Let(name, _, rhs, body) => {
+                write!(f, "let {} = {} in {}", name, rhs, body)
             }
         }
     }
@@ -251,6 +319,14 @@ impl Display for AExpr {
         match self {
             AExpr::Const(c, _) => write!(f, "{}", c),
             AExpr::Var(s, _) => write!(f, "{}", s),
+            AExpr::Lam(args, body, _) => {
+                let args_str = args
+                    .iter()
+                    .map(|(name, _)| name.clone())
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                write!(f, "(fun {} -> {})", args_str, body)
+            }
         }
     }
 }
@@ -264,8 +340,8 @@ impl Display for CExpr {
                     .iter()
                     .map(|a| a.to_string())
                     .collect::<Vec<_>>()
-                    .join(", ");
-                write!(f, "{}({})", fun, args_str)
+                    .join(" ");
+                write!(f, "{} {}", fun, args_str)
             }
             CExpr::Tuple(elems, _) => {
                 let elems_str = elems

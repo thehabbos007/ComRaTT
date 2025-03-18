@@ -173,15 +173,20 @@ pub fn traverse_locals<'a>(expr: &'a TypedExpr, locals: &mut Vec<(&'a str, Type)
     }
 }
 
-pub fn find_free_vars(expr: &TypedExpr, bound: &HashSet<String>) -> HashSet<String> {
+pub fn find_free_vars(
+    expr: &TypedExpr,
+    bound: &HashSet<(String, Type)>,
+) -> HashSet<(String, Type)> {
     match expr {
         TypedExpr::TConst(_, _) => HashSet::new(),
-        TypedExpr::TName(name, _) => {
-            if bound.contains(name) {
+        TypedExpr::TName(name, ty) => {
+            let name = name.clone();
+            let ty = ty.clone();
+            if bound.contains(&(name.clone(), ty.clone())) {
                 HashSet::new()
             } else {
                 let mut set = HashSet::new();
-                set.insert(name.clone());
+                set.insert((name, ty));
                 set
             }
         }
@@ -193,8 +198,10 @@ pub fn find_free_vars(expr: &TypedExpr, bound: &HashSet<String>) -> HashSet<Stri
         }
         TypedExpr::TLam(args, body, _) => {
             let mut new_bound = bound.clone();
-            for (name, _) in args {
-                new_bound.insert(name.clone());
+            for (name, ty) in args {
+                let name = name.clone();
+                let ty = ty.clone();
+                new_bound.insert((name, ty));
             }
             find_free_vars(body, &new_bound)
         }
@@ -205,10 +212,12 @@ pub fn find_free_vars(expr: &TypedExpr, bound: &HashSet<String>) -> HashSet<Stri
             }
             free
         }
-        TypedExpr::TLet(name, _, rhs, body) => {
+        TypedExpr::TLet(name, ty, rhs, body) => {
             let mut free = find_free_vars(rhs, bound);
             let mut new_bound = bound.clone();
-            new_bound.insert(name.clone());
+            let name = name.clone();
+            let ty = ty.clone();
+            new_bound.insert((name, ty));
             free.extend(find_free_vars(body, &new_bound));
             free
         }

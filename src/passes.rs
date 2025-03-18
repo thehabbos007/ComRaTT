@@ -10,24 +10,37 @@ pub trait Pass<I = TypedProg, O = TypedProg> {
 }
 
 pub fn run_program_passes(prog: TypedProg) -> TypedProg {
+    eprintln!("Base:\n{prog}");
     let mut eliminate_partial = eliminate_partial::PartialElimination::new();
     let prog = eliminate_partial.run(prog);
+    eprintln!("PartialElim:\n{prog}");
 
     // Let's not do this as it's problematic for us to get rid of partial applications
     // when calling closures
     let mut eliminate_consec = eliminate_consec_app::EliminateConsecApp::new();
     let prog = eliminate_consec.run(prog);
+    eprintln!("ConsecElim:\n{prog}");
 
     let mut lambda_lift = lambda_lift::LambdaLift::new();
-    lambda_lift.run(prog)
+    let prog = lambda_lift.run(prog);
+
+    let mut eliminate_partial = eliminate_partial::PartialElimination::new();
+    let prog = eliminate_partial.run(prog);
+
+    eprintln!("LamLiftPartialElim:\n{prog}");
+
+    prog
 }
 
 pub fn run_program_passes_anf(prog: TypedProg) -> AnfProg {
     let prog = run_program_passes(prog);
 
     let mut anf = anf::ANFConversion::new();
+    let prog = anf.run(prog);
 
-    anf.run(prog)
+    eprintln!("Anf:\n{prog}");
+
+    prog
 }
 
 #[cfg(test)]
