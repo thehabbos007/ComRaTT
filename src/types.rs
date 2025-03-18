@@ -107,7 +107,7 @@ pub fn final_type_tproduct(ts: &[Type]) -> Type {
     }
 }
 
-pub fn tfun_len_n_rec(ty: Type, n: usize, acc: &mut Vec<Type>) -> (Type, Vec<Type>) {
+fn tfun_len_n_rec(ty: Type, n: usize, acc: &mut Vec<Type>) -> (Type, Vec<Type>) {
     match ty {
         Type::TFun(ty, next_ty) if n > 0 => {
             acc.push(*ty);
@@ -124,10 +124,17 @@ pub fn tfun_len_n_rec(ty: Type, n: usize, acc: &mut Vec<Type>) -> (Type, Vec<Typ
     }
 }
 
+/// Unfold a type for use in fuctions. This will pop [`n`] elements of a [`Type::TFun`] type and return
+/// the remaining type and the popped types.
 pub fn tfun_len_n(ty: Type, n: usize) -> (Type, Vec<Type>) {
-    tfun_len_n_rec(ty, n, &mut Vec::new())
+    let (typ, popped) = tfun_len_n_rec(ty, n, &mut Vec::new());
+    debug_assert_eq!(popped.len(), n);
+    (typ, popped)
 }
 
+/// Build a TFun from a slice of argument types and a return type.
+/// types: [TInt, TInt] and ret_ty: TBool will result in
+/// TFun(TInt, TFun(TInt, TBool))
 pub fn build_function_type(types: &[Type], ret_ty: Type) -> Type {
     match types {
         [] => ret_ty,

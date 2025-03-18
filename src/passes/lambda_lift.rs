@@ -1,5 +1,7 @@
 use crate::source::Type;
-use crate::types::{find_free_vars, TypedExpr, TypedProg, TypedToplevel};
+use crate::types::{
+    build_function_type, find_free_vars, tfun_len_n, TypedExpr, TypedProg, TypedToplevel,
+};
 use itertools::Itertools;
 use std::collections::HashSet;
 
@@ -93,8 +95,11 @@ impl LambdaLift {
                     (lambda, lifted_defs)
                 } else {
                     let fun_name = self.unique_name("lambda");
+                    let orig_arg_len = args.len();
                     let mut new_args = free_vars_with_types.clone();
                     new_args.extend(args);
+
+                    let (return_typ, _) = tfun_len_n(typ.clone(), orig_arg_len);
 
                     let (lifted_body, mut lifted_defs) = self.lift_lambdas(*body, &new_args);
 
@@ -102,7 +107,12 @@ impl LambdaLift {
                         fun_name.clone(),
                         new_args.clone(),
                         Box::new(lifted_body),
-                        typ.clone(),
+                        return_typ.clone(),
+                    );
+
+                    let substitute_typ = build_function_type(
+                        &new_args.clone().into_iter().map(|(_, ty)| ty).collect_vec(),
+                        return_typ,
                     );
 
                     lifted_defs.push(lambda_def);
@@ -114,7 +124,7 @@ impl LambdaLift {
 
                     (
                         TypedExpr::TApp(
-                            Box::new(TypedExpr::TName(fun_name, typ.clone())),
+                            Box::new(TypedExpr::TName(fun_name, substitute_typ.clone())),
                             app_args,
                             typ,
                         ),

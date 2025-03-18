@@ -106,6 +106,8 @@ impl Type {
 
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub enum Toplevel {
+    /// A top level function defintion. The type provided is a type for the entire expression,
+    /// including args and return type.
     FunDef(String, Type, Vec<String>, Expr),
     Channel(String),
     Output(String, Expr),

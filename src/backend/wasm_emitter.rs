@@ -57,6 +57,15 @@ const MALLOC_BODY: &str = r#"
 )
 "#;
 
+// Initial allocation of a closure
+const ALLOCATE_CLOSURE: &str = r#"
+"#;
+
+// Apply arguments to a closure
+// After doing this, make sure to check if arity is 0 and call in that case
+const POPULATE_CLOSURE: &str = r#"
+"#;
+
 impl WasmEmitter<'_> {
     pub fn new() -> Self {
         Self {

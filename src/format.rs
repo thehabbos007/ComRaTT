@@ -226,7 +226,7 @@ impl Display for AnfToplevel {
                     .map(|(name, ty)| format!("{}: {}", name, ty))
                     .collect::<Vec<_>>()
                     .join(" ");
-                writeln!(f, "fun {}({}) : {} =\n  {}", name, param_str, ret_ty, body)
+                writeln!(f, "def {}({}) : {} =\n  {}", name, param_str, ret_ty, body)
             }
             AnfToplevel::Channel(name) => writeln!(f, "channel {};", name),
             AnfToplevel::Output(name, aexpr) => writeln!(f, "{} <- {};", name, aexpr),
