@@ -92,7 +92,7 @@ impl PartialElimination {
                 typ,
             ),
             TypedExpr::TLet(bind_old, _, box TypedExpr::TName(bind_new, _), body) => {
-                substitute_binding(&bind_old, &bind_new, *body)
+                self.eliminate_partial(substitute_binding(&bind_old, &bind_new, *body))
             }
             TypedExpr::TLet(name, typ, rhs, body) => TypedExpr::TLet(
                 name,
