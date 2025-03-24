@@ -1,0 +1,25 @@
+many_add : int -> int -> int -> int
+def many_add x y z = x + y + z;
+
+main : int -> int
+def main x =
+    let adds = many_add 1 in
+    let adds = adds 2 in
+    adds x;
+
+
+
+---------------------
+def many_add(x: int, y: int, z: int) : int =
+  let tmp_0 = x + y in tmp_0 + z
+
+def main(x: int) : int =
+  let adds = (fun #part_elim_lam_1 #part_elim_lam_2 -> #lambda_1 many_add #part_elim_lam_1 #part_elim_lam_2) in
+  let adds = (fun #part_elim_lam_3 -> #lambda_2 adds #part_elim_lam_3) in
+  adds x
+
+def #lambda_1(many_add: int -> int -> int -> int, #part_elim_lam_1: int, #part_elim_lam_2: int) : int =
+  many_add 1 #part_elim_lam_1 #part_elim_lam_2
+
+def #lambda_2(adds: int -> int -> int, #part_elim_lam_3: int) : int =
+  adds 2 #part_elim_lam_3
