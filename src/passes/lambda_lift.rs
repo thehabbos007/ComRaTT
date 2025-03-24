@@ -396,8 +396,12 @@ mod tests {
 
         let (lifted, globals) = lifter.lambda_lift(&[], expr);
 
-        assert!(globals.is_empty(), "Should not have lifted any functions");
-        assert!(matches!(lifted, TypedExpr::TLam(_, _, _)));
+        assert_eq!(globals.len(), 1, "Should not have lifted any functions");
+        assert_lifted_function(&globals, 1, &[]);
+        assert!(matches!(lifted,
+            TypedExpr::TName(name, Type::TFun(_, _))
+            if name.as_str() == "#lambda_1"
+        ));
     }
 
     #[test]
