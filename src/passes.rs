@@ -24,10 +24,10 @@ pub fn run_program_passes(prog: TypedProg) -> TypedProg {
     let mut lambda_lift = lambda_lift::LambdaLift::new();
     let prog = lambda_lift.run(prog);
 
-    let mut eliminate_partial = eliminate_partial::PartialElimination::new();
+    eprintln!("LamLift:\n{prog}");
     let prog = eliminate_partial.run(prog);
 
-    eprintln!("LamLiftPartialElim:\n{prog}");
+    eprintln!("LamLiftElimPartial:\n{prog}");
 
     prog
 }

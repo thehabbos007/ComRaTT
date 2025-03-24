@@ -582,12 +582,16 @@ impl Inference {
                 let (mut unbound_left, left) = self.substitute_texp(*left);
                 let (unbound_right, right) = self.substitute_texp(*right);
                 unbound_left.extend(unbound_right);
+                let (unbounds, ty) = self.substitute(ty);
+                unbound_left.extend(unbounds);
                 (unbound_left, TypedExpr::TPrim(op, left.b(), right.b(), ty))
             }
             TypedExpr::TLet(name, ty, rhs, body) => {
                 let (mut unbound_rhs, rhs) = self.substitute_texp(*rhs);
                 let (unbound_body, body) = self.substitute_texp(*body);
                 unbound_rhs.extend(unbound_body);
+                let (unbounds, ty) = self.substitute(ty);
+                unbound_rhs.extend(unbounds);
                 (unbound_rhs, TypedExpr::TLet(name, ty, rhs.b(), body.b()))
             }
             TypedExpr::TIfThenElse(cond, then, else_branch, ty) => {
@@ -596,23 +600,29 @@ impl Inference {
                 let (unbound_else, else_branch) = self.substitute_texp(*else_branch);
                 unbound_cond.extend(unbound_then);
                 unbound_cond.extend(unbound_else);
+                let (unbounds, ty) = self.substitute(ty);
+                unbound_cond.extend(unbounds);
                 (
                     unbound_cond,
                     TypedExpr::TIfThenElse(cond.b(), then.b(), else_branch.b(), ty),
                 )
             }
             TypedExpr::TTuple(ts, ty) => {
-                let mut unbounds = BTreeSet::new();
+                let mut unbound = BTreeSet::new();
                 let mut new_ts = Vec::new();
                 for t in ts {
-                    let (unbound, t) = self.substitute_texp(t);
-                    unbounds.extend(unbound);
+                    let (unbounds, t) = self.substitute_texp(t);
+                    unbound.extend(unbounds);
                     new_ts.push(t);
                 }
-                (unbounds, TypedExpr::TTuple(new_ts, ty))
+                let (unbounds, ty) = self.substitute(ty);
+                unbound.extend(unbounds);
+                (unbound, TypedExpr::TTuple(new_ts, ty))
             }
             TypedExpr::TAccess(texp, idx, ty) => {
-                let (unbound, texp) = self.substitute_texp(*texp);
+                let (mut unbound, texp) = self.substitute_texp(*texp);
+                let (unbounds, ty) = self.substitute(ty);
+                unbound.extend(unbounds);
                 (unbound, TypedExpr::TAccess(texp.b(), idx, ty))
             }
         }

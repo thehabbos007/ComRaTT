@@ -238,8 +238,8 @@ pub fn find_free_vars(
     }
 }
 
-pub fn substitute_binding(bind_old: &str, bind_new: &str, aexpr: TypedExpr) -> TypedExpr {
-    match aexpr {
+pub fn substitute_binding(bind_old: &str, bind_new: &str, expr: TypedExpr) -> TypedExpr {
+    match expr {
         TypedExpr::TName(binding, ty) if binding == bind_old => {
             TypedExpr::TName(bind_new.to_string(), ty)
         }
@@ -267,6 +267,12 @@ pub fn substitute_binding(bind_old: &str, bind_new: &str, aexpr: TypedExpr) -> T
             Box::new(substitute_binding(bind_old, bind_new, *rhs)),
             Box::new(substitute_binding(bind_old, bind_new, *body)),
         ),
+        TypedExpr::TLet(name, ty, rhs, body) => TypedExpr::TLet(
+            name,
+            ty,
+            Box::new(substitute_binding(bind_old, bind_new, *rhs)),
+            body,
+        ),
         TypedExpr::TIfThenElse(condition, then_branch, else_branch, ty) => TypedExpr::TIfThenElse(
             Box::new(substitute_binding(bind_old, bind_new, *condition)),
             Box::new(substitute_binding(bind_old, bind_new, *then_branch)),
@@ -285,7 +291,8 @@ pub fn substitute_binding(bind_old: &str, bind_new: &str, aexpr: TypedExpr) -> T
             idx,
             ty,
         ),
-        _ => aexpr,
+        TypedExpr::TName(_, _) => expr,
+        TypedExpr::TConst(_, _) => expr,
     }
 }
 

@@ -105,6 +105,9 @@ impl<'a> Iterator for Tokenizer<'a> {
 #[allow(clippy::upper_case_acronyms)]
 #[derive(logos::Logos, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum TokenKind {
+    #[regex(r"//[^\n]*", logos::skip)]
+    Comment,
+
     #[regex("[a-zA-Z_][a-zA-Z0-9_]*")]
     Ident,
 
