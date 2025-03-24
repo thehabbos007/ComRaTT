@@ -81,10 +81,15 @@ impl TypedExpr {
 
 trait TraversalExt {
     fn assert_none_traversal(self) -> TypedExpr;
+    fn ignore_traversal_outcome(self) -> TypedExpr;
 }
 impl TraversalExt for (TypedExpr, TraverseOutcome) {
     fn assert_none_traversal(self) -> TypedExpr {
         self.1.assert_none();
+        self.0
+    }
+
+    fn ignore_traversal_outcome(self) -> TypedExpr {
         self.0
     }
 }
@@ -153,9 +158,8 @@ impl EliminateConsecApp {
                     fun_expr,
                     args.into_iter()
                         .map(|arg| {
-                            let (inner, outcome) = self.eliminate_consec(arg, local_scope.clone());
-                            outcome.assert_none();
-                            inner
+                            self.eliminate_consec(arg, local_scope.clone())
+                                .assert_none_traversal()
                         })
                         .collect(),
                     typ,
@@ -169,11 +173,11 @@ impl EliminateConsecApp {
                 op,
                 Box::new(
                     self.eliminate_consec(*left, local_scope.clone())
-                        .assert_none_traversal(),
+                        .ignore_traversal_outcome(),
                 ),
                 Box::new(
                     self.eliminate_consec(*right, local_scope)
-                        .assert_none_traversal(),
+                        .ignore_traversal_outcome(),
                 ),
                 typ,
             )
@@ -183,13 +187,13 @@ impl EliminateConsecApp {
                 typ.clone(),
                 Box::new(
                     self.eliminate_consec(*rhs, local_scope.clone())
-                        .assert_none_traversal(),
+                        .ignore_traversal_outcome(),
                 ),
                 {
                     local_scope.insert(name, typ);
                     Box::new(
                         self.eliminate_consec(*body, local_scope)
-                            .assert_none_traversal(),
+                            .ignore_traversal_outcome(),
                     )
                 },
             )
@@ -198,7 +202,7 @@ impl EliminateConsecApp {
                 args,
                 Box::new(
                     self.eliminate_consec(*body, local_scope)
-                        .assert_none_traversal(),
+                        .ignore_traversal_outcome(),
                 ),
                 typ,
             )
@@ -207,15 +211,15 @@ impl EliminateConsecApp {
                 TypedExpr::TIfThenElse(
                     Box::new(
                         self.eliminate_consec(*condition, local_scope.clone())
-                            .assert_none_traversal(),
+                            .ignore_traversal_outcome(),
                     ),
                     Box::new(
                         self.eliminate_consec(*then_branch, local_scope.clone())
-                            .assert_none_traversal(),
+                            .ignore_traversal_outcome(),
                     ),
                     Box::new(
                         self.eliminate_consec(*else_branch, local_scope)
-                            .assert_none_traversal(),
+                            .ignore_traversal_outcome(),
                     ),
                     typ,
                 )
@@ -226,7 +230,7 @@ impl EliminateConsecApp {
                     .into_iter()
                     .map(|expr| {
                         self.eliminate_consec(expr, local_scope.clone())
-                            .assert_none_traversal()
+                            .ignore_traversal_outcome()
                     })
                     .collect(),
                 typ,
@@ -235,7 +239,7 @@ impl EliminateConsecApp {
             TypedExpr::TAccess(texp, idx, typ) => TypedExpr::TAccess(
                 Box::new(
                     self.eliminate_consec(*texp, local_scope)
-                        .assert_none_traversal(),
+                        .ignore_traversal_outcome(),
                 ),
                 idx,
                 typ,
