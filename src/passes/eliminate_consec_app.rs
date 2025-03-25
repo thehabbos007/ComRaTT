@@ -182,22 +182,25 @@ impl EliminateConsecApp {
                 typ,
             )
             .none_traversal(),
-            TypedExpr::TLet(name, typ, rhs, body) => TypedExpr::TLet(
-                name.clone(),
-                typ.clone(),
-                Box::new(
-                    self.eliminate_consec(*rhs, local_scope.clone())
-                        .ignore_traversal_outcome(),
-                ),
-                {
-                    local_scope.insert(name, typ);
+            TypedExpr::TLet(name, typ, box rhs, body) => {
+                let rhs_type = rhs.ty();
+                TypedExpr::TLet(
+                    name.clone(),
+                    typ.clone(),
                     Box::new(
-                        self.eliminate_consec(*body, local_scope)
+                        self.eliminate_consec(rhs, local_scope.clone())
                             .ignore_traversal_outcome(),
-                    )
-                },
-            )
-            .none_traversal(),
+                    ),
+                    {
+                        local_scope.insert(name, rhs_type);
+                        Box::new(
+                            self.eliminate_consec(*body, local_scope)
+                                .ignore_traversal_outcome(),
+                        )
+                    },
+                )
+                .none_traversal()
+            }
             TypedExpr::TLam(args, body, typ) => TypedExpr::TLam(
                 args,
                 Box::new(
