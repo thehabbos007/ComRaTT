@@ -681,7 +681,10 @@ impl Inference {
                         context.insert(arg.to_owned(), typ);
                     }
 
-                    let (body_type, body_output) = self.infer(context, body);
+                    let (body_type, mut body_output) = self.infer(context, body);
+                    body_output
+                        .constraints
+                        .push(Constraint::TypeEqual(ret_ty.clone(), body_type.clone()));
 
                     // Constraint solving went well
                     if self.unification(&body_output.constraints).is_ok() {
