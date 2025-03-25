@@ -260,8 +260,26 @@ impl Inference {
             },
             // TODO we must not allow functions under a tick
             // also, if there is a tick we need to insert to the right of the tick
-            Expr::Let(name, rhs, body) => {
-                let (rhs_type, mut rhs_output) = self.infer(context.clone(), *rhs);
+            // also, if the binding rhs is a delayed computation, we need to also
+            // insert the clock in the context to be able to advance it.
+            Expr::Let(name, box Expr::Delay(delayed, clock), body) => {
+                let rhs = Expr::Delay(delayed, clock.clone());
+                let (rhs_type, mut rhs_output) = self.infer(context.clone(), rhs);
+                let _ = context.insert_clock(name.clone(), rhs_type, clock);
+                let (body_type, mut body_output) = self.infer(context, *body);
+                let mut constraints = Vec::new();
+                constraints.append(&mut rhs_output.constraints);
+                constraints.append(&mut body_output.constraints);
+                (
+                    body_type.clone(),
+                    TypeOutput::new(
+                        constraints,
+                        TypedExpr::TLet(name, body_type, rhs_output.texp.b(), body_output.texp.b()),
+                    ),
+                )
+            }
+            Expr::Let(name, box rhs, body) => {
+                let (rhs_type, mut rhs_output) = self.infer(context.clone(), rhs);
                 let _ = context.insert(name.clone(), rhs_type);
                 let (body_type, mut body_output) = self.infer(context, *body);
                 let mut constraints = Vec::new();
