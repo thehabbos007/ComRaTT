@@ -268,9 +268,10 @@ mod tests {
         };
     }
 
+    #[test]
     fn test_eliminate_partial_nested_let() {
         // Before: let x = y in let z = x in z
-        // After:  let z = y in z
+        // After:  y
         let mut eliminator = PartialElimination::new();
         let expr = TypedExpr::TLet(
             "x".to_string(),
@@ -284,15 +285,7 @@ mod tests {
             )),
         );
         let result = eliminator.eliminate_partial(expr);
-        assert_eq!(
-            result,
-            TypedExpr::TLet(
-                "z".to_string(),
-                Type::TInt,
-                Box::new(TypedExpr::TName("y".to_string(), Type::TInt)),
-                Box::new(TypedExpr::TName("z".to_string(), Type::TInt)),
-            )
-        );
+        assert_eq!(result, TypedExpr::TName("y".to_string(), Type::TInt));
     }
 
     #[test]
