@@ -326,7 +326,7 @@ mod tests {
 
         let parser = Parser::new(0);
         for payload in parser.parse_all(bytes) {
-            let p = payload.unwrap();
+            let _ = payload.unwrap();
         }
     }
 

@@ -1,5 +1,5 @@
 use ena::unify::{EqUnifyValue, UnifyKey};
-use std::ops::Deref;
+use std::{collections::HashSet, ops::Deref};
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub enum Binop {
@@ -31,7 +31,7 @@ pub enum Expr {
     Prim(Binop, Box<Expr>, Box<Expr>),
     Let(String, Box<Expr>, Box<Expr>),
     IfThenElse(Box<Expr>, Box<Expr>, Box<Expr>),
-    Delay(Box<Expr>, Vec<String>),
+    Delay(Box<Expr>, HashSet<String>),
     Advance(String),
     Tuple(Vec<Expr>),
     Access(Box<Expr>, i32),
