@@ -1,0 +1,4 @@
+main : int -> int
+def main x =
+    let del = delay {apple} x in
+    delay {apple} (advance del);
