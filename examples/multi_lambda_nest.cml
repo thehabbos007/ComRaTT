@@ -1,0 +1,5 @@
+har : int -> int -> int -> int -> int
+def har x = fun y z -> fun w -> x + y + z;
+
+main : int -> int
+def main x = (har 1 2) x 2;

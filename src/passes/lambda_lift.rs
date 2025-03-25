@@ -9,7 +9,7 @@ use std::collections::{HashMap, HashSet};
 use super::Pass;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-enum BindingKind {
+pub enum BindingKind {
     Local,
     Toplevel,
 }
@@ -200,9 +200,6 @@ impl LambdaLift {
                 bound.insert((name.clone(), lifted_rhs.ty().clone()), BindingKind::Local);
 
                 if let TypedExpr::TName(new_name, _) = &lifted_rhs {
-                    dbg!(&name);
-                    dbg!(&new_name);
-                    dbg!(&lifted_rhs);
                     body = substitute_binding(&name, new_name, body);
                 }
 
@@ -281,11 +278,20 @@ mod tests {
         TypedExpr::TPrim(Binop::Eq, Box::new(left), Box::new(right), Type::TBool)
     }
 
-    fn lam(arg_name: &str, arg_type: Type, body: TypedExpr, ret_type: Type) -> TypedExpr {
+    fn lam(args: &[(&str, Type)], body: TypedExpr, ret_type: Type) -> TypedExpr {
+        let ty = build_function_type(
+            args.iter()
+                .map(|(_, ty)| ty.clone())
+                .collect_vec()
+                .as_slice(),
+            ret_type.clone(),
+        );
         TypedExpr::TLam(
-            vec![(arg_name.to_string(), arg_type.clone())],
+            args.iter()
+                .map(|(n, t)| (n.to_string(), t.clone()))
+                .collect_vec(),
             Box::new(body),
-            Type::TFun(arg_type.b(), Box::new(ret_type)),
+            ty,
         )
     }
 
@@ -313,13 +319,11 @@ mod tests {
 
     // Helper for verifying lifted functions
     fn assert_lifted_function(
-        globals: &[TypedToplevel],
+        globals: &TypedToplevel,
         expected_args_count: usize,
         expected_free_vars: &[&str],
     ) {
-        assert!(!globals.is_empty(), "Expected lifted functions");
-
-        let TypedToplevel::TFunDef(name, args, _, _) = &globals[0] else {
+        let TypedToplevel::TFunDef(name, args, _, _) = &globals else {
             panic!("Didn't get fun def")
         };
 
@@ -346,8 +350,7 @@ mod tests {
             Type::TInt,
             int(1),
             lam(
-                "y",
-                Type::TInt,
+                &[("y", Type::TInt)],
                 add(var("x", Type::TInt), var("y", Type::TInt)),
                 Type::TInt,
             ),
@@ -355,7 +358,7 @@ mod tests {
 
         let (lifted, globals) = lifter.lambda_lift(expr, HashMap::new());
 
-        assert_lifted_function(&globals, 1, &["x"]);
+        assert_lifted_function(&globals[0], 1, &["x"]);
 
         // Verify the structure of the lifted expression
         if let TypedExpr::TLet(name, typ, rhs, body) = lifted {
@@ -384,8 +387,7 @@ mod tests {
                 Type::TInt,
                 int(2),
                 lam(
-                    "z",
-                    Type::TInt,
+                    &[("z", Type::TInt)],
                     add(
                         add(var("x", Type::TInt), var("y", Type::TInt)),
                         var("z", Type::TInt),
@@ -397,7 +399,7 @@ mod tests {
 
         let (_lifted, globals) = lifter.lambda_lift(expr, HashMap::new());
 
-        assert_lifted_function(&globals, 1, &["x", "y"]);
+        assert_lifted_function(&globals[0], 1, &["x", "y"]);
     }
 
     #[test]
@@ -409,8 +411,7 @@ mod tests {
             Type::TInt,
             int(1),
             lam(
-                "y",
-                Type::TInt,
+                &[("y", Type::TInt)],
                 if_then_else(
                     eq(var("x", Type::TInt), var("y", Type::TInt)),
                     int(1),
@@ -423,7 +424,7 @@ mod tests {
 
         let (_lifted, globals) = lifter.lambda_lift(expr, HashMap::new());
 
-        assert_lifted_function(&globals, 1, &["x"]);
+        assert_lifted_function(&globals[0], 1, &["x"]);
     }
 
     #[test]
@@ -431,8 +432,7 @@ mod tests {
         let mut lifter = LambdaLift::new();
 
         let expr = lam(
-            "x",
-            Type::TInt,
+            &[("x", Type::TInt)],
             add(var("x", Type::TInt), int(1)),
             Type::TInt,
         );
@@ -440,7 +440,7 @@ mod tests {
         let (lifted, globals) = lifter.lambda_lift(expr, HashMap::new());
 
         assert_eq!(globals.len(), 1, "Should not have lifted any functions");
-        assert_lifted_function(&globals, 1, &[]);
+        assert_lifted_function(&globals[0], 1, &[]);
         assert!(matches!(lifted,
             TypedExpr::TName(name, Type::TFun(_, _))
             if name.as_str() == "#lambda_1"
@@ -456,16 +456,10 @@ mod tests {
             Type::TInt,
             int(1),
             lam(
-                "y",
-                Type::TInt,
-                lam(
-                    "z",
-                    Type::TInt,
-                    add(
-                        add(var("x", Type::TInt), var("y", Type::TInt)),
-                        var("z", Type::TInt),
-                    ),
-                    Type::TInt,
+                &[("y", Type::TInt), ("z", Type::TInt)],
+                add(
+                    add(var("x", Type::TInt), var("y", Type::TInt)),
+                    var("z", Type::TInt),
                 ),
                 Type::TInt,
             ),
@@ -473,11 +467,8 @@ mod tests {
 
         let (_lifted, globals) = lifter.lambda_lift(expr, HashMap::new());
 
-        assert_eq!(globals.len(), 2, "Should have lifted two functions");
-        // The inner lambda should be lifted first
-        assert_lifted_function(&globals[0..1], 1, &["x", "y"]);
-        // The outer lambda should be lifted second
-        assert_lifted_function(&globals[1..], 1, &["x"]);
+        assert_eq!(globals.len(), 1);
+        assert_lifted_function(&globals[0], 2, &["x"]);
     }
 
     #[test]
@@ -504,8 +495,7 @@ mod tests {
                 "f",
                 Type::TFun(Box::new(Type::TInt), Box::new(Type::TInt)),
                 lam(
-                    "y",
-                    Type::TInt,
+                    &[("y", Type::TInt)],
                     add(var("x", Type::TInt), var("y", Type::TInt)),
                     Type::TInt,
                 ),
@@ -519,7 +509,7 @@ mod tests {
 
         let (lifted, globals) = lifter.lambda_lift(expr, HashMap::new());
 
-        assert_lifted_function(&globals, 1, &["x"]);
+        assert_lifted_function(&globals[0], 1, &["x"]);
 
         // Verify the application is preserved in the lifted expression
         if let TypedExpr::TLet(name, _, _, body) = lifted
@@ -551,8 +541,7 @@ mod tests {
             Type::TInt,
             int(1),
             lam(
-                "y",
-                Type::TInt,
+                &[("y", Type::TInt)],
                 TypedExpr::TTuple(
                     vec![var("x", Type::TInt), var("y", Type::TInt)],
                     Type::TProduct(vec![Type::TInt, Type::TInt]),
@@ -563,7 +552,7 @@ mod tests {
 
         let (_lifted, globals) = lifter.lambda_lift(expr, HashMap::new());
 
-        assert_lifted_function(&globals, 1, &["x"]);
+        assert_lifted_function(&globals[0], 1, &["x"]);
     }
 
     #[test]
@@ -575,8 +564,7 @@ mod tests {
             Type::TInt,
             int(1),
             lam(
-                "t",
-                Type::TProduct(vec![Type::TInt, Type::TInt]),
+                &[("t", Type::TProduct(vec![Type::TInt, Type::TInt]))],
                 add(
                     var("x", Type::TInt),
                     TypedExpr::TAccess(
@@ -591,6 +579,6 @@ mod tests {
 
         let (_lifted, globals) = lifter.lambda_lift(expr, HashMap::new());
 
-        assert_lifted_function(&globals, 1, &["x"]);
+        assert_lifted_function(&globals[0], 1, &["x"]);
     }
 }

@@ -931,6 +931,21 @@ mod tests {
     }
 
     #[test]
+    #[should_panic]
+    fn infer_all_function_with_wrong_signature_should_panic() {
+        let fn_type = Type::TFun(Type::TInt.b(), Type::TInt.b());
+        let fun_body = Expr::Const(Const::CBool(true));
+        let fun = Toplevel::FunDef(
+            "test".to_owned(),
+            fn_type,
+            vec![String::from("x")],
+            fun_body,
+        );
+
+        let inferred = infer_all(Prog(vec![fun]));
+    }
+
+    #[test]
     fn infer_int_const() {
         let expr = Expr::Const(Const::CInt(42));
         let mut inference = Inference {
@@ -1047,7 +1062,7 @@ mod tests {
         let mut inference = Inference {
             unification_table: InPlaceUnificationTable::default(),
         };
-        let (ty, output) = inference.infer(context.into(), expr);
+        let (ty, output) = inference.infer(context, expr);
     }
 
     #[test]
@@ -1064,7 +1079,7 @@ mod tests {
         let mut inference = Inference {
             unification_table: InPlaceUnificationTable::default(),
         };
-        let (ty, output) = inference.infer(context.into(), expr);
+        let (ty, output) = inference.infer(context, expr);
     }
 
     #[test]
@@ -1082,7 +1097,7 @@ mod tests {
         let mut inference = Inference {
             unification_table: InPlaceUnificationTable::default(),
         };
-        let _ = inference.infer(context.into(), expr);
+        let _ = inference.infer(context, expr);
     }
 
     #[test]
