@@ -1,12 +1,13 @@
 use std::collections::HashSet;
 
 use itertools::Itertools;
-use winnow::combinator::{fail, opt};
-use winnow::error::{ContextError, StrContext, StrContextValue};
+use winnow::combinator::{cut_err, fail, opt};
+use winnow::error::{ContextError, ErrMode, StrContext, StrContextValue};
 use winnow::token::literal;
+use winnow::ModalParser;
 use winnow::{
     combinator::{alt, delimited, preceded, repeat, terminated},
-    Parser, Result,
+    ModalResult, Parser, Result,
 };
 
 use crate::error::ComRaTTError;
@@ -25,44 +26,46 @@ impl Prog {
         let token_slice = TokenSlice::new(&tokenizer);
 
         prog.parse(token_slice).map_err(|e| {
-            let offset = e.offset();
-            ComRaTTError::from_context_error(e.into_inner(), offset, input)
+            let span = e.input()[e.offset()].span;
+            let message = e.into_inner().to_string();
+
+            ComRaTTError::from_span(message, span, input)
         })
     }
 }
 
-impl<'a> Parser<Input<'a>, &'a Token<'a>, ContextError> for TokenKind {
-    fn parse_next(&mut self, input: &mut Input<'a>) -> Result<&'a Token<'a>, ContextError> {
+impl<'a> Parser<Input<'a>, &'a Token<'a>, ErrMode<ContextError>> for TokenKind {
+    fn parse_next(
+        &mut self,
+        input: &mut Input<'a>,
+    ) -> Result<&'a Token<'a>, ErrMode<ContextError>> {
         literal(*self).parse_next(input).map(|t| &t[0])
     }
 }
 
 pub fn text<'a, Registry>(
     text: &'static str,
-) -> impl Parser<Input<'a>, &'a Token<'a>, ContextError> {
+) -> impl ModalParser<Input<'a>, &'a Token<'a>, ContextError> {
     move |input: &mut Input<'a>| literal(text).parse_next(input).map(|t| &t[0])
 }
 
-fn atomic_typ(input: &mut Input<'_>) -> Result<Type> {
+fn atomic_typ(input: &mut Input<'_>) -> ModalResult<Type> {
     alt((
         TokenKind::TBool.value(Type::TBool),
         TokenKind::TInt.value(Type::TInt),
         TokenKind::Unit.value(Type::TUnit),
         delimited(TokenKind::LParen, typ, TokenKind::RParen),
-        fail.context(StrContext::Label("type"))
+        cut_err(fail)
+            .context(StrContext::Label("type"))
             .context(StrContext::Expected(StrContextValue::StringLiteral("bool")))
             .context(StrContext::Expected(StrContextValue::StringLiteral("int")))
             .context(StrContext::Expected(StrContextValue::StringLiteral("()")))
             .context(StrContext::Expected(StrContextValue::StringLiteral("->"))),
     ))
-    .context(StrContext::Label("type"))
-    .context(StrContext::Expected(StrContextValue::Description(
-        "atomic type",
-    )))
     .parse_next(input)
 }
 
-fn arrow_typ(input: &mut Input<'_>) -> Result<Type> {
+fn arrow_typ(input: &mut Input<'_>) -> ModalResult<Type> {
     let t1 = atomic_typ.parse_next(input)?;
     let t2 = opt(preceded(TokenKind::RArrow, arrow_typ)).parse_next(input)?;
 
@@ -72,7 +75,7 @@ fn arrow_typ(input: &mut Input<'_>) -> Result<Type> {
     })
 }
 
-fn typ(input: &mut Input<'_>) -> Result<Type> {
+fn typ(input: &mut Input<'_>) -> ModalResult<Type> {
     arrow_typ
         .context(StrContext::Label("type"))
         .context(StrContext::Expected(StrContextValue::Description(
@@ -81,7 +84,7 @@ fn typ(input: &mut Input<'_>) -> Result<Type> {
         .parse_next(input)
 }
 
-fn simple_expr(input: &mut Input<'_>) -> Result<Expr> {
+fn simple_expr(input: &mut Input<'_>) -> ModalResult<Expr> {
     alt((
         TokenKind::Ident.map(|t| Expr::Var(t.text().to_owned())),
         TokenKind::Int.try_map(|t| t.text().parse().map(|n| Expr::Const(Const::CInt(n)))),
@@ -107,7 +110,7 @@ fn simple_expr(input: &mut Input<'_>) -> Result<Expr> {
     .parse_next(input)
 }
 
-fn braced_idents(input: &mut Input<'_>) -> Result<Vec<String>> {
+fn braced_idents(input: &mut Input<'_>) -> ModalResult<Vec<String>> {
     delimited(
         TokenKind::LBrace,
         repeat(1.., TokenKind::Ident),
@@ -117,11 +120,12 @@ fn braced_idents(input: &mut Input<'_>) -> Result<Vec<String>> {
     .parse_next(input)
 }
 
-fn atomic_expr(input: &mut Input<'_>) -> Result<Expr> {
+fn atomic_expr(input: &mut Input<'_>) -> ModalResult<Expr> {
     alt((
-        preceded(TokenKind::Delay, (braced_idents, simple_expr))
+        preceded(TokenKind::Delay, cut_err((braced_idents, simple_expr)))
             .map(|(c, e)| Expr::Delay(e.b(), HashSet::from_iter(c))),
-        preceded(TokenKind::Advance, TokenKind::Ident).map(|t| Expr::Advance(t.text().to_string())),
+        preceded(TokenKind::Advance, cut_err(TokenKind::Ident))
+            .map(|t| Expr::Advance(t.text().to_string())),
         simple_expr,
         fail.context(StrContext::Label("atomic expression"))
             .context(StrContext::Expected(StrContextValue::StringLiteral(
@@ -137,7 +141,7 @@ fn atomic_expr(input: &mut Input<'_>) -> Result<Expr> {
     .parse_next(input)
 }
 
-fn app_expr(input: &mut Input<'_>) -> Result<Expr> {
+fn app_expr(input: &mut Input<'_>) -> ModalResult<Expr> {
     let first = atomic_expr.parse_next(input)?;
 
     // Try to parse a sequence of atomic expressions
@@ -150,7 +154,7 @@ fn app_expr(input: &mut Input<'_>) -> Result<Expr> {
     .parse_next(input)
 }
 
-fn mul_op(input: &mut Input<'_>) -> Result<Binop> {
+fn mul_op(input: &mut Input<'_>) -> ModalResult<Binop> {
     alt((
         TokenKind::Times.value(Binop::Mul),
         TokenKind::Div.value(Binop::Div),
@@ -161,7 +165,7 @@ fn mul_op(input: &mut Input<'_>) -> Result<Binop> {
     .parse_next(input)
 }
 
-fn add_op(input: &mut Input<'_>) -> Result<Binop> {
+fn add_op(input: &mut Input<'_>) -> ModalResult<Binop> {
     alt((
         TokenKind::Plus.value(Binop::Add),
         TokenKind::Minus.value(Binop::Sub),
@@ -172,7 +176,7 @@ fn add_op(input: &mut Input<'_>) -> Result<Binop> {
     .parse_next(input)
 }
 
-fn compare(input: &mut Input<'_>) -> Result<Binop> {
+fn compare(input: &mut Input<'_>) -> ModalResult<Binop> {
     alt((
         TokenKind::Equal.value(Binop::Eq),
         TokenKind::Lt.value(Binop::Lt),
@@ -191,7 +195,7 @@ fn compare(input: &mut Input<'_>) -> Result<Binop> {
     .parse_next(input)
 }
 
-fn mul_expr(input: &mut Input<'_>) -> Result<Expr> {
+fn mul_expr(input: &mut Input<'_>) -> ModalResult<Expr> {
     let first = app_expr.parse_next(input)?;
 
     repeat(0.., (mul_op, app_expr))
@@ -202,7 +206,7 @@ fn mul_expr(input: &mut Input<'_>) -> Result<Expr> {
         .parse_next(input)
 }
 
-fn add_expr(input: &mut Input<'_>) -> Result<Expr> {
+fn add_expr(input: &mut Input<'_>) -> ModalResult<Expr> {
     let first = mul_expr.parse_next(input)?;
 
     repeat(0.., (add_op, mul_expr))
@@ -213,7 +217,7 @@ fn add_expr(input: &mut Input<'_>) -> Result<Expr> {
         .parse_next(input)
 }
 
-fn compare_expr(input: &mut Input<'_>) -> Result<Expr> {
+fn compare_expr(input: &mut Input<'_>) -> ModalResult<Expr> {
     let first = add_expr.parse_next(input)?;
 
     repeat(0.., (compare, add_expr))
@@ -224,14 +228,14 @@ fn compare_expr(input: &mut Input<'_>) -> Result<Expr> {
         .parse_next(input)
 }
 
-fn expr(input: &mut Input<'_>) -> Result<Expr> {
+fn expr(input: &mut Input<'_>) -> ModalResult<Expr> {
     alt((
         preceded(
             TokenKind::Let,
             (
                 TokenKind::Ident,
-                preceded(TokenKind::Equal, expr),
-                preceded(TokenKind::In, expr),
+                preceded(TokenKind::Equal, cut_err(expr)),
+                preceded(TokenKind::In, cut_err(expr)),
             ),
         )
         .map(|(x, e1, e2)| Expr::Let(x.text().to_string(), Box::new(e1), Box::new(e2))),
@@ -247,9 +251,9 @@ fn expr(input: &mut Input<'_>) -> Result<Expr> {
         preceded(
             TokenKind::If,
             (
-                compare_expr,
-                preceded(TokenKind::Then, compare_expr),
-                preceded(TokenKind::Else, compare_expr),
+                cut_err(compare_expr),
+                preceded(TokenKind::Then, cut_err(compare_expr)),
+                preceded(TokenKind::Else, cut_err(compare_expr)),
             ),
         )
         .map(|(guard, then_branch, else_branch)| {
@@ -260,19 +264,20 @@ fn expr(input: &mut Input<'_>) -> Result<Expr> {
             )
         }),
         compare_expr,
-        fail.context(StrContext::Label("expr"))
-            .context(StrContext::Expected(StrContextValue::StringLiteral("let")))
-            .context(StrContext::Expected(StrContextValue::StringLiteral("fun")))
-            .context(StrContext::Expected(StrContextValue::StringLiteral("if")))
+        cut_err(fail)
+            .context(StrContext::Label("expr"))
             .context(StrContext::Expected(StrContextValue::StringLiteral(
                 "expression",
-            ))),
+            )))
+            .context(StrContext::Expected(StrContextValue::StringLiteral("let")))
+            .context(StrContext::Expected(StrContextValue::StringLiteral("fun")))
+            .context(StrContext::Expected(StrContextValue::StringLiteral("if"))),
     ))
     .parse_next(input)
 }
-// Top-level parsers
-fn fundef(input: &mut Input<'_>) -> Result<Toplevel> {
-    let mut parser = terminated(
+
+fn fundef(input: &mut Input<'_>) -> ModalResult<Toplevel> {
+    terminated(
         (
             TokenKind::Ident.context(StrContext::Expected(StrContextValue::Description(
                 "function name",
@@ -288,61 +293,44 @@ fn fundef(input: &mut Input<'_>) -> Result<Toplevel> {
                 .context(StrContext::Expected(StrContextValue::Description(
                     "function parameters",
                 ))),
-            preceded(TokenKind::Equal, expr).context(StrContext::Expected(
-                StrContextValue::Description("function body"),
-            )),
+            preceded(TokenKind::Equal, expr),
         ),
         TokenKind::Semi,
     )
     .map(|(name, t, _def_name, args, e)| Toplevel::FunDef(name.text().to_string(), t, args, e))
-    .context(StrContext::Label("function definition"))
-    .context(StrContext::Expected(StrContextValue::Description(
-        "function definition",
-    )));
-
-    parser.parse_next(input)
+    .parse_next(input)
 }
 
-fn chan(input: &mut Input<'_>) -> Result<Toplevel> {
-    let mut parser = terminated(
+fn chan(input: &mut Input<'_>) -> ModalResult<Toplevel> {
+    terminated(
         (
-            preceded(TokenKind::Chan, TokenKind::Ident).context(StrContext::Expected(
+            preceded(TokenKind::Chan, cut_err(TokenKind::Ident)).context(StrContext::Expected(
                 StrContextValue::Description("binding name"),
             )),
         ),
         TokenKind::Semi,
     )
     .map(|(name,)| Toplevel::Channel(name.text().to_string()))
-    .context(StrContext::Label("function definition"))
-    .context(StrContext::Expected(StrContextValue::Description(
-        "function definition",
-    )));
-
-    parser.parse_next(input)
+    .parse_next(input)
 }
 
-fn output(input: &mut Input<'_>) -> Result<Toplevel> {
-    let mut parser = terminated(
+fn output(input: &mut Input<'_>) -> ModalResult<Toplevel> {
+    terminated(
         (
             TokenKind::Ident.context(StrContext::Expected(StrContextValue::Description(
                 "function name",
             ))),
-            preceded(TokenKind::LArrow, expr).context(StrContext::Expected(
+            preceded(TokenKind::LArrow, cut_err(expr)).context(StrContext::Expected(
                 StrContextValue::Description("binding name"),
             )),
         ),
         TokenKind::Semi,
     )
     .map(|(output, expr)| Toplevel::Output(output.text().to_string(), expr))
-    .context(StrContext::Label("function definition"))
-    .context(StrContext::Expected(StrContextValue::Description(
-        "function definition",
-    )));
-
-    parser.parse_next(input)
+    .parse_next(input)
 }
 
-pub fn prog(input: &mut Input<'_>) -> Result<Prog> {
+pub fn prog(input: &mut Input<'_>) -> ModalResult<Prog> {
     let toplevel = alt((
         fundef,
         chan,

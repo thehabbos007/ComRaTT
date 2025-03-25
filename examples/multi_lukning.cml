@@ -4,10 +4,8 @@ def many_add x y z = x + y + z;
 main : int -> int
 def main x =
     let adds = many_add 1 in
-    let adds = adds 2 in
+    let adds  3 = $ in
     adds x;
-
-
 
 // ---------------------
 // def many_add(x: int, y: int, z: int) : int =

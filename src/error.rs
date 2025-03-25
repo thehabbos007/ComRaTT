@@ -1,5 +1,3 @@
-use winnow::error::ContextError;
-
 use crate::range::Range;
 
 #[derive(Debug)]
@@ -15,19 +13,6 @@ impl<'a> ComRaTTError<'a> {
             message,
             input,
             span,
-        }
-    }
-    pub fn from_context_error(error: ContextError, start: usize, input: &'a str) -> Self {
-        let message = error.to_string();
-
-        let end = (start + 1..)
-            .find(|e| input.is_char_boundary(*e))
-            .unwrap_or(start);
-
-        Self {
-            message,
-            input,
-            span: (start..end).into(),
         }
     }
 }
