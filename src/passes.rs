@@ -10,23 +10,37 @@ pub trait Pass<I = TypedProg, O = TypedProg> {
 }
 
 pub fn run_program_passes(prog: TypedProg) -> TypedProg {
+    eprintln!("Base:\n{prog}");
     let mut eliminate_partial = eliminate_partial::PartialElimination::new();
     let prog = eliminate_partial.run(prog);
+    eprintln!("PartialElim:\n{prog}");
 
+    // Let's not do this as it's problematic for us to get rid of partial applications
+    // when calling closures
     let mut eliminate_consec = eliminate_consec_app::EliminateConsecApp::new();
     let prog = eliminate_consec.run(prog);
+    eprintln!("ConsecElim:\n{prog}");
 
     let mut lambda_lift = lambda_lift::LambdaLift::new();
+    let prog = lambda_lift.run(prog);
 
-    lambda_lift.run(prog)
+    eprintln!("LamLift:\n{prog}");
+    let prog = eliminate_partial.run(prog);
+
+    eprintln!("LamLiftElimPartial:\n{prog}");
+
+    prog
 }
 
 pub fn run_program_passes_anf(prog: TypedProg) -> AnfProg {
     let prog = run_program_passes(prog);
 
     let mut anf = anf::ANFConversion::new();
+    let prog = anf.run(prog);
 
-    anf.run(prog)
+    eprintln!("Anf:\n{prog}");
+
+    prog
 }
 
 #[cfg(test)]
@@ -75,46 +89,6 @@ mod tests {
             TypedToplevel::TFunDef(_, _, body, _) => match **body {
                 TypedExpr::TLet(_, _, box TypedExpr::TLam(_, _, _), _) => (),
                 _ => panic!("Expected lambda in let binding after partial elimination"),
-            },
-            _ => panic!("Expected function definition"),
-        }
-    }
-
-    #[test]
-    fn test_run_program_passes_consecutive_application() {
-        // (f 1) 2 -> f 1 2
-        let prog = TypedProg(vec![TypedToplevel::TFunDef(
-            "main".to_owned(),
-            vec![],
-            TypedExpr::TApp(
-                TypedExpr::TApp(
-                    TypedExpr::TName(
-                        "f".to_owned(),
-                        Type::TFun(
-                            Type::TInt.b(),
-                            Type::TFun(Type::TInt.b(), Type::TInt.b()).b(),
-                        ),
-                    )
-                    .b(),
-                    vec![TypedExpr::TConst(Const::CInt(1), Type::TInt)],
-                    Type::TFun(Type::TInt.b(), Type::TInt.b()),
-                )
-                .b(),
-                vec![TypedExpr::TConst(Const::CInt(2), Type::TInt)],
-                Type::TInt,
-            )
-            .b(),
-            Type::TInt,
-        )]);
-
-        let result = run_program_passes(prog);
-
-        match result.0[0].clone() {
-            TypedToplevel::TFunDef(_, _, body, _) => match *body {
-                TypedExpr::TApp(box TypedExpr::TName(_, _), args, _) => {
-                    assert_eq!(args.len(), 2);
-                }
-                _ => panic!("Expected flattened application"),
             },
             _ => panic!("Expected function definition"),
         }

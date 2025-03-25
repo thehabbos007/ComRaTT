@@ -260,8 +260,26 @@ impl Inference {
             },
             // TODO we must not allow functions under a tick
             // also, if there is a tick we need to insert to the right of the tick
-            Expr::Let(name, rhs, body) => {
-                let (rhs_type, mut rhs_output) = self.infer(context.clone(), *rhs);
+            // also, if the binding rhs is a delayed computation, we need to also
+            // insert the clock in the context to be able to advance it.
+            Expr::Let(name, box Expr::Delay(delayed, clock), body) => {
+                let rhs = Expr::Delay(delayed, clock.clone());
+                let (rhs_type, mut rhs_output) = self.infer(context.clone(), rhs);
+                let _ = context.insert_clock(name.clone(), rhs_type, clock);
+                let (body_type, mut body_output) = self.infer(context, *body);
+                let mut constraints = Vec::new();
+                constraints.append(&mut rhs_output.constraints);
+                constraints.append(&mut body_output.constraints);
+                (
+                    body_type.clone(),
+                    TypeOutput::new(
+                        constraints,
+                        TypedExpr::TLet(name, body_type, rhs_output.texp.b(), body_output.texp.b()),
+                    ),
+                )
+            }
+            Expr::Let(name, box rhs, body) => {
+                let (rhs_type, mut rhs_output) = self.infer(context.clone(), rhs);
                 let _ = context.insert(name.clone(), rhs_type);
                 let (body_type, mut body_output) = self.infer(context, *body);
                 let mut constraints = Vec::new();
@@ -561,7 +579,8 @@ impl Inference {
                 }
                 let (unbound, body) = self.substitute_texp(*body.clone());
                 unbounds.extend(unbound);
-                let (_, ty) = self.substitute(ty);
+                let (unbound, ty) = self.substitute(ty);
+                unbounds.extend(unbound);
                 (unbounds, TypedExpr::TLam(new_args, body.b(), ty))
             }
             TypedExpr::TApp(fun, args, ty) => {
@@ -575,19 +594,24 @@ impl Inference {
                     unbounds.extend(unbound);
                 }
 
-                let (_, ty) = self.substitute(ty);
+                let (unbound, ty) = self.substitute(ty);
+                unbounds.extend(unbound);
                 (unbounds, TypedExpr::TApp(fun.b(), new_args, ty))
             }
             TypedExpr::TPrim(op, left, right, ty) => {
                 let (mut unbound_left, left) = self.substitute_texp(*left);
                 let (unbound_right, right) = self.substitute_texp(*right);
                 unbound_left.extend(unbound_right);
+                let (unbounds, ty) = self.substitute(ty);
+                unbound_left.extend(unbounds);
                 (unbound_left, TypedExpr::TPrim(op, left.b(), right.b(), ty))
             }
             TypedExpr::TLet(name, ty, rhs, body) => {
                 let (mut unbound_rhs, rhs) = self.substitute_texp(*rhs);
                 let (unbound_body, body) = self.substitute_texp(*body);
                 unbound_rhs.extend(unbound_body);
+                let (unbounds, ty) = self.substitute(ty);
+                unbound_rhs.extend(unbounds);
                 (unbound_rhs, TypedExpr::TLet(name, ty, rhs.b(), body.b()))
             }
             TypedExpr::TIfThenElse(cond, then, else_branch, ty) => {
@@ -596,23 +620,29 @@ impl Inference {
                 let (unbound_else, else_branch) = self.substitute_texp(*else_branch);
                 unbound_cond.extend(unbound_then);
                 unbound_cond.extend(unbound_else);
+                let (unbounds, ty) = self.substitute(ty);
+                unbound_cond.extend(unbounds);
                 (
                     unbound_cond,
                     TypedExpr::TIfThenElse(cond.b(), then.b(), else_branch.b(), ty),
                 )
             }
             TypedExpr::TTuple(ts, ty) => {
-                let mut unbounds = BTreeSet::new();
+                let mut unbound = BTreeSet::new();
                 let mut new_ts = Vec::new();
                 for t in ts {
-                    let (unbound, t) = self.substitute_texp(t);
-                    unbounds.extend(unbound);
+                    let (unbounds, t) = self.substitute_texp(t);
+                    unbound.extend(unbounds);
                     new_ts.push(t);
                 }
-                (unbounds, TypedExpr::TTuple(new_ts, ty))
+                let (unbounds, ty) = self.substitute(ty);
+                unbound.extend(unbounds);
+                (unbound, TypedExpr::TTuple(new_ts, ty))
             }
             TypedExpr::TAccess(texp, idx, ty) => {
-                let (unbound, texp) = self.substitute_texp(*texp);
+                let (mut unbound, texp) = self.substitute_texp(*texp);
+                let (unbounds, ty) = self.substitute(ty);
+                unbound.extend(unbounds);
                 (unbound, TypedExpr::TAccess(texp.b(), idx, ty))
             }
         }
@@ -651,7 +681,10 @@ impl Inference {
                         context.insert(arg.to_owned(), typ);
                     }
 
-                    let (body_type, body_output) = self.infer(context, body);
+                    let (body_type, mut body_output) = self.infer(context, body);
+                    body_output
+                        .constraints
+                        .push(Constraint::TypeEqual(ret_ty.clone(), body_type.clone()));
 
                     // Constraint solving went well
                     if self.unification(&body_output.constraints).is_ok() {

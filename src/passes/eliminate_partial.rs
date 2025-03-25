@@ -73,38 +73,26 @@ impl PartialElimination {
             TypedExpr::TLam(args, body, typ) => {
                 TypedExpr::TLam(args, Box::new(self.eliminate_partial(*body)), typ)
             }
+            TypedExpr::TApp(fun_expr, args, app_ty @ Type::TFun(_, _)) => {
+                let eta_args = unpack_type(&app_ty);
+                let (lambda_args, app_args) = self.generate_lambda_vars_and_app_vars(&eta_args);
+                let mut all_args = args;
+                all_args.extend(app_args);
+                TypedExpr::TLam(
+                    lambda_args,
+                    Box::new(TypedExpr::TApp(fun_expr, all_args, final_type(&app_ty))),
+                    app_ty.clone(),
+                )
+            }
             TypedExpr::TApp(fn_expr, args, typ) => TypedExpr::TApp(
-                Box::new(self.eliminate_partial(*fn_expr)),
+                fn_expr,
                 args.into_iter()
                     .map(|arg| self.eliminate_partial(arg))
                     .collect(),
                 typ,
             ),
             TypedExpr::TLet(bind_old, _, box TypedExpr::TName(bind_new, _), body) => {
-                substitute_binding(&bind_old, &bind_new, *body)
-            }
-
-            TypedExpr::TLet(
-                name,
-                typ,
-                box TypedExpr::TApp(lam, args, app_ty @ Type::TFun(_, _)),
-                body,
-            ) => {
-                let eta_args = unpack_type(&app_ty);
-                let (lambda_args, app_args) = self.generate_lambda_vars_and_app_vars(&eta_args);
-                let mut all_args = args;
-                all_args.extend(app_args);
-                let new_lam = TypedExpr::TLam(
-                    lambda_args,
-                    Box::new(TypedExpr::TApp(lam, all_args, final_type(&app_ty))),
-                    typ.clone(),
-                );
-                TypedExpr::TLet(
-                    name,
-                    typ,
-                    Box::new(new_lam),
-                    Box::new(self.eliminate_partial(*body)),
-                )
+                self.eliminate_partial(substitute_binding(&bind_old, &bind_new, *body))
             }
             TypedExpr::TLet(name, typ, rhs, body) => TypedExpr::TLet(
                 name,
@@ -189,6 +177,97 @@ mod tests {
     }
 
     #[test]
+    fn test_eliminate_partial_nested_let_with_partial() {
+        // Before: let f = (fun x y -> x + y) in let g = f in g 42
+        // After:  let f = (fun x y -> x + y) in (fun y -> f 42 y)
+        let mut eliminator = PartialElimination::new();
+        let expr = TypedExpr::TLet(
+            "f".to_string(),
+            Type::TFun(Type::TInt.b(), Type::TInt.b()),
+            Box::new(TypedExpr::TLam(
+                vec![("x".to_string(), Type::TInt), ("y".to_string(), Type::TInt)],
+                Box::new(TypedExpr::TPrim(
+                    Binop::Add,
+                    Box::new(TypedExpr::TName("x".to_string(), Type::TInt)),
+                    Box::new(TypedExpr::TName("y".to_string(), Type::TInt)),
+                    Type::TInt,
+                )),
+                Type::TFun(
+                    Type::TInt.b(),
+                    Type::TFun(Type::TInt.b(), Type::TInt.b()).b(),
+                ),
+            )),
+            Box::new(TypedExpr::TLet(
+                "g".to_string(),
+                Type::TFun(
+                    Type::TInt.b(),
+                    Type::TFun(Type::TInt.b(), Type::TInt.b()).b(),
+                ),
+                Box::new(TypedExpr::TName(
+                    "f".to_string(),
+                    Type::TFun(
+                        Type::TInt.b(),
+                        Type::TFun(Type::TInt.b(), Type::TInt.b()).b(),
+                    ),
+                )),
+                Box::new(TypedExpr::TApp(
+                    Box::new(TypedExpr::TName(
+                        "g".to_string(),
+                        Type::TFun(
+                            Type::TInt.b(),
+                            Type::TFun(Type::TInt.b(), Type::TInt.b()).b(),
+                        ),
+                    )),
+                    vec![TypedExpr::TConst(Const::CInt(42), Type::TInt)],
+                    Type::TFun(Type::TInt.b(), Type::TInt.b()),
+                )),
+            )),
+        );
+
+        let expected_rhs = TypedExpr::TLam(
+            vec![("x".to_owned(), Type::TInt), ("y".to_owned(), Type::TInt)],
+            TypedExpr::TPrim(
+                Binop::Add,
+                TypedExpr::TName("x".to_owned(), Type::TInt).b(),
+                TypedExpr::TName("y".to_owned(), Type::TInt).b(),
+                Type::TInt,
+            )
+            .b(),
+            Type::TFun(
+                Type::TInt.b(),
+                Type::TFun(Type::TInt.b(), Type::TInt.b()).b(),
+            ),
+        );
+
+        let expected_body = TypedExpr::TLam(
+            vec![("#part_elim_lam_1".to_owned(), Type::TInt)],
+            TypedExpr::TApp(
+                Box::new(TypedExpr::TName(
+                    "f".to_owned(),
+                    Type::TFun(
+                        Type::TInt.b(),
+                        Type::TFun(Type::TInt.b(), Type::TInt.b()).b(),
+                    ),
+                )),
+                vec![
+                    TypedExpr::TConst(Const::CInt(42), Type::TInt),
+                    TypedExpr::TName("#part_elim_lam_1".to_owned(), Type::TInt),
+                ],
+                Type::TInt,
+            )
+            .b(),
+            Type::TFun(Type::TInt.b(), Type::TInt.b()),
+        );
+
+        let result = eliminator.eliminate_partial(expr);
+        if let TypedExpr::TLet(name, typ, box rhs, box body) = result {
+            assert_eq!(name, "f".to_owned());
+            assert_eq!(typ, Type::TFun(Type::TInt.b(), Type::TInt.b()));
+            assert_eq!(rhs, expected_rhs);
+            assert_eq!(body, expected_body);
+        };
+    }
+
     fn test_eliminate_partial_nested_let() {
         // Before: let x = y in let z = x in z
         // After:  let z = y in z

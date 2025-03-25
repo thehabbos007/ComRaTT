@@ -77,8 +77,9 @@ impl ANFConversion {
                 let comp = CExpr::Access(e_anf, idx, ty);
                 self.wrap_bindings(bindings, vec![], AnfExpr::CExp(comp))
             }
-            TypedExpr::TLam(..) => {
-                panic!("Lambda expressions should have been eliminated by this point.")
+            TypedExpr::TLam(params, body, ty) => {
+                let body_anf = self.normalize(*body);
+                AnfExpr::AExpr(AExpr::Lam(params, Box::new(body_anf), ty))
             }
         }
     }

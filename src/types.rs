@@ -107,7 +107,7 @@ pub fn final_type_tproduct(ts: &[Type]) -> Type {
     }
 }
 
-pub fn tfun_len_n_rec(ty: Type, n: usize, acc: &mut Vec<Type>) -> (Type, Vec<Type>) {
+fn tfun_len_n_rec(ty: Type, n: usize, acc: &mut Vec<Type>) -> (Type, Vec<Type>) {
     match ty {
         Type::TFun(ty, next_ty) if n > 0 => {
             acc.push(*ty);
@@ -124,10 +124,17 @@ pub fn tfun_len_n_rec(ty: Type, n: usize, acc: &mut Vec<Type>) -> (Type, Vec<Typ
     }
 }
 
+/// Unfold a type for use in fuctions. This will pop [`n`] elements of a [`Type::TFun`] type and return
+/// the remaining type and the popped types.
 pub fn tfun_len_n(ty: Type, n: usize) -> (Type, Vec<Type>) {
-    tfun_len_n_rec(ty, n, &mut Vec::new())
+    let (typ, popped) = tfun_len_n_rec(ty, n, &mut Vec::new());
+    debug_assert_eq!(popped.len(), n);
+    (typ, popped)
 }
 
+/// Build a TFun from a slice of argument types and a return type.
+/// types: [TInt, TInt] and ret_ty: TBool will result in
+/// TFun(TInt, TFun(TInt, TBool))
 pub fn build_function_type(types: &[Type], ret_ty: Type) -> Type {
     match types {
         [] => ret_ty,
@@ -166,15 +173,20 @@ pub fn traverse_locals<'a>(expr: &'a TypedExpr, locals: &mut Vec<(&'a str, Type)
     }
 }
 
-pub fn find_free_vars(expr: &TypedExpr, bound: &HashSet<String>) -> HashSet<String> {
+pub fn find_free_vars(
+    expr: &TypedExpr,
+    bound: &HashSet<(String, Type)>,
+) -> HashSet<(String, Type)> {
     match expr {
         TypedExpr::TConst(_, _) => HashSet::new(),
-        TypedExpr::TName(name, _) => {
-            if bound.contains(name) {
+        TypedExpr::TName(name, ty) => {
+            let name = name.clone();
+            let ty = ty.clone();
+            if bound.contains(&(name.clone(), ty.clone())) {
                 HashSet::new()
             } else {
                 let mut set = HashSet::new();
-                set.insert(name.clone());
+                set.insert((name, ty));
                 set
             }
         }
@@ -186,8 +198,10 @@ pub fn find_free_vars(expr: &TypedExpr, bound: &HashSet<String>) -> HashSet<Stri
         }
         TypedExpr::TLam(args, body, _) => {
             let mut new_bound = bound.clone();
-            for (name, _) in args {
-                new_bound.insert(name.clone());
+            for (name, ty) in args {
+                let name = name.clone();
+                let ty = ty.clone();
+                new_bound.insert((name, ty));
             }
             find_free_vars(body, &new_bound)
         }
@@ -198,10 +212,12 @@ pub fn find_free_vars(expr: &TypedExpr, bound: &HashSet<String>) -> HashSet<Stri
             }
             free
         }
-        TypedExpr::TLet(name, _, rhs, body) => {
+        TypedExpr::TLet(name, ty, rhs, body) => {
             let mut free = find_free_vars(rhs, bound);
             let mut new_bound = bound.clone();
-            new_bound.insert(name.clone());
+            let name = name.clone();
+            let ty = ty.clone();
+            new_bound.insert((name, ty));
             free.extend(find_free_vars(body, &new_bound));
             free
         }
@@ -222,8 +238,8 @@ pub fn find_free_vars(expr: &TypedExpr, bound: &HashSet<String>) -> HashSet<Stri
     }
 }
 
-pub fn substitute_binding(bind_old: &str, bind_new: &str, aexpr: TypedExpr) -> TypedExpr {
-    match aexpr {
+pub fn substitute_binding(bind_old: &str, bind_new: &str, expr: TypedExpr) -> TypedExpr {
+    match expr {
         TypedExpr::TName(binding, ty) if binding == bind_old => {
             TypedExpr::TName(bind_new.to_string(), ty)
         }
@@ -251,6 +267,12 @@ pub fn substitute_binding(bind_old: &str, bind_new: &str, aexpr: TypedExpr) -> T
             Box::new(substitute_binding(bind_old, bind_new, *rhs)),
             Box::new(substitute_binding(bind_old, bind_new, *body)),
         ),
+        TypedExpr::TLet(name, ty, rhs, body) => TypedExpr::TLet(
+            name,
+            ty,
+            Box::new(substitute_binding(bind_old, bind_new, *rhs)),
+            body,
+        ),
         TypedExpr::TIfThenElse(condition, then_branch, else_branch, ty) => TypedExpr::TIfThenElse(
             Box::new(substitute_binding(bind_old, bind_new, *condition)),
             Box::new(substitute_binding(bind_old, bind_new, *then_branch)),
@@ -269,7 +291,8 @@ pub fn substitute_binding(bind_old: &str, bind_new: &str, aexpr: TypedExpr) -> T
             idx,
             ty,
         ),
-        _ => aexpr,
+        TypedExpr::TName(_, _) => expr,
+        TypedExpr::TConst(_, _) => expr,
     }
 }
 

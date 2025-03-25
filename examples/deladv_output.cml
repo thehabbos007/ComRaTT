@@ -1,0 +1,6 @@
+doit : int -> int
+def doit x =
+    let del = delay {apple} x in
+    delay {apple} (advance del);
+
+print <- doit 42;
