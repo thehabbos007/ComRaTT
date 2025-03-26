@@ -1,12 +1,12 @@
 use anyhow::{Context, Result};
 use wasm_encoder::{
-    reencode::{Reencode, RoundtripReencoder}, CodeSection, ElementSection, ExportSection, FunctionSection,
-    GlobalSection, ImportSection, IndirectNameMap, MemorySection, MemoryType, Module,
-    NameMap, NameSection, TypeSection,
+    reencode::{Reencode, RoundtripReencoder},
+    CodeSection, ElementSection, ExportSection, FunctionSection, GlobalSection, ImportSection,
+    IndirectNameMap, MemorySection, MemoryType, Module, NameMap, NameSection, TypeSection,
 };
 
 use std::collections::HashMap;
-use wasmparser::Payload;
+use wasmparser::{IndirectNaming, Name, Naming, Payload};
 
 pub struct WasmEmitter<'a> {
     pub module: Module,
@@ -163,9 +163,36 @@ impl WasmEmitter<'_> {
                 Payload::CustomSection(custom) => {
                     if let wasmparser::KnownCustom::Name(subsections) = custom.as_known() {
                         for name in subsections.into_iter() {
-                            let name = name?;
-                            RoundtripReencoder
-                                .parse_custom_name_subsection(&mut self.name_section, name)?
+                            match name? {
+                                Name::Function(funcs) => {
+                                    funcs.into_iter().map(|x| x.unwrap()).for_each(
+                                        |Naming { index, name }| {
+                                            self.function_name_map.append(index, name);
+                                        },
+                                    );
+                                }
+                                Name::Local(locals) => {
+                                    locals.into_iter().map(|x| x.unwrap()).for_each(
+                                        |IndirectNaming { index, names }| {
+                                            let mut name_map = NameMap::new();
+                                            names.into_iter().map(|x| x.unwrap()).for_each(
+                                                |Naming { index, name }| {
+                                                    name_map.append(index, name);
+                                                },
+                                            );
+                                            self.locals_name_map.append(index, &name_map);
+                                        },
+                                    );
+                                }
+                                Name::Type(types) => {
+                                    types.into_iter().map(|x| x.unwrap()).for_each(
+                                        |Naming { index, name }| {
+                                            self.type_name_map.append(index, name);
+                                        },
+                                    );
+                                }
+                                _ => (),
+                            }
                         }
                     }
                 }
@@ -180,7 +207,7 @@ impl WasmEmitter<'_> {
 mod tests {
     use super::*;
     use wasmparser::Validator;
-    
+
     use wasmtime_wast::WastContext;
 
     #[test]
