@@ -205,8 +205,6 @@ impl WasmEmitter<'_> {
 
         func.instruction(&Instruction::I32Const(size_bytes));
         func.instruction(&Instruction::Call(MALLOC_FUN_IDX));
-
-        todo!()
     }
 }
 #[cfg(test)]

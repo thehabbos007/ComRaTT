@@ -70,22 +70,20 @@ impl<'a> BareWasmEmitter<'a> {
             TypedToplevel::TFunDef(name, args, body, _ret_type) => {
                 // Reset locals at every def
                 self.locals_map.clear();
-                self.next_local = 0;
 
                 for (i, (arg_name, _)) in args.iter().enumerate() {
                     self.locals_map.insert(arg_name, i as u32);
                 }
-                self.next_local = args.len() as u32;
 
                 let mut local_types = Vec::new();
                 traverse_locals(body, &mut local_types);
                 local_types.dedup();
 
+                let args_len = args.len() as u32;
                 for (i, (arg_name, _)) in local_types.iter().enumerate() {
-                    let idx = self.next_local + i as u32;
+                    let idx = args_len + i as u32;
                     self.locals_map.insert(arg_name, idx);
                 }
-                self.next_local += local_types.len() as u32;
 
                 let local_types = local_types
                     .into_iter()

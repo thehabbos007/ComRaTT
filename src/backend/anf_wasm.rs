@@ -1,9 +1,8 @@
-use wasm_encoder::{
-    BlockType, Elements, ExportKind, Function, Instruction, MemArg, NameMap, ValType,
-};
+use wasm_encoder::{BlockType, ExportKind, Function, Instruction, MemArg, NameMap, ValType};
 
 use itertools::Itertools;
 use std::collections::BTreeSet;
+use std::iter;
 use std::ops::{Deref, DerefMut};
 
 use crate::anf::{AExpr, AnfExpr, AnfProg, AnfToplevel, CExpr};
@@ -13,7 +12,8 @@ use crate::types::count_tfun_args;
 use super::wasm_emitter::WasmEmitter;
 
 const WASM_WORD_SIZE: i32 = 4;
-const WASM_ALIGNMENT_SIZE: u32 = 4;
+const WASM_DWORD_SIZE: i32 = 8;
+const WASM_ALIGNMENT_SIZE: u32 = 0;
 const LOCAL_DUP_I32_NAME: &str = "dupi32";
 
 pub struct AnfWasmEmitter<'a> {
@@ -106,15 +106,16 @@ impl<'a> AnfWasmEmitter<'a> {
                 }
                 let next_local = args_len + local_types.len() as u32;
 
-                // the local $dup variable is used to store the pointer
-                // to a closure while it is being allocated.
-                self.locals_map.insert(LOCAL_DUP_I32_NAME, next_local);
-                local_types.insert((LOCAL_DUP_I32_NAME, Type::TInt));
-
                 let local_types = local_types
                     .into_iter()
                     .map(|(_, ty)| self.wasm_type(&ty))
+                    // This is the type for the local $dupi32 variable
+                    .chain(iter::once(ValType::I32))
                     .collect_vec();
+
+                // the local $dup variable is used to store the pointer
+                // to a closure while it is being allocated.
+                self.locals_map.insert(LOCAL_DUP_I32_NAME, next_local);
 
                 let mut func = Function::new_with_locals_types(local_types);
                 self.compile_anf_expr(&mut func, body);
@@ -139,7 +140,9 @@ impl<'a> AnfWasmEmitter<'a> {
 
     fn compile_anf_expr(&mut self, func: &mut Function, expr: &'a AnfExpr) {
         match expr {
-            AnfExpr::AExpr(aexpr) => self.compile_atomic(func, aexpr),
+            AnfExpr::AExpr(aexpr) => {
+                self.compile_atomic(func, aexpr);
+            }
             AnfExpr::CExp(cexpr) => self.compile_computation(func, cexpr),
             AnfExpr::Let(name, _ty, rhs, body) => {
                 self.compile_anf_expr(func, rhs);
@@ -152,29 +155,35 @@ impl<'a> AnfWasmEmitter<'a> {
         }
     }
 
-    fn compile_atomic(&mut self, func: &mut Function, aexpr: &'a AExpr) {
+    fn compile_atomic(&mut self, func: &mut Function, aexpr: &'a AExpr) -> Type {
         match aexpr {
-            AExpr::Const(Const::CInt(n), _) => {
+            AExpr::Const(Const::CInt(n), ty) => {
                 func.instruction(&Instruction::I64Const(*n as i64));
+                ty.clone()
             }
-            AExpr::Const(Const::CBool(b), _) => {
+            AExpr::Const(Const::CBool(b), ty) => {
                 func.instruction(&Instruction::I32Const(*b as i32));
+                ty.clone()
             }
-            AExpr::Const(Const::CUnit, _) => {
+            AExpr::Const(Const::CUnit, ty) => {
                 func.instruction(&Instruction::I32Const(-1));
+                ty.clone()
             }
-            AExpr::Var(name, _) => {
+            AExpr::Var(name, ty) => {
                 if let Some(&local_idx) = self.locals_map.get(name.as_str()) {
+                    // we need to identify if this is a function pointer and not just a local
                     func.instruction(&Instruction::LocalGet(local_idx));
                 } else if let Some(&func_idx) = self.func_map.get(name.as_str()) {
                     func.instruction(&Instruction::Call(func_idx));
                 } else {
                     panic!("Undefined variable: {}", name);
                 }
+
+                ty.clone()
             }
             AExpr::Lam(
                 lam_args,
-                box AnfExpr::CExp(CExpr::App(AExpr::Var(app_name, var_typ), app_args, app_typ)),
+                box AnfExpr::CExp(CExpr::App(AExpr::Var(app_name, var_typ), app_args, _)),
                 lam_typ,
             ) => {
                 // Invariants:
@@ -213,12 +222,12 @@ impl<'a> AnfWasmEmitter<'a> {
 
                 let arity = app_args.len() as i32;
 
-                let num_populate_args = arity - lam_args.len() as i32;
+                let num_populate_args = arity as usize - lam_args.len();
 
                 let closure_size_bytes = (1 + // Function pointer
-                    1 + // arity argument
-                    arity) // Number of arguments in the top-level function
-                    * WASM_WORD_SIZE;
+                    1) * WASM_WORD_SIZE + // arity argument
+                    (arity // Number of arguments in the top-level function
+                    * WASM_DWORD_SIZE);
 
                 // malloc(closure_size) -> closure_ptr
                 // [i32]
@@ -253,8 +262,26 @@ impl<'a> AnfWasmEmitter<'a> {
                 func.instruction(&Instruction::I32Const(arity));
                 func.instruction(&Instruction::I32Store(arity_arg));
 
-                // populate all known arguments
+                // populate all known arguments TODO: free variables
+                for (idx, arg) in app_args.iter().take(num_populate_args).enumerate() {
+                    let arg_offset = WASM_WORD_SIZE * (2 + idx as i32);
+                    let arg_arg = MemArg {
+                        offset: arg_offset as u64,
+                        align: WASM_ALIGNMENT_SIZE,
+                        memory_index: 0,
+                    };
+
+                    func.instruction(&Instruction::LocalGet(dup_local_idx));
+                    let comp_ty = self.compile_atomic(func, arg);
+                    if !matches!(comp_ty, Type::TInt) {
+                        func.instruction(&Instruction::I64ExtendI32S);
+                    }
+                    func.instruction(&Instruction::I64Store(arg_arg));
+                }
                 // return ptr from malloc
+                func.instruction(&Instruction::LocalGet(dup_local_idx));
+
+                lam_typ.clone()
             }
             _ => panic!("Attempted to compile invalid atomic ANF expression {aexpr}"),
         }
@@ -289,8 +316,14 @@ impl<'a> AnfWasmEmitter<'a> {
                 }
                 match f {
                     AExpr::Var(name, _) => {
-                        let idx = self.func_map[name.as_str()];
-                        func.instruction(&Instruction::Call(idx));
+                        if let Some(&local_idx) = self.locals_map.get(name.as_str()) {
+                            // we need to identify if this is a function pointer and not just a
+                            func.instruction(&Instruction::LocalGet(local_idx));
+                        } else if let Some(&func_idx) = self.func_map.get(name.as_str()) {
+                            func.instruction(&Instruction::Call(func_idx));
+                        } else {
+                            panic!("Undefined variable: {}", name);
+                        }
                     }
                     _ => panic!("Function call target must be a variable"),
                 }

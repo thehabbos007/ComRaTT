@@ -58,8 +58,8 @@ pub enum AnfExpr {
 impl AnfExpr {
     pub fn traverse_locals<'a>(&'a self, locals: &mut BTreeSet<(&'a str, Type)>) {
         match self {
-            AnfExpr::Let(name, ty, rhs, body) => {
-                locals.insert((name, ty.clone()));
+            AnfExpr::Let(name, _, rhs, body) => {
+                locals.insert((name, rhs.ty()));
                 rhs.traverse_locals(locals);
                 body.traverse_locals(locals);
             }
