@@ -107,6 +107,13 @@ pub fn final_type_tproduct(ts: &[Type]) -> Type {
     }
 }
 
+pub fn count_tfun_args(ty: &Type) -> usize {
+    match ty {
+        Type::TFun(_, t2) => 1 + count_tfun_args(t2),
+        _ => 0,
+    }
+}
+
 fn tfun_len_n_rec(ty: Type, n: usize, acc: &mut Vec<Type>) -> (Type, Vec<Type>) {
     match ty {
         Type::TFun(ty, next_ty) if n > 0 => {

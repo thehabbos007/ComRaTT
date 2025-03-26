@@ -1,8 +1,9 @@
 use anyhow::{Context, Result};
 use wasm_encoder::{
     reencode::{Reencode, RoundtripReencoder},
-    CodeSection, ElementSection, ExportSection, FunctionSection, GlobalSection, ImportSection,
-    IndirectNameMap, MemorySection, MemoryType, Module, NameMap, NameSection, TypeSection,
+    CodeSection, ElementSection, ExportSection, Function, FunctionSection, GlobalSection,
+    ImportSection, IndirectNameMap, Instruction, MemorySection, MemoryType, Module, NameMap,
+    NameSection, TypeSection,
 };
 
 use std::collections::HashMap;
@@ -28,9 +29,9 @@ pub struct WasmEmitter<'a> {
     pub func_map: HashMap<&'a str, u32>,
 
     pub locals_map: HashMap<&'a str, u32>,
-    pub next_local: u32,
 }
 
+const MALLOC_FUN_IDX: u32 = 0;
 const MALLOC_BODY: &str = r#"
 (module
     (global $next_ptr (mut i32) (i32.const 0))
@@ -53,10 +54,6 @@ const MALLOC_BODY: &str = r#"
         (local.get $old)
     )
 )
-"#;
-
-// Initial allocation of a closure
-const ALLOCATE_CLOSURE: &str = r#"
 "#;
 
 // Apply arguments to a closure
@@ -91,7 +88,6 @@ impl WasmEmitter<'_> {
             func_map: HashMap::new(),
 
             locals_map: HashMap::new(),
-            next_local: 0,
         }
     }
 
@@ -129,7 +125,7 @@ impl WasmEmitter<'_> {
         let bytes = wat::parse_str(MALLOC_BODY)?;
         self.parse_wasm_module(&bytes).context("add malloc")?;
 
-        self.func_map.insert("malloc", 0);
+        self.func_map.insert("malloc", MALLOC_FUN_IDX);
 
         Ok(())
     }
@@ -201,6 +197,16 @@ impl WasmEmitter<'_> {
         }
 
         Ok(())
+    }
+
+    pub fn malloc(&self, func: &mut Function, size_bytes: i32) {
+        // malloc is in the wasm blob as index `MALLOC_FUN_IDX` function
+        // inject code that invokes this function with closure_size
+
+        func.instruction(&Instruction::I32Const(size_bytes));
+        func.instruction(&Instruction::Call(MALLOC_FUN_IDX));
+
+        todo!()
     }
 }
 #[cfg(test)]

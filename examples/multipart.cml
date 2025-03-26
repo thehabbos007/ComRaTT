@@ -1,0 +1,4 @@
+main : int -> int -> int -> int
+def main x =
+    let g = x+x+x+x in
+    let f = fun y z w -> y+z+w in f g;

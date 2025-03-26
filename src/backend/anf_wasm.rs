@@ -1,4 +1,6 @@
-use wasm_encoder::{BlockType, ExportKind, Function, Instruction, NameMap, ValType};
+use wasm_encoder::{
+    BlockType, Elements, ExportKind, Function, Instruction, MemArg, NameMap, ValType,
+};
 
 use itertools::Itertools;
 use std::collections::BTreeSet;
@@ -6,8 +8,13 @@ use std::ops::{Deref, DerefMut};
 
 use crate::anf::{AExpr, AnfExpr, AnfProg, AnfToplevel, CExpr};
 use crate::source::{Binop, Const, Type};
+use crate::types::count_tfun_args;
 
 use super::wasm_emitter::WasmEmitter;
+
+const WASM_WORD_SIZE: i32 = 4;
+const WASM_ALIGNMENT_SIZE: u32 = 4;
+const LOCAL_DUP_I32_NAME: &str = "dupi32";
 
 pub struct AnfWasmEmitter<'a> {
     wasm_emitter: WasmEmitter<'a>,
@@ -65,6 +72,8 @@ impl<'a> AnfWasmEmitter<'a> {
             return;
         };
 
+        //Elements::Functions(())
+        // self.element_section.active(table_index, offset, elements)
         let func_idx = self.function_section.len();
         let type_idx = self.register_function_type(name, args, ret_type);
 
@@ -82,21 +91,25 @@ impl<'a> AnfWasmEmitter<'a> {
         match def {
             AnfToplevel::FunDef(name, args, body, _ret_type) => {
                 self.locals_map.clear();
-                self.next_local = 0;
 
                 for (i, (arg_name, _)) in args.iter().enumerate() {
                     self.locals_map.insert(arg_name, i as u32);
                 }
-                self.next_local = args.len() as u32;
 
                 let mut local_types = BTreeSet::new();
                 body.traverse_locals(&mut local_types);
 
+                let args_len = args.len() as u32;
                 for (i, (arg_name, _)) in local_types.iter().enumerate() {
-                    let idx = self.next_local + i as u32;
+                    let idx = args_len + i as u32;
                     self.locals_map.insert(arg_name, idx);
                 }
-                self.next_local += local_types.len() as u32;
+                let next_local = args_len + local_types.len() as u32;
+
+                // the local $dup variable is used to store the pointer
+                // to a closure while it is being allocated.
+                self.locals_map.insert(LOCAL_DUP_I32_NAME, next_local);
+                local_types.insert((LOCAL_DUP_I32_NAME, Type::TInt));
 
                 let local_types = local_types
                     .into_iter()
@@ -159,7 +172,91 @@ impl<'a> AnfWasmEmitter<'a> {
                     panic!("Undefined variable: {}", name);
                 }
             }
-            AExpr::Lam(..) => todo!(),
+            AExpr::Lam(
+                lam_args,
+                box AnfExpr::CExp(CExpr::App(AExpr::Var(app_name, var_typ), app_args, app_typ)),
+                lam_typ,
+            ) => {
+                // Invariants:
+                // - App fun should be a toplevel (given by func_map.get below)
+                // - Lambda has a App immediately inside body (given by match)
+                // - Args are _fully_ applied in the inner App (below assertion)
+                // - App args - lambda args = the arguments to populate the closure with (below assertion ensures non-negative)
+                //
+                // Random note: free variables allowed as arguments, should be populated in-place.
+                //
+                // What do we need for allocating the closure?
+                // - Function index aka pointer
+                // - Arity
+                // - Length?
+                // - Already applied args / free vars
+                //
+                // Simplifications
+                // - arguments are i32 values stored directly in memory
+                // i.e. they are not pointers to data stored elsewhere
+
+                // Invariant assertions
+                assert_eq!(
+                    count_tfun_args(&var_typ),
+                    app_args.len(),
+                    "Lambda application should be fully applied"
+                );
+                assert!(
+                    app_args.len().checked_sub(lam_args.len()).is_some(),
+                    "Closure population candidates should be non-negative"
+                );
+
+                let fun_idx = self
+                    .func_map
+                    .get(app_name.as_str())
+                    .expect("Closure function should be a toplevel function.");
+
+                let arity = app_args.len() as i32;
+
+                let num_populate_args = arity - lam_args.len() as i32;
+
+                let closure_size_bytes = (1 + // Function pointer
+                    1 + // arity argument
+                    arity) // Number of arguments in the top-level function
+                    * WASM_WORD_SIZE;
+
+                // malloc(closure_size) -> closure_ptr
+                // [i32]
+                self.wasm_emitter.malloc(func, closure_size_bytes);
+                // The first store will consume this value from the stack.
+                // We cannot write it to a local because we would need to forward declare it
+                // before reaching this.
+                // However, WASM has no dup so we need to add a single local to all top level functions
+                // to make sure that we have it available.
+
+                let dup_local_idx = self.locals_map[LOCAL_DUP_I32_NAME];
+                func.instruction(&Instruction::LocalTee(dup_local_idx));
+
+                // populate function pointer and arity -> closure_ptr
+                // [i32]
+                let fp_offset = WASM_WORD_SIZE * 0;
+                let fp_arg = MemArg {
+                    offset: fp_offset as u64,
+                    align: WASM_ALIGNMENT_SIZE,
+                    memory_index: 0,
+                };
+                func.instruction(&Instruction::I32Const(*fun_idx as i32));
+                func.instruction(&Instruction::I32Store(fp_arg));
+
+                let arity_offset = WASM_WORD_SIZE * 1;
+                let arity_arg = MemArg {
+                    offset: arity_offset as u64,
+                    align: WASM_ALIGNMENT_SIZE,
+                    memory_index: 0,
+                };
+                func.instruction(&Instruction::LocalGet(dup_local_idx));
+                func.instruction(&Instruction::I32Const(arity));
+                func.instruction(&Instruction::I32Store(arity_arg));
+
+                // populate all known arguments
+                // return ptr from malloc
+            }
+            _ => panic!("Attempted to compile invalid atomic ANF expression {aexpr}"),
         }
     }
 
@@ -245,7 +342,7 @@ impl<'a> AnfWasmEmitter<'a> {
             Type::TInt => ValType::I64,
             Type::TBool => ValType::I32,
             Type::TUnit => ValType::I32,
-            Type::TFun(_, _) => panic!("Function types not supported as value types"),
+            Type::TFun(_, _) => ValType::I32,
             Type::TProduct(_) => panic!("Product types not supported as value types"),
             Type::TVar(_) => panic!("Type variables not supported as value types"),
         }
