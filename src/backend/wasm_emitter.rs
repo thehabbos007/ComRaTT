@@ -3,7 +3,7 @@ use wasm_encoder::{
     reencode::{Reencode, RoundtripReencoder},
     CodeSection, ElementSection, ExportSection, Function, FunctionSection, GlobalSection,
     ImportSection, IndirectNameMap, Instruction, MemorySection, MemoryType, Module, NameMap,
-    NameSection, TypeSection, ValType,
+    NameSection, RefType, TableSection, TableType, TypeSection, ValType,
 };
 
 use std::collections::HashMap;
@@ -111,7 +111,17 @@ impl WasmEmitter<'_> {
         self.module.section(&self.type_section);
         self.module.section(&ImportSection::new());
         self.module.section(&self.function_section);
-        // <Table section would be here>
+
+        let mut tables = TableSection::new();
+        tables.table(TableType {
+            element_type: RefType::FUNCREF,
+            minimum: 128,
+            maximum: None,
+            table64: false,
+            shared: false,
+        });
+        self.module.section(&tables);
+
         self.module.section(&self.memory_section);
         self.module.section(&self.global_section);
         self.module.section(&self.export_section);

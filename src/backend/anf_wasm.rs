@@ -1,4 +1,6 @@
-use wasm_encoder::{BlockType, ExportKind, Function, Instruction, MemArg, NameMap, ValType};
+use wasm_encoder::{
+    BlockType, ConstExpr, Elements, ExportKind, Function, Instruction, MemArg, NameMap, ValType,
+};
 
 use itertools::Itertools;
 use std::borrow::Cow;
@@ -14,7 +16,8 @@ use super::wasm_emitter::WasmEmitter;
 
 const WASM_WORD_SIZE: i32 = 4;
 // const WASM_DWORD_SIZE: i32 = 8;
-const WASM_ALIGNMENT_SIZE: u32 = 0;
+/// Allignment is a power of 2. So we align with 2^2 = 4 bytes
+const WASM_ALIGNMENT_SIZE: u32 = 2;
 const LOCAL_DUP_I32_NAME: &str = "dupi32";
 const FUNCTION_INDEX_OFFSET: u64 = 0;
 const ARITY_OFFSET: u64 = WASM_WORD_SIZE as u64 * 1;
@@ -22,6 +25,7 @@ const ARITY_OFFSET: u64 = WASM_WORD_SIZE as u64 * 1;
 pub struct AnfWasmEmitter<'a> {
     wasm_emitter: WasmEmitter<'a>,
 
+    dispatch_offset: u32,
     prog: &'a AnfProg,
 }
 
@@ -42,6 +46,7 @@ impl<'a> AnfWasmEmitter<'a> {
     pub fn new(prog: &'a AnfProg) -> Self {
         Self {
             wasm_emitter: WasmEmitter::new(),
+            dispatch_offset: 0,
             prog,
         }
     }
@@ -53,11 +58,15 @@ impl<'a> AnfWasmEmitter<'a> {
             self.forward_declare_functions(def);
         }
 
+        self.dispatch_offset = self.function_section.len();
+
         for def in &self.prog.0 {
             self.process_function(def);
         }
 
         self.gen_dispatch();
+
+        self.declare_table_entries();
 
         self.wasm_emitter
             .name_section
@@ -130,7 +139,7 @@ impl<'a> AnfWasmEmitter<'a> {
             func.instruction(&Instruction::Block(BlockType::Empty));
         }
 
-        let target_labels = (0..func_map_len).into_iter().collect_vec();
+        let target_labels = (0..func_map_len).collect_vec();
 
         // Iin the innermost block
         func.instruction(&Instruction::BrTable(
@@ -140,16 +149,18 @@ impl<'a> AnfWasmEmitter<'a> {
         func.instruction(&Instruction::End);
 
         // Compile each break case. Order is important.
-        for (name, idx) in self.func_map.iter().sorted_by(|a, b| a.1.cmp(&b.1)) {
+        for (name, idx) in self.func_map.iter().sorted_by(|a, b| a.1.cmp(b.1)) {
             // find args and put on stack
             let func_args = self.func_args[name];
             let mut arg = MemArg {
+                // beware we're subtracting by one here because the offset is not the end of the malloc block
+                // so if we end up getting jumbled values, look at this again.
                 offset: FUNCTION_INDEX_OFFSET
-                    + ((2 + func_args.len() as u64) * WASM_WORD_SIZE as u64),
+                    + ((2 + func_args.len() as u64 - 1) * WASM_WORD_SIZE as u64),
                 align: WASM_ALIGNMENT_SIZE,
                 memory_index: 0,
             };
-            for _ in func_args.len()..0 {
+            for _ in (0..func_args.len()).rev() {
                 // Closure pointer on stack
                 func.instruction(&Instruction::LocalGet(0));
                 func.instruction(&Instruction::I32Load(arg));
@@ -282,7 +293,7 @@ impl<'a> AnfWasmEmitter<'a> {
     fn compile_atomic(&mut self, func: &mut Function, aexpr: &'a AExpr) -> Type {
         match aexpr {
             AExpr::Const(Const::CInt(n), ty) => {
-                func.instruction(&Instruction::I32Const(*n as i32));
+                func.instruction(&Instruction::I32Const(*n));
                 ty.clone()
             }
             AExpr::Const(Const::CBool(b), ty) => {
@@ -330,7 +341,7 @@ impl<'a> AnfWasmEmitter<'a> {
 
                 // Invariant assertions
                 assert_eq!(
-                    count_tfun_args(&var_typ),
+                    count_tfun_args(var_typ),
                     app_args.len(),
                     "Lambda application should be fully applied"
                 );
@@ -503,6 +514,15 @@ impl<'a> AnfWasmEmitter<'a> {
             Type::TProduct(_) => panic!("Product types not supported as value types"),
             Type::TVar(_) => panic!("Type variables not supported as value types"),
         }
+    }
+
+    fn declare_table_entries(&mut self) {
+        let elements = self.func_map.values().copied().collect_vec();
+        self.element_section.active(
+            Some(0),
+            &ConstExpr::i32_const(0),
+            Elements::Functions(elements.into()),
+        );
     }
 }
 
