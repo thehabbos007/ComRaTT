@@ -137,7 +137,7 @@ impl<'a> BareWasmEmitter<'a> {
 
     fn wasm_type(&self, ty: &Type) -> ValType {
         match ty {
-            Type::TInt => ValType::I64,
+            Type::TInt => ValType::I32,
             Type::TBool => ValType::I32,
             Type::TUnit => ValType::I32,
             Type::TFun(_, _) => panic!("Function types not supported as value types"),
@@ -150,7 +150,8 @@ impl<'a> BareWasmEmitter<'a> {
         match expr {
             TypedExpr::TConst(c, _) => match c {
                 Const::CInt(n) => {
-                    func.instruction(&Instruction::I64Const(*n as i64));
+                    // func.instruction(&Instruction::I64Const(*n as i64));
+                    func.instruction(&Instruction::I32Const(*n));
                 }
                 Const::CBool(b) => {
                     func.instruction(&Instruction::I32Const(*b as i32));

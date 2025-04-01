@@ -3,11 +3,13 @@ use wasm_encoder::{
     reencode::{Reencode, RoundtripReencoder},
     CodeSection, ElementSection, ExportSection, Function, FunctionSection, GlobalSection,
     ImportSection, IndirectNameMap, Instruction, MemorySection, MemoryType, Module, NameMap,
-    NameSection, TypeSection,
+    NameSection, TypeSection, ValType,
 };
 
 use std::collections::HashMap;
 use wasmparser::{IndirectNaming, Name, Naming, Payload};
+
+use crate::source::Type;
 
 pub struct WasmEmitter<'a> {
     pub module: Module,
@@ -27,6 +29,7 @@ pub struct WasmEmitter<'a> {
 
     pub type_map: HashMap<&'a str, u32>,
     pub func_map: HashMap<&'a str, u32>,
+    pub func_args: HashMap<&'a str, &'a [(String, Type)]>,
 
     pub locals_map: HashMap<&'a str, u32>,
 }
@@ -86,6 +89,7 @@ impl WasmEmitter<'_> {
 
             type_map: HashMap::new(),
             func_map: HashMap::new(),
+            func_args: HashMap::new(),
 
             locals_map: HashMap::new(),
         }
@@ -126,6 +130,8 @@ impl WasmEmitter<'_> {
         self.parse_wasm_module(&bytes).context("add malloc")?;
 
         self.func_map.insert("malloc", MALLOC_FUN_IDX);
+        self.func_args.insert("malloc", &[]);
+        self.type_map.insert("malloc", 0);
 
         Ok(())
     }

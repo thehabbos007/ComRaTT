@@ -1,7 +1,8 @@
 use wasm_encoder::{BlockType, ExportKind, Function, Instruction, MemArg, NameMap, ValType};
 
 use itertools::Itertools;
-use std::collections::BTreeSet;
+use std::borrow::Cow;
+use std::collections::{BTreeSet, HashMap};
 use std::iter;
 use std::ops::{Deref, DerefMut};
 
@@ -12,9 +13,11 @@ use crate::types::count_tfun_args;
 use super::wasm_emitter::WasmEmitter;
 
 const WASM_WORD_SIZE: i32 = 4;
-const WASM_DWORD_SIZE: i32 = 8;
+// const WASM_DWORD_SIZE: i32 = 8;
 const WASM_ALIGNMENT_SIZE: u32 = 0;
 const LOCAL_DUP_I32_NAME: &str = "dupi32";
+const FUNCTION_INDEX_OFFSET: u64 = 0;
+const ARITY_OFFSET: u64 = WASM_WORD_SIZE as u64 * 1;
 
 pub struct AnfWasmEmitter<'a> {
     wasm_emitter: WasmEmitter<'a>,
@@ -54,6 +57,8 @@ impl<'a> AnfWasmEmitter<'a> {
             self.process_function(def);
         }
 
+        self.gen_dispatch();
+
         self.wasm_emitter
             .name_section
             .functions(&self.wasm_emitter.function_name_map);
@@ -79,12 +84,131 @@ impl<'a> AnfWasmEmitter<'a> {
 
         self.function_section.function(type_idx);
         self.func_map.insert(name.as_str(), func_idx);
+        self.func_args.insert(name.as_str(), args.as_slice());
 
         self.export_section.export(name, ExportKind::Func, func_idx);
 
         // Debug info
         self.function_name_map.append(func_idx, name);
         self.type_name_map.append(type_idx, name);
+    }
+
+    fn gen_dispatch(&mut self) {
+        // generate a wasm function
+        // takes a closure pointer
+        // returns anything (could be numeric value, could be pointer, could be bool, the sky is the limit)
+        // (func (param i32) (result i32))
+        let name = "dispatch";
+        // TODO: we assume an invariant where we have a partially applied function with one remaining argument
+        //   so the dispatch function will take a closure and that last argument.
+        //   In an ideal world, we would populate the closure fully (failing if we are "over applying")
+        //   before passing it on to dispatch.
+        let params = [ValType::I32, ValType::I32];
+        self.locals_map.clear();
+        // self.locals_map.insert("closure_ptr", 0);
+
+        let mut func = Function::new_with_locals_types(params.iter().cloned());
+
+        // Closure pointer on stack
+        func.instruction(&Instruction::LocalGet(0));
+        // Load and push function index
+        let fun_index_load_arg = MemArg {
+            offset: FUNCTION_INDEX_OFFSET,
+            align: WASM_ALIGNMENT_SIZE,
+            memory_index: 0,
+        };
+        func.instruction(&Instruction::I32Load(fun_index_load_arg));
+
+        // break table with target labels and default case
+        // generate with a loop
+        // default case is at index NUM_FUNCTIONS?
+
+        let func_map_len = self.func_map.len() as u32;
+
+        // Open as many blocks as there are functions + 1 for default
+        for _ in 0..(func_map_len + 1) {
+            func.instruction(&Instruction::Block(BlockType::Empty));
+        }
+
+        let target_labels = (0..func_map_len).into_iter().collect_vec();
+
+        // Iin the innermost block
+        func.instruction(&Instruction::BrTable(
+            Cow::from(target_labels),
+            func_map_len,
+        ));
+        func.instruction(&Instruction::End);
+
+        // Compile each break case. Order is important.
+        for (name, idx) in self.func_map.iter().sorted_by(|a, b| a.1.cmp(&b.1)) {
+            // find args and put on stack
+            let func_args = self.func_args[name];
+            let mut arg = MemArg {
+                offset: FUNCTION_INDEX_OFFSET
+                    + ((2 + func_args.len() as u64) * WASM_WORD_SIZE as u64),
+                align: WASM_ALIGNMENT_SIZE,
+                memory_index: 0,
+            };
+            for _ in func_args.len()..0 {
+                // Closure pointer on stack
+                func.instruction(&Instruction::LocalGet(0));
+                func.instruction(&Instruction::I32Load(arg));
+                arg.offset -= WASM_WORD_SIZE as u64;
+            }
+
+            // Push function index
+            let type_index = self.type_map[name];
+            func.instruction(&Instruction::I32Const(*idx as i32));
+            func.instruction(&Instruction::ReturnCallIndirect {
+                type_index,
+                table_index: 0,
+            });
+            // Close the block
+            func.instruction(&Instruction::End);
+        }
+
+        // Default case, unreachable
+        func.instruction(&Instruction::Unreachable);
+
+        // End function block
+        func.instruction(&Instruction::End);
+
+        let func_idx = self.function_section.len();
+        let type_idx = self.register_function_type(
+            name,
+            &[
+                (
+                    "closure_ptr".to_owned(),
+                    // This type is irrelevant. I just want to produce a "i32"
+                    Type::TFun(Type::TInt.b(), Type::TInt.b()),
+                ),
+                (
+                    "last_argument".to_owned(),
+                    // This type is potentially incorrect. Just be aware that chaning away from the "god i32" type
+                    // that we may run into problems.
+                    Type::TFun(Type::TInt.b(), Type::TInt.b()),
+                ),
+            ],
+            &Type::TInt,
+        );
+
+        self.function_section.function(type_idx);
+        self.code_section.function(&func);
+        self.func_map.insert(name, func_idx);
+
+        self.export_section.export(name, ExportKind::Func, func_idx);
+
+        self.function_name_map.append(func_idx, name);
+        self.type_name_map.append(type_idx, name);
+
+        let mut locals_name_map = NameMap::new();
+        self.locals_map
+            .iter()
+            .sorted_by_key(|l| l.1)
+            .for_each(|(name, idx)| {
+                locals_name_map.append(*idx, name);
+            });
+        self.locals_name_map.append(func_idx, &locals_name_map);
     }
 
     fn process_function(&mut self, def: &'a AnfToplevel) {
@@ -158,7 +282,7 @@ impl<'a> AnfWasmEmitter<'a> {
     fn compile_atomic(&mut self, func: &mut Function, aexpr: &'a AExpr) -> Type {
         match aexpr {
             AExpr::Const(Const::CInt(n), ty) => {
-                func.instruction(&Instruction::I64Const(*n as i64));
+                func.instruction(&Instruction::I32Const(*n as i32));
                 ty.clone()
             }
             AExpr::Const(Const::CBool(b), ty) => {
@@ -227,7 +351,7 @@ impl<'a> AnfWasmEmitter<'a> {
                 let closure_size_bytes = (1 + // Function pointer
                     1) * WASM_WORD_SIZE + // arity argument
                     (arity // Number of arguments in the top-level function
-                    * WASM_DWORD_SIZE);
+                    * WASM_WORD_SIZE);
 
                 // malloc(closure_size) -> closure_ptr
                 // [i32]
@@ -243,18 +367,16 @@ impl<'a> AnfWasmEmitter<'a> {
 
                 // populate function pointer and arity -> closure_ptr
                 // [i32]
-                let fp_offset = WASM_WORD_SIZE * 0;
                 let fp_arg = MemArg {
-                    offset: fp_offset as u64,
+                    offset: FUNCTION_INDEX_OFFSET,
                     align: WASM_ALIGNMENT_SIZE,
                     memory_index: 0,
                 };
                 func.instruction(&Instruction::I32Const(*fun_idx as i32));
                 func.instruction(&Instruction::I32Store(fp_arg));
 
-                let arity_offset = WASM_WORD_SIZE * 1;
                 let arity_arg = MemArg {
-                    offset: arity_offset as u64,
+                    offset: ARITY_OFFSET,
                     align: WASM_ALIGNMENT_SIZE,
                     memory_index: 0,
                 };
@@ -272,11 +394,13 @@ impl<'a> AnfWasmEmitter<'a> {
                     };
 
                     func.instruction(&Instruction::LocalGet(dup_local_idx));
-                    let comp_ty = self.compile_atomic(func, arg);
+                    let _comp_ty = self.compile_atomic(func, arg);
+                    /*
                     if !matches!(comp_ty, Type::TInt) {
                         func.instruction(&Instruction::I64ExtendI32S);
                     }
-                    func.instruction(&Instruction::I64Store(arg_arg));
+                    */
+                    func.instruction(&Instruction::I32Store(arg_arg));
                 }
                 // return ptr from malloc
                 func.instruction(&Instruction::LocalGet(dup_local_idx));
@@ -294,16 +418,16 @@ impl<'a> AnfWasmEmitter<'a> {
                 self.compile_atomic(func, right);
 
                 let instr = match (op, typ) {
-                    (Binop::Add, Type::TInt) => Instruction::I64Add,
-                    (Binop::Sub, Type::TInt) => Instruction::I64Sub,
-                    (Binop::Mul, Type::TInt) => Instruction::I64Mul,
-                    (Binop::Div, Type::TInt) => Instruction::I64DivS,
-                    (Binop::Eq, Type::TBool) => Instruction::I64Eq,
-                    (Binop::Lt, Type::TBool) => Instruction::I64LtS,
-                    (Binop::Lte, Type::TBool) => Instruction::I64LeS,
-                    (Binop::Gt, Type::TBool) => Instruction::I64GtS,
-                    (Binop::Gte, Type::TBool) => Instruction::I64GeS,
-                    (Binop::Neq, Type::TBool) => Instruction::I64Ne,
+                    (Binop::Add, Type::TInt) => Instruction::I32Add,
+                    (Binop::Sub, Type::TInt) => Instruction::I32Sub,
+                    (Binop::Mul, Type::TInt) => Instruction::I32Mul,
+                    (Binop::Div, Type::TInt) => Instruction::I32DivS,
+                    (Binop::Eq, Type::TBool) => Instruction::I32Eq,
+                    (Binop::Lt, Type::TBool) => Instruction::I32LtS,
+                    (Binop::Lte, Type::TBool) => Instruction::I32LeS,
+                    (Binop::Gt, Type::TBool) => Instruction::I32GtS,
+                    (Binop::Gte, Type::TBool) => Instruction::I32GeS,
+                    (Binop::Neq, Type::TBool) => Instruction::I32Ne,
                     _ => panic!("Unsupported primitive operation"),
                 };
 
@@ -372,7 +496,7 @@ impl<'a> AnfWasmEmitter<'a> {
 
     fn wasm_type(&self, ty: &Type) -> ValType {
         match ty {
-            Type::TInt => ValType::I64,
+            Type::TInt => ValType::I32,
             Type::TBool => ValType::I32,
             Type::TUnit => ValType::I32,
             Type::TFun(_, _) => ValType::I32,
