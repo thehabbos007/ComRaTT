@@ -93,7 +93,12 @@ impl<'a> AnfWasmEmitter<'a> {
 
         self.function_section.function(type_idx);
         self.func_map.insert(name.as_str(), func_idx);
-        self.func_args.insert(name.as_str(), args.as_slice());
+        self.func_args.insert(
+            name.as_str(),
+            args.iter()
+                .map(|(str, typ)| (str.as_str(), typ.clone()))
+                .collect_vec(),
+        );
 
         self.export_section.export(name, ExportKind::Func, func_idx);
 
@@ -118,16 +123,6 @@ impl<'a> AnfWasmEmitter<'a> {
 
         let mut func = Function::new_with_locals_types(params.iter().cloned());
 
-        // Closure pointer on stack
-        func.instruction(&Instruction::LocalGet(0));
-        // Load and push function index
-        let fun_index_load_arg = MemArg {
-            offset: FUNCTION_INDEX_OFFSET,
-            align: WASM_ALIGNMENT_SIZE,
-            memory_index: 0,
-        };
-        func.instruction(&Instruction::I32Load(fun_index_load_arg));
-
         // break table with target labels and default case
         // generate with a loop
         // default case is at index NUM_FUNCTIONS?
@@ -141,7 +136,16 @@ impl<'a> AnfWasmEmitter<'a> {
 
         let target_labels = (0..func_map_len).collect_vec();
 
-        // Iin the innermost block
+        // Load and push function index
+        let fun_index_load_arg = MemArg {
+            offset: FUNCTION_INDEX_OFFSET,
+            align: WASM_ALIGNMENT_SIZE,
+            memory_index: 0,
+        };
+        func.instruction(&Instruction::LocalGet(0));
+        func.instruction(&Instruction::I32Load(fun_index_load_arg));
+
+        // In the innermost block
         func.instruction(&Instruction::BrTable(
             Cow::from(target_labels),
             func_map_len,
@@ -151,7 +155,7 @@ impl<'a> AnfWasmEmitter<'a> {
         // Compile each break case. Order is important.
         for (name, idx) in self.func_map.iter().sorted_by(|a, b| a.1.cmp(b.1)) {
             // find args and put on stack
-            let func_args = self.func_args[name];
+            let func_args = &self.func_args[name];
             let mut arg = MemArg {
                 // beware we're subtracting by one here because the offset is not the end of the malloc block
                 // so if we end up getting jumbled values, look at this again.
@@ -357,8 +361,6 @@ impl<'a> AnfWasmEmitter<'a> {
 
                 let arity = app_args.len() as i32;
 
-                let num_populate_args = arity as usize - lam_args.len();
-
                 let closure_size_bytes = (1 + // Function pointer
                     1) * WASM_WORD_SIZE + // arity argument
                     (arity // Number of arguments in the top-level function
@@ -392,11 +394,13 @@ impl<'a> AnfWasmEmitter<'a> {
                     memory_index: 0,
                 };
                 func.instruction(&Instruction::LocalGet(dup_local_idx));
-                func.instruction(&Instruction::I32Const(arity));
+                // All bound variables in the lambda are the variables yet to be populated.
+                func.instruction(&Instruction::I32Const(lam_args.len() as i32));
                 func.instruction(&Instruction::I32Store(arity_arg));
 
-                // populate all known arguments TODO: free variables
-                for (idx, arg) in app_args.iter().take(num_populate_args).enumerate() {
+                // populate all known arguments
+                // We traverse the app args in reverse, skipping over bound variables
+                for (idx, arg) in app_args.iter().rev().enumerate().skip(lam_args.len()) {
                     let arg_offset = WASM_WORD_SIZE * (2 + idx as i32);
                     let arg_arg = MemArg {
                         offset: arg_offset as u64,
@@ -450,9 +454,20 @@ impl<'a> AnfWasmEmitter<'a> {
                     self.compile_atomic(func, arg);
                 }
                 match f {
+                    AExpr::Var(name, Type::TFun(..)) => {
+                        let Some(&local_idx) = self.locals_map.get(name.as_str()) else {
+                            panic!("Got non-local variable [{}] in closure call", name);
+                        };
+
+                        func.instruction(&Instruction::LocalGet(local_idx));
+                        func.instruction(&Instruction::I32Const(self.dispatch_offset as i32));
+                        func.instruction(&Instruction::ReturnCallIndirect {
+                            type_index: self.dispatch_offset,
+                            table_index: 0,
+                        });
+                    }
                     AExpr::Var(name, _) => {
                         if let Some(&local_idx) = self.locals_map.get(name.as_str()) {
-                            // we need to identify if this is a function pointer and not just a
                             func.instruction(&Instruction::LocalGet(local_idx));
                         } else if let Some(&func_idx) = self.func_map.get(name.as_str()) {
                             func.instruction(&Instruction::Call(func_idx));

@@ -1,9 +1,9 @@
 use anyhow::{Context, Result};
 use wasm_encoder::{
     reencode::{Reencode, RoundtripReencoder},
-    CodeSection, ElementSection, ExportSection, Function, FunctionSection, GlobalSection,
-    ImportSection, IndirectNameMap, Instruction, MemorySection, MemoryType, Module, NameMap,
-    NameSection, RefType, TableSection, TableType, TypeSection, ValType,
+    CodeSection, ElementSection, ExportKind, ExportSection, Function, FunctionSection,
+    GlobalSection, ImportSection, IndirectNameMap, Instruction, MemorySection, MemoryType, Module,
+    NameMap, NameSection, RefType, TableSection, TableType, TypeSection, ValType,
 };
 
 use std::collections::HashMap;
@@ -29,11 +29,12 @@ pub struct WasmEmitter<'a> {
 
     pub type_map: HashMap<&'a str, u32>,
     pub func_map: HashMap<&'a str, u32>,
-    pub func_args: HashMap<&'a str, &'a [(String, Type)]>,
+    pub func_args: HashMap<&'a str, Vec<(&'a str, Type)>>,
 
     pub locals_map: HashMap<&'a str, u32>,
 }
 
+// const MALLOC_ARGS: [(&str, Type); 1] = [("size", Type::TInt)];
 const MALLOC_FUN_IDX: u32 = 0;
 const MALLOC_BODY: &str = r#"
 (module
@@ -104,6 +105,8 @@ impl WasmEmitter<'_> {
             page_size_log2: None,
         });
 
+        self.export_section.export("heap", ExportKind::Memory, 0);
+
         self.gen_malloc().unwrap();
     }
 
@@ -140,7 +143,7 @@ impl WasmEmitter<'_> {
         self.parse_wasm_module(&bytes).context("add malloc")?;
 
         self.func_map.insert("malloc", MALLOC_FUN_IDX);
-        self.func_args.insert("malloc", &[]);
+        self.func_args.insert("malloc", vec![("size", Type::TInt)]);
         self.type_map.insert("malloc", 0);
 
         Ok(())
