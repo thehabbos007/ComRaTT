@@ -21,6 +21,7 @@ const WASM_ALIGNMENT_SIZE: u32 = 2;
 const LOCAL_DUP_I32_NAME: &str = "dupi32";
 const FUNCTION_INDEX_OFFSET: u64 = 0;
 const ARITY_OFFSET: u64 = WASM_WORD_SIZE as u64 * 1;
+const POPULATE_OFFSET: u64 = WASM_WORD_SIZE as u64 * 2;
 
 pub struct AnfWasmEmitter<'a> {
     wasm_emitter: WasmEmitter<'a>,
@@ -454,6 +455,50 @@ impl<'a> AnfWasmEmitter<'a> {
                     self.compile_atomic(func, arg);
                 }
                 match f {
+                    AExpr::Var(name, Type::TFun(_, box Type::TFun(..))) => {
+                        // Get the function index from the closure
+                        let Some(&local_idx) = self.locals_map.get(name.as_str()) else {
+                            panic!("Got non-local variable [{}] in closure call", name);
+                        };
+
+                        // Push the closure pointer onto the stack
+                        func.instruction(&Instruction::LocalGet(local_idx));
+
+                        // Read the arity from the closure pointer
+                        let arity_arg = MemArg {
+                            offset: ARITY_OFFSET,
+                            align: WASM_ALIGNMENT_SIZE,
+                            memory_index: 0,
+                        };
+
+                        let populate_arg = MemArg {
+                            offset: POPULATE_OFFSET,
+                            align: WASM_ALIGNMENT_SIZE,
+                            memory_index: 0,
+                        };
+
+                        // TODO do this in while looping on all arguments to the application
+
+                        // Store updated arity back in the closure
+                        func.instruction(&Instruction::LocalGet(local_idx));
+                        // Subtract 1 from the arity
+                        func.instruction(&Instruction::LocalGet(local_idx));
+                        func.instruction(&Instruction::I32Load(arity_arg));
+                        func.instruction(&Instruction::I32Const(1));
+                        func.instruction(&Instruction::I32Sub);
+                        func.instruction(&Instruction::I32Store(arity_arg));
+                        // remaining arity * word size + closure ptr gives us the index to write at (offset by 8 i.e. the first cell for arg)
+                        func.instruction(&Instruction::LocalGet(local_idx));
+                        func.instruction(&Instruction::I32Load(arity_arg));
+                        func.instruction(&Instruction::I32Const(4));
+                        func.instruction(&Instruction::I32Mul);
+                        func.instruction(&Instruction::LocalGet(local_idx));
+                        func.instruction(&Instruction::I32Add);
+                        // TODO: Load arg from local var
+                        func.instruction(&Instruction::I32Const(42)); /* PLACEHOLDER */
+                        // Store wants: first where then what
+                        func.instruction(&Instruction::I32Store(populate_arg));
+                    }
                     AExpr::Var(name, Type::TFun(..)) => {
                         let Some(&local_idx) = self.locals_map.get(name.as_str()) else {
                             panic!("Got non-local variable [{}] in closure call", name);
