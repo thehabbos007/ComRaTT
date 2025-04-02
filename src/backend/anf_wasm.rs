@@ -577,7 +577,12 @@ impl<'a> AnfWasmEmitter<'a> {
     }
 
     fn declare_table_entries(&mut self) {
-        let elements = self.func_map.values().copied().collect_vec();
+        let elements = self
+            .func_map
+            .values()
+            .sorted_by(|a, b| a.cmp(b))
+            .copied()
+            .collect_vec();
         self.element_section.active(
             Some(0),
             &ConstExpr::i32_const(0),
