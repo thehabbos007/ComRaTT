@@ -451,8 +451,15 @@ impl<'a> AnfWasmEmitter<'a> {
             }
 
             CExpr::App(f, args, _) => {
-                for arg in args {
-                    self.compile_atomic(func, arg);
+                match f {
+                    AExpr::Var(_, Type::TFun(..)) => (),
+                    _ => {
+                        // We don't want this behaviour
+                        // when dispatching a closure.
+                        for arg in args {
+                            self.compile_atomic(func, arg);
+                        }
+                    }
                 }
                 match f {
                     AExpr::Var(name, Type::TFun(_, box Type::TFun(..))) => {
@@ -505,6 +512,20 @@ impl<'a> AnfWasmEmitter<'a> {
                         };
 
                         func.instruction(&Instruction::LocalGet(local_idx));
+                        // In the cases where we call dispatch with a closure pointer,
+                        // we want the stack to look like the following before return_call_indirect
+                        // - Pointer to closure
+                        // - Last argument for closure application
+                        // - Table index for dispatch function
+                        // Hence the different handling of arguments in this match case.
+                        // Invariant: when calling a closure, only 1 argument is missing and
+                        // thus only 1 argument exists.
+                        // Is this too strict?
+                        assert!(args.len() == 1);
+                        let arg = args
+                            .first()
+                            .expect("Attempted to dispatch a closure with multiple arguments");
+                        self.compile_atomic(func, arg);
                         func.instruction(&Instruction::I32Const(self.dispatch_offset as i32));
                         func.instruction(&Instruction::ReturnCallIndirect {
                             type_index: self.dispatch_offset,
