@@ -468,9 +468,6 @@ impl<'a> AnfWasmEmitter<'a> {
                             panic!("Got non-local variable [{}] in closure call", name);
                         };
 
-                        // Push the closure pointer onto the stack
-                        func.instruction(&Instruction::LocalGet(local_idx));
-
                         // Read the arity from the closure pointer
                         let arity_arg = MemArg {
                             offset: ARITY_OFFSET,
@@ -484,27 +481,29 @@ impl<'a> AnfWasmEmitter<'a> {
                             memory_index: 0,
                         };
 
-                        // TODO do this in while looping on all arguments to the application
+                        for arg in args {
+                            // Push the closure pointer onto the stack
+                            func.instruction(&Instruction::LocalGet(local_idx));
+                            // Subtract 1 from the arity
+                            func.instruction(&Instruction::LocalGet(local_idx));
+                            func.instruction(&Instruction::I32Load(arity_arg));
+                            func.instruction(&Instruction::I32Const(1));
+                            func.instruction(&Instruction::I32Sub);
+                            // Store updated arity back in the closure
+                            func.instruction(&Instruction::I32Store(arity_arg));
 
-                        // Store updated arity back in the closure
-                        func.instruction(&Instruction::LocalGet(local_idx));
-                        // Subtract 1 from the arity
-                        func.instruction(&Instruction::LocalGet(local_idx));
-                        func.instruction(&Instruction::I32Load(arity_arg));
-                        func.instruction(&Instruction::I32Const(1));
-                        func.instruction(&Instruction::I32Sub);
-                        func.instruction(&Instruction::I32Store(arity_arg));
-                        // remaining arity * word size + closure ptr gives us the index to write at (offset by 8 i.e. the first cell for arg)
-                        func.instruction(&Instruction::LocalGet(local_idx));
-                        func.instruction(&Instruction::I32Load(arity_arg));
-                        func.instruction(&Instruction::I32Const(4));
-                        func.instruction(&Instruction::I32Mul);
-                        func.instruction(&Instruction::LocalGet(local_idx));
-                        func.instruction(&Instruction::I32Add);
-                        // TODO: Load arg from local var
-                        func.instruction(&Instruction::I32Const(42)); /* PLACEHOLDER */
-                        // Store wants: first where then what
-                        func.instruction(&Instruction::I32Store(populate_arg));
+                            // remaining arity * word size + closure ptr gives us the index to write at (offset by 8 i.e. the first cell for arg)
+                            func.instruction(&Instruction::LocalGet(local_idx));
+                            func.instruction(&Instruction::I32Load(arity_arg));
+                            func.instruction(&Instruction::I32Const(4));
+                            func.instruction(&Instruction::I32Mul);
+                            func.instruction(&Instruction::LocalGet(local_idx));
+                            func.instruction(&Instruction::I32Add);
+                            // Compile the argument to be stored
+                            let _ = self.compile_atomic(func, arg);
+                            // Store wants: first where then what
+                            func.instruction(&Instruction::I32Store(populate_arg));
+                        }
                     }
                     AExpr::Var(name, Type::TFun(..)) => {
                         let Some(&local_idx) = self.locals_map.get(name.as_str()) else {
