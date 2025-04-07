@@ -8,7 +8,8 @@ def first x =
 second : int -> () -> int
 def second x =
 	// this fails type checking if trying to subtract from x instead of adding...
-	let del_second = delay {apple} (x+2) in
+	// subtraction requires whitespace between operands..
+	let del_second = delay {apple} (x - 2) in
 	delay {apple} (advance del_second);
 
 print <- first 42;
