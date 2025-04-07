@@ -61,9 +61,7 @@ impl PartialElimination {
 
     pub fn eliminate_partial(&mut self, aexpr: TypedExpr) -> TypedExpr {
         match aexpr {
-            TypedExpr::TConst(_, _) => aexpr,
-            TypedExpr::TName(_, Type::TFun(_, _)) => aexpr,
-            TypedExpr::TName(_, _) => aexpr,
+            TypedExpr::TConst(_, _) | TypedExpr::TName(_, _) | TypedExpr::TWait(_, _) => aexpr,
             TypedExpr::TPrim(op, left, right, typ) => TypedExpr::TPrim(
                 op,
                 Box::new(self.eliminate_partial(*left)),

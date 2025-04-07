@@ -141,6 +141,9 @@ pub enum TokenKind {
     #[token("advance")]
     Advance,
 
+    #[token("wait")]
+    Wait,
+
     #[token("if")]
     If,
 
