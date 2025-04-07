@@ -126,6 +126,8 @@ fn atomic_expr(input: &mut Input<'_>) -> ModalResult<Expr> {
             .map(|(c, e)| Expr::Delay(e.b(), HashSet::from_iter(c))),
         preceded(TokenKind::Advance, cut_err(TokenKind::Ident))
             .map(|t| Expr::Advance(t.text().to_string())),
+        preceded(TokenKind::Wait, cut_err(TokenKind::Ident))
+            .map(|t| Expr::Wait(t.text().to_string())),
         simple_expr,
         fail.context(StrContext::Label("atomic expression"))
             .context(StrContext::Expected(StrContextValue::StringLiteral(
@@ -303,14 +305,16 @@ fn fundef(input: &mut Input<'_>) -> ModalResult<Toplevel> {
 
 fn chan(input: &mut Input<'_>) -> ModalResult<Toplevel> {
     terminated(
-        (
-            preceded(TokenKind::Chan, cut_err(TokenKind::Ident)).context(StrContext::Expected(
-                StrContextValue::Description("binding name"),
-            )),
-        ),
+        (preceded(
+            TokenKind::Chan,
+            cut_err((TokenKind::Ident, TokenKind::Colon, typ)),
+        )
+        .context(StrContext::Expected(StrContextValue::Description(
+            "binding name",
+        ))),),
         TokenKind::Semi,
     )
-    .map(|(name,)| Toplevel::Channel(name.text().to_string()))
+    .map(|((name, _, typ),)| Toplevel::Channel(name.text().to_string(), typ))
     .parse_next(input)
 }
 
@@ -587,12 +591,12 @@ mod tests {
 
     #[test]
     fn test_chan_def() {
-        let input = "chan boo;";
+        let input = "chan boo : int;";
         let tokens = tokenize(input);
         let mut token_slice = TokenSlice::new(&tokens);
         assert_eq!(
             chan.parse_next(&mut token_slice).unwrap(),
-            Toplevel::Channel("boo".to_owned())
+            Toplevel::Channel("boo".to_owned(), Type::TInt)
         );
     }
 

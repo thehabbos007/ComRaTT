@@ -1,6 +1,17 @@
-chan apple;
+chan keyboard : int;
 
-main : int -> () -> int
-def main x =
-    let del = delay {apple} x in
-    delay {apple} (advance del);
+// equivalent of existential Sig Int
+keeb_loop : () -> int
+def keeb_loop _ =
+    delay {keyboard} (advance (wait keyboard))
+      ;
+
+print <- keeb_loop;
+
+// runtime will apply unit arg through a "dispatch".
+// first call will do allocation and return a ptr to closure.
+//
+// then through bookkeeping it will wait for a keyboard event
+// and when that happens, lookup this closure.
+//
+// executing the closure will produce a Sig int: (int, () -> Sig int)
