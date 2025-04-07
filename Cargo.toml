@@ -21,6 +21,8 @@ wasmprinter = "0.225.0"
 wat = "1.225.0"
 ena = "0.14.3"
 wasmtime = "30"
+pest = "2.6"
+pest_derive = "2.6"
 
 [dev-dependencies]
 wasmtime-wast = "30"
