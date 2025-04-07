@@ -662,9 +662,7 @@ impl Inference {
                 Toplevel::Channel(name) => {
                     typed_toplevels.push(TypedToplevel::Channel(name.to_owned()))
                 }
-                Toplevel::Output(_, _) => {
-                    unimplemented!()
-                }
+                Toplevel::Output(name, expr) => {}
                 _ => panic!("Error: FunDefs must be functions with at least 1 argument"),
             }
         }
@@ -708,8 +706,29 @@ impl Inference {
                         );
                     }
                 }
-                Toplevel::Channel(name) => {}
-                Toplevel::Output(name, expr) => {}
+                Toplevel::Channel(name) => {
+                    // Channels are handled in the pre-processing loop above.
+                }
+                Toplevel::Output(name, expr) => {
+                    // type expr
+                    let mut context = context.clone();
+                    let (expr_type, mut output) = self.infer(context, expr);
+                    // push tfun () -> int constraint, because we want a closure
+                    // from unit to ptr
+                    let expected_type = Type::TFun(Type::TUnit.b(), Type::TInt.b());
+                    output
+                        .constraints
+                        .push(Constraint::TypeEqual(expr_type.clone(), expected_type));
+
+                    if self.unification(&output.constraints).is_ok() {
+                        let (mut unbound, ty) = self.substitute(expr_type);
+                        let (_, typed_expr) = self.substitute_texp(output.texp);
+                        // unbound.extend(unbound_body);
+
+                        // create typedtoplevel::output
+                        typed_toplevels.push(TypedToplevel::Output(name, typed_expr.b()));
+                    }
+                }
                 _ => panic!("Error: FunDefs must be functions with at least 1 argument"),
             }
         }
