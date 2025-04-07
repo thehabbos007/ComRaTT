@@ -1,0 +1,75 @@
+program = _{ SOI ~ toplevel* ~ EOI }
+
+toplevel = _{
+    (function_def | channel_def | output_def) ~ ";"
+}
+
+function_args = { identifier* }
+
+function_def = {
+    identifier ~ ":" ~ type_expr ~ "def" ~ identifier ~ function_args ~ "=" ~ expr
+}
+channel_def  = { "chan" ~ identifier ~ ":" ~ type_expr }
+output_def   = { identifier ~ "<-" ~ expr }
+
+// Types
+type_expr   =  { atomic_type ~ (type_op ~ atomic_type)* }
+atomic_type = _{ int_type | bool_type | unit_type | "(" ~ type_expr ~ ")" }
+int_type    =  { "int" }
+bool_type   =  { "bool" }
+unit_type   =  { "()" }
+type_op     = _{ arrow }
+arrow       =  { "->" }
+
+expr = { primary ~ (infix ~ primary)* }
+
+channel_set = { "{" ~ identifier+ ~ "}" }
+
+let_expr     = { "let" ~ identifier ~ "=" ~ expr ~ "in" ~ expr }
+fun_expr     = { "fun" ~ identifier* ~ "->" ~ expr }
+if_expr      = { "if" ~ expr ~ "then" ~ expr ~ "else" ~ expr }
+delay_expr   = { "delay" ~ channel_set ~ expr }
+advance_expr = { "advance" ~ identifier }
+wait_expr    = { "wait" ~ identifier }
+app_expr     = { expr ~ expr }
+
+primary = _{
+    let_expr
+  | fun_expr
+  | if_expr
+  | delay_expr
+  | advance_expr
+  | wait_expr // | app_expr
+
+  | "(" ~ expr ~ ")"
+  | integer
+  | true_lit
+  | false_lit
+  | unit_lit
+  | identifier
+}
+
+infix = _{
+    equality_op
+  | relational_op
+  | add_op
+  | mul_op
+}
+
+equality_op   = { "==" | "<>" }
+relational_op = { "<" | "<=" | ">" | ">=" }
+add_op        = { "+" | "-" }
+mul_op        = { "*" | "/" }
+
+// Terminals
+identifier = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+integer    = @{ "-"? ~ ("0" | ASCII_NONZERO_DIGIT ~ ASCII_DIGIT*) }
+true_lit   =  { "true" }
+false_lit  =  { "false" }
+unit_lit   =  { "()" }
+
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
+COMMENT    = _{
+    "/*" ~ (!"*/" ~ ANY)* ~ "*/"
+  | "//" ~ (!("\n") ~ ANY)*
+}

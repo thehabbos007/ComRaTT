@@ -10,9 +10,10 @@ pub mod infer;
 pub mod lexer;
 pub mod parse;
 pub mod passes;
+pub mod pest_parse;
 pub mod range;
+pub mod runtime;
 pub mod source;
 #[cfg(test)]
 mod test_suite;
 pub mod types;
-pub mod runtime;

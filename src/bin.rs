@@ -52,14 +52,21 @@ fn main() -> Result<(), lexopt::Error> {
     }
 
     let input = args.read();
-
-    let prog = match Prog::parse(&input) {
+    let prog = match Prog::parse_pest(&input) {
         Ok(prog) => prog,
         Err(err) => {
             eprintln!("{}", err);
             return Ok(());
         }
     };
+
+    // let prog = match Prog::parse(&input) {
+    //     Ok(prog) => prog,
+    //     Err(err) => {
+    //         eprintln!("{}", err);
+    //         return Ok(());
+    //     }
+    // };
     let prog = infer_all(prog);
     let wasm_bytes;
 

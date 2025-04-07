@@ -3,8 +3,8 @@ chan keyboard : int;
 // equivalent of existential Sig Int
 keeb_loop : () -> int
 def keeb_loop _ =
-    delay {keyboard} (advance (wait keyboard))
-      ;
+    let banan = wait keyboard in
+    delay {keyboarda (advance banan);
 
 print <- keeb_loop;
 
