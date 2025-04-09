@@ -105,7 +105,9 @@ impl WasmEmitter<'_> {
             page_size_log2: None,
         });
 
+        // Table export is really only needed for debugging
         self.export_section.export("heap", ExportKind::Memory, 0);
+        self.export_section.export("table", ExportKind::Table, 0);
 
         self.gen_malloc().unwrap();
     }
