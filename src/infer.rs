@@ -57,16 +57,10 @@ impl Context {
                 key
             ),
             Context::Tick(bindings, tick_clock, _) => {
-                if let Some((ty, clock_opt)) = bindings.get(key) {
-                    if let Some(clock) = clock_opt {
-                        if tick_clock.is_subset(clock) {
-                            return ty.clone();
-                        }
-                        panic!("Tried to advance name {} with clock not part of tick", key);
-                    }
-                    panic!("Tried to advance name {} without clock", key);
-                }
-                panic!("Tried to advance nonexisting name {}", key);
+                let Some((ty, _)) = bindings.get(key) else {
+                    panic!("Tried to advance nonexisting name {}", key);
+                };
+                ty.clone()
             }
         }
     }
@@ -237,10 +231,13 @@ impl Inference {
                 )
             }
             // advance must look only in the left bindings i.e. before the tick (going back in time)
-            // also the clock related to the name being advanced must be correct wrt. the delayed computation.
-            // this is handled by attempt_advance
             // TODO: this currently only checks that name is a delayed computation
             // by checking if it is a thunk.
+            // The name we advance needs to be of type "later" (we will check this when that is introduced).
+            // When we introduce a "cl()" (clock of) construct, we will need to check statically
+            // that delay is done with regard to the clock of whatever is being advanced.
+            // The input channels of this clock can change at runtime, but at comptime we need
+            // to do some checking.
             Expr::Advance(name) => match context.attempt_advance(&name) {
                 Type::TFun(box Type::TUnit, ty) => {
                     let fun_type = Type::TFun(Type::TUnit.b(), ty.clone().b());
@@ -1062,30 +1059,8 @@ mod tests {
         inference.infer(HashMap::new().into(), expr);
     }
 
-    // This should pass because the tick is on keyboard, which is part of the clock
-    // for the name being advanced
     #[test]
-    fn infer_advance_name_bound_and_valid_tick_subset() {
-        let expr = Expr::Advance("x".to_owned());
-        let fun_type = Type::TFun(Type::TUnit.b(), Type::TInt.b());
-        let binding = (
-            fun_type,
-            Some(HashSet::from(["keyboard".to_owned(), "mouse".to_owned()])),
-        );
-        let mut context = Context::Tick(
-            HashMap::from([("x".to_owned(), binding)]),
-            HashSet::from(["keyboard".to_owned()]),
-            HashMap::new(),
-        );
-
-        let mut inference = Inference {
-            unification_table: InPlaceUnificationTable::default(),
-        };
-        let (ty, output) = inference.infer(context, expr);
-    }
-
-    #[test]
-    fn infer_advance_name_bound_and_valid_tick() {
+    fn infer_advance_name_bound_and_tick_in_context() {
         let expr = Expr::Advance("x".to_owned());
         let fun_type = Type::TFun(Type::TUnit.b(), Type::TInt.b());
         let binding = (fun_type, Some(HashSet::from(["keyboard".to_owned()])));
@@ -1101,23 +1076,6 @@ mod tests {
         let (ty, output) = inference.infer(context, expr);
     }
 
-    #[test]
-    #[should_panic]
-    fn infer_advance_name_bound_and_invalid_tick() {
-        let expr = Expr::Advance("x".to_owned());
-        let fun_type = Type::TFun(Type::TUnit.b(), Type::TInt.b());
-        let binding = (fun_type, Some(HashSet::from(["mouse".to_owned()])));
-        let mut context = Context::Tick(
-            HashMap::new(),
-            HashSet::from(["keyboard".to_owned()]),
-            HashMap::new(),
-        );
-
-        let mut inference = Inference {
-            unification_table: InPlaceUnificationTable::default(),
-        };
-        let _ = inference.infer(context, expr);
-    }
 
     #[test]
     #[should_panic]
