@@ -100,8 +100,18 @@ impl WasmEmitter<'_> {
             page_size_log2: None,
         });
 
+        self.memory_section.memory(MemoryType {
+            minimum: 1,
+            maximum: None,
+            memory64: false,
+            shared: false,
+            page_size_log2: None,
+        });
+
         // Table export is really only needed for debugging
         self.export_section.export("heap", ExportKind::Memory, 0);
+        self.export_section
+            .export("location", ExportKind::Memory, 1);
         self.export_section.export("table", ExportKind::Table, 0);
 
         self.gen_malloc().unwrap();
