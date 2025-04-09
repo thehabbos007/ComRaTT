@@ -1,9 +1,4 @@
-use std::{collections::HashMap, iter};
-
-use crate::{
-    source::Type,
-    types::{build_function_type, unpack_type, TypedExpr, TypedProg, TypedToplevel},
-};
+use crate::types::{TypedExpr, TypedProg, TypedToplevel};
 use itertools::Itertools;
 use map_box::Map;
 

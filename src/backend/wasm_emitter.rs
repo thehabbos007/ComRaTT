@@ -3,7 +3,7 @@ use wasm_encoder::{
     reencode::{Reencode, RoundtripReencoder},
     CodeSection, ElementSection, ExportKind, ExportSection, Function, FunctionSection,
     GlobalSection, ImportSection, IndirectNameMap, Instruction, MemorySection, MemoryType, Module,
-    NameMap, NameSection, RefType, TableSection, TableType, TypeSection, ValType,
+    NameMap, NameSection, RefType, TableSection, TableType, TypeSection,
 };
 
 use std::collections::HashMap;
@@ -58,11 +58,6 @@ const MALLOC_BODY: &str = r#"
         (local.get $old)
     )
 )
-"#;
-
-// Apply arguments to a closure
-// After doing this, make sure to check if arity is 0 and call in that case
-const POPULATE_CLOSURE: &str = r#"
 "#;
 
 impl Default for WasmEmitter<'_> {

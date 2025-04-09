@@ -4,7 +4,7 @@ use wasm_encoder::{
 
 use itertools::Itertools;
 use std::borrow::Cow;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::BTreeSet;
 use std::iter;
 use std::ops::{Deref, DerefMut};
 
