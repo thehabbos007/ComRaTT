@@ -107,6 +107,18 @@ fn parse_type_atom(pair: Pair<Rule>) -> Type {
         Rule::bool_type => Type::TBool,
         Rule::unit_type => Type::TUnit,
         Rule::type_expr => parse_type(pair.into_inner()),
+        Rule::parenthesis_or_tuple_type => {
+            let mut typs = pair
+                .into_inner()
+                .map(|typ| parse_type(typ.into_inner()))
+                .collect_vec();
+
+            if typs.len() == 1 {
+                return typs.remove(0);
+            }
+
+            Type::TProduct(typs)
+        }
         _ => unreachable!("Unknown atomic type: {:?}", pair.as_rule()),
     }
 }
@@ -184,6 +196,18 @@ fn parse_expression_atom(pair: Pair<Rule>) -> Expr {
         Rule::wait_expr => {
             let channel = pair.into_inner().next().unwrap().as_str().to_string();
             Expr::Wait(channel)
+        }
+        Rule::parenthesis_or_tuple => {
+            let mut exprs = pair
+                .into_inner()
+                .map(|expr| parse_expression(expr.into_inner()))
+                .collect_vec();
+
+            if exprs.len() == 1 {
+                return exprs.remove(0);
+            }
+
+            Expr::Tuple(exprs)
         }
         Rule::integer => Expr::Const(Const::CInt(pair.as_str().parse().unwrap())),
         Rule::true_lit => Expr::Const(Const::CBool(true)),
