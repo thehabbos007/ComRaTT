@@ -113,7 +113,7 @@ impl LambdaLift {
         match expr {
             TypedExpr::TConst(_, _) => (expr, vec![]),
             TypedExpr::TName(_, _) => (expr, vec![]),
-
+            TypedExpr::TWait(_, _) => (expr, vec![]),
             TypedExpr::TPrim(op, left, right, typ) => {
                 let (left_expr, mut left_defs) = self.lift_lambdas(*left, bound.clone());
                 let (right_expr, right_defs) = self.lift_lambdas(*right, bound);
@@ -123,7 +123,6 @@ impl LambdaLift {
                     left_defs,
                 )
             }
-
             TypedExpr::TLam(args, body, typ) => {
                 let args: HashSet<_> = args.iter().cloned().collect();
                 let free_vars = find_free_vars(&body, &args)
@@ -175,7 +174,6 @@ impl LambdaLift {
                     )
                 }
             }
-
             TypedExpr::TApp(fn_expr, args, typ) => {
                 let (lifted_fn, mut fn_defs) = self.lift_lambdas(*fn_expr, bound.clone());
                 let mut all_defs = vec![];
@@ -193,7 +191,6 @@ impl LambdaLift {
                     fn_defs,
                 )
             }
-
             TypedExpr::TLet(name, typ, rhs, box mut body) => {
                 let (lifted_rhs, mut rhs_defs) = self.lift_lambdas(*rhs, bound.clone());
                 let mut bound = bound;
@@ -211,7 +208,6 @@ impl LambdaLift {
                     rhs_defs,
                 )
             }
-
             TypedExpr::TIfThenElse(condition, then_branch, else_branch, typ) => {
                 let (lifted_cond, mut cond_defs) = self.lift_lambdas(*condition, bound.clone());
                 let (lifted_then, then_defs) = self.lift_lambdas(*then_branch, bound.clone());
@@ -230,7 +226,6 @@ impl LambdaLift {
                     cond_defs,
                 )
             }
-
             TypedExpr::TTuple(exprs, typ) => {
                 let mut all_defs = vec![];
                 let mut lifted_exprs = vec![];
@@ -243,7 +238,6 @@ impl LambdaLift {
 
                 (TypedExpr::TTuple(lifted_exprs, typ), all_defs)
             }
-
             TypedExpr::TAccess(expr, idx, typ) => {
                 let (lifted_expr, defs) = self.lift_lambdas(*expr, bound);
                 (TypedExpr::TAccess(Box::new(lifted_expr), idx, typ), defs)

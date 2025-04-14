@@ -166,9 +166,6 @@ impl EliminateConsecApp {
                 ),
                 TraverseOutcome::None,
             ),
-
-            TypedExpr::TConst(_, _) => expr.none_traversal(),
-            TypedExpr::TName(_, _) => expr.none_traversal(),
             TypedExpr::TPrim(op, left, right, typ) => TypedExpr::TPrim(
                 op,
                 Box::new(
@@ -248,6 +245,9 @@ impl EliminateConsecApp {
                 typ,
             )
             .none_traversal(),
+            TypedExpr::TConst(_, _) | TypedExpr::TName(_, _) | TypedExpr::TWait(_, _) => {
+                expr.none_traversal()
+            }
         }
     }
 }

@@ -9,10 +9,8 @@ path = "src/bin.rs"
 
 [dependencies]
 anyhow = "1"
-winnow = "0.7"
 annotate-snippets = "0.11"
 lexopt = "0.3"
-logos = "0.15.0"
 map_box = "0.2.2"
 itertools = "0.14.0"
 wasm-encoder = { version = "0.225.0", features = ["wasmparser"] }
@@ -21,6 +19,9 @@ wasmprinter = "0.225.0"
 wat = "1.225.0"
 ena = "0.14.3"
 wasmtime = "30"
+pest = { version = "2.6", features = ["miette-error"] }
+miette = "7.5"
+pest_derive = "2.6"
 
 [dev-dependencies]
 wasmtime-wast = "30"

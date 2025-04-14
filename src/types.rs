@@ -24,6 +24,8 @@ pub enum TypedExpr {
     TTuple(Vec<TypedExpr>, Type),
     /// A tuple access with (tuple expression, index, result type)
     TAccess(Box<TypedExpr>, i32, Type),
+    /// Wait on a channel
+    TWait(String, Type),
 }
 
 impl TypedExpr {
@@ -42,6 +44,7 @@ impl TypedExpr {
             TypedExpr::TIfThenElse(_, _, _, ty) => ty.clone(),
             TypedExpr::TTuple(_, ty) => ty.clone(),
             TypedExpr::TAccess(_, _, ty) => ty.clone(),
+            TypedExpr::TWait(_, ty) => ty.clone(),
         }
     }
 }
@@ -50,7 +53,7 @@ impl TypedExpr {
 pub enum TypedToplevel {
     /// A function definition with (name, args and their types, body expression, return type)
     TFunDef(Sym, Vec<(Sym, Type)>, Box<TypedExpr>, Type),
-    Channel(String),
+    Channel(String, Type),
     Output(String, Box<TypedExpr>),
 }
 
@@ -58,7 +61,7 @@ impl TypedToplevel {
     pub fn get_type(&self) -> Type {
         match self {
             TypedToplevel::TFunDef(_, _, _, typ) => typ.clone(),
-            TypedToplevel::Channel(_) => panic!("Channel do not have types"),
+            TypedToplevel::Channel(_, typ) => typ.clone(),
             TypedToplevel::Output(_, typed_expr) => typed_expr.ty(),
         }
     }
@@ -176,7 +179,10 @@ pub fn traverse_locals<'a>(expr: &'a TypedExpr, locals: &mut Vec<(&'a str, Type)
         TypedExpr::TAccess(expr, _, _) => {
             traverse_locals(expr, locals);
         }
-        TypedExpr::TConst(_, _) | TypedExpr::TName(_, _) | TypedExpr::TApp(_, _, _) => {}
+        TypedExpr::TConst(_, _)
+        | TypedExpr::TName(_, _)
+        | TypedExpr::TApp(_, _, _)
+        | TypedExpr::TWait(_, _) => {}
     }
 }
 
@@ -242,6 +248,7 @@ pub fn find_free_vars(
             free
         }
         TypedExpr::TAccess(expr, _, _) => find_free_vars(expr, bound),
+        TypedExpr::TWait(_, _) => HashSet::new(),
     }
 }
 
@@ -300,6 +307,7 @@ pub fn substitute_binding(bind_old: &str, bind_new: &str, expr: TypedExpr) -> Ty
         ),
         TypedExpr::TName(_, _) => expr,
         TypedExpr::TConst(_, _) => expr,
+        TypedExpr::TWait(_, _) => expr,
     }
 }
 
