@@ -1,2 +1,5 @@
-main : (int) -> (bool * int)
-def main x = (true, 2);
+main : (int) -> int
+def main x =
+    let tup = ((3, x), false)
+    in tup.0.1
+    ;

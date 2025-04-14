@@ -1,4 +1,4 @@
-use std::{collections::HashSet, sync::LazyLock};
+use std::{assert_matches::assert_matches, collections::HashSet, sync::LazyLock};
 
 use itertools::Itertools;
 use pest::{
@@ -214,18 +214,30 @@ fn parse_expression_atom(pair: Pair<Rule>) -> Expr {
         Rule::false_lit => Expr::Const(Const::CBool(false)),
         Rule::unit_lit => Expr::Const(Const::CUnit),
         Rule::identifier => Expr::Var(pair.as_str().to_string()),
-        Rule::term => {
-            let mut app_expr = pair.into_inner();
-            let mut exp = parse_expression_atom(app_expr.next().unwrap());
-
-            for exp_arg in app_expr {
-                let arg = parse_expression_atom(exp_arg);
-                exp = Expr::App(Box::new(exp), Box::new(arg));
-            }
-
-            exp
-        }
+        Rule::term => pair
+            .into_inner()
+            .map(|e| parse_term(e))
+            .reduce(|e1, e2| Expr::App(e1.b(), e2.b()))
+            .expect("At least one term"),
         Rule::expr => parse_expression(pair.into_inner()),
         _ => unreachable!("Unknown expression type: {:?}", pair.as_rule()),
     }
+}
+
+fn parse_term(pair: Pair<Rule>) -> Expr {
+    assert_matches!(pair.as_rule(), Rule::tuple_access);
+
+    let mut pairs = pair.into_inner();
+    let mut expr = parse_expression_atom(pairs.next().unwrap());
+
+    while let Some(tuple_access_index) = pairs.next()
+        && tuple_access_index.as_rule() == Rule::integer
+    {
+        let index = tuple_access_index
+            .as_str()
+            .parse::<i32>()
+            .expect("tuple access index to be an integer");
+        expr = Expr::Access(Box::new(expr), index);
+    }
+    expr
 }

@@ -25,8 +25,9 @@ parenthesis_or_tuple_type = {
     "(" ~ type_expr ~ ("*" ~ type_expr)* ~ ")"
 }
 
-term = { primary ~ (primary*) }
-expr = { (term ~ (infix ~ term)*) }
+tuple_access = { primary ~ ("." ~ integer)* }
+term         = { tuple_access+ }
+expr         = { (term ~ (infix ~ term)*) }
 
 channel_set = { "{" ~ identifier+ ~ "}" }
 

@@ -60,13 +60,8 @@ fn main() -> Result<(), lexopt::Error> {
         }
     };
 
-    // let prog = match Prog::parse(&input) {
-    //     Ok(prog) => prog,
-    //     Err(err) => {
-    //         eprintln!("{}", err);
-    //         return Ok(());
-    //     }
-    // };
+    eprintln!("{}", prog);
+
     let prog = infer_all(prog);
     let wasm_bytes;
 
