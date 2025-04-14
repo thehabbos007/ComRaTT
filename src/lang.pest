@@ -21,17 +21,17 @@ unit_type   =  { "()" }
 type_op     = _{ arrow }
 arrow       =  { "->" }
 
-expr = { primary ~ (infix ~ primary)* }
+term = { primary ~ (primary*) }
+expr = { (term ~ (infix ~ term)*) }
 
 channel_set = { "{" ~ identifier+ ~ "}" }
 
 let_expr     = { "let" ~ identifier ~ "=" ~ expr ~ "in" ~ expr }
-fun_expr     = { "fun" ~ identifier* ~ "->" ~ expr }
+fun_expr     = { "fun" ~ function_args ~ "->" ~ expr }
 if_expr      = { "if" ~ expr ~ "then" ~ expr ~ "else" ~ expr }
 delay_expr   = { "delay" ~ channel_set ~ expr }
 advance_expr = { "advance" ~ identifier }
 wait_expr    = { "wait" ~ identifier }
-app_expr     = { expr ~ expr }
 
 primary = _{
     let_expr
@@ -39,14 +39,13 @@ primary = _{
   | if_expr
   | delay_expr
   | advance_expr
-  | wait_expr // | app_expr
-
+  | wait_expr
   | "(" ~ expr ~ ")"
   | integer
   | true_lit
   | false_lit
   | unit_lit
-  | identifier
+  | !keyword ~ identifier
 }
 
 infix = _{
@@ -56,8 +55,8 @@ infix = _{
   | mul_op
 }
 
-equality_op   = { "==" | "<>" }
-relational_op = { "<" | "<=" | ">" | ">=" }
+equality_op   = { "=" | "<>" }
+relational_op = { "<=" | ">=" | "<" | ">" }
 add_op        = { "+" | "-" }
 mul_op        = { "*" | "/" }
 
@@ -67,6 +66,22 @@ integer    = @{ "-"? ~ ("0" | ASCII_NONZERO_DIGIT ~ ASCII_DIGIT*) }
 true_lit   =  { "true" }
 false_lit  =  { "false" }
 unit_lit   =  { "()" }
+
+keyword = _{
+    "def"
+  | "let"
+  | "in"
+  | "if"
+  | "then"
+  | "else"
+  | "fun"
+  | "chan"
+  | "delay"
+  | "advance"
+  | "wait"
+  | "true"
+  | "false"
+}
 
 WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
 COMMENT    = _{
