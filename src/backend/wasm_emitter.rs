@@ -32,6 +32,7 @@ pub struct WasmEmitter<'a> {
     pub func_args: HashMap<&'a str, Vec<(&'a str, Type)>>,
 
     pub locals_map: HashMap<&'a str, u32>,
+    parsed_modules: u32,
 }
 
 // const MALLOC_ARGS: [(&str, Type); 1] = [("size", Type::TInt)];
@@ -88,6 +89,8 @@ impl WasmEmitter<'_> {
             func_args: HashMap::new(),
 
             locals_map: HashMap::new(),
+
+            parsed_modules: 0,
         }
     }
 
@@ -189,6 +192,7 @@ impl WasmEmitter<'_> {
                                 Name::Function(funcs) => {
                                     funcs.into_iter().map(|x| x.unwrap()).for_each(
                                         |Naming { index, name }| {
+                                            let index = index + self.parsed_modules;
                                             self.function_name_map.append(index, name);
                                         },
                                     );
@@ -197,6 +201,7 @@ impl WasmEmitter<'_> {
                                     locals.into_iter().map(|x| x.unwrap()).for_each(
                                         |IndirectNaming { index, names }| {
                                             let mut name_map = NameMap::new();
+                                            let index = index + self.parsed_modules;
                                             names.into_iter().map(|x| x.unwrap()).for_each(
                                                 |Naming { index, name }| {
                                                     name_map.append(index, name);
@@ -209,6 +214,7 @@ impl WasmEmitter<'_> {
                                 Name::Type(types) => {
                                     types.into_iter().map(|x| x.unwrap()).for_each(
                                         |Naming { index, name }| {
+                                            let index = index + self.parsed_modules;
                                             self.type_name_map.append(index, name);
                                         },
                                     );
@@ -221,6 +227,8 @@ impl WasmEmitter<'_> {
                 _ => {}
             };
         }
+
+        self.parsed_modules += 1;
 
         Ok(())
     }
