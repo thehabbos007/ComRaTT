@@ -14,12 +14,16 @@ output_def   = { identifier ~ "<-" ~ expr }
 
 // Types
 type_expr   =  { atomic_type ~ (type_op ~ atomic_type)* }
-atomic_type = _{ int_type | bool_type | unit_type | "(" ~ type_expr ~ ")" }
+atomic_type = _{ int_type | bool_type | unit_type | parenthesis_or_tuple_type }
+type_op     = _{ arrow }
 int_type    =  { "int" }
 bool_type   =  { "bool" }
 unit_type   =  { "()" }
-type_op     = _{ arrow }
 arrow       =  { "->" }
+
+parenthesis_or_tuple_type = {
+    "(" ~ type_expr ~ ("*" ~ type_expr)* ~ ")"
+}
 
 term = { primary ~ (primary*) }
 expr = { (term ~ (infix ~ term)*) }
@@ -40,12 +44,16 @@ primary = _{
   | delay_expr
   | advance_expr
   | wait_expr
-  | "(" ~ expr ~ ")"
+  | parenthesis_or_tuple
   | integer
   | true_lit
   | false_lit
   | unit_lit
   | !keyword ~ identifier
+}
+
+parenthesis_or_tuple = {
+    "(" ~ expr ~ ("," ~ expr)* ~ ")"
 }
 
 infix = _{
