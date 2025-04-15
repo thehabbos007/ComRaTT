@@ -159,6 +159,9 @@ pub enum TokenKind {
     #[token("()")]
     Unit,
 
+    #[token("{}")]
+    LaterUnit,
+
     #[token("+")]
     Plus,
 

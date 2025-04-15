@@ -20,6 +20,7 @@ pub enum Const {
     CInt(i32),
     CBool(bool),
     CUnit,
+    CLaterUnit,
 }
 
 #[derive(PartialEq, Eq, Debug, Clone)]
@@ -66,6 +67,7 @@ pub enum Type {
     TInt,
     TBool,
     TUnit,
+    TLaterUnit,
     TFun(Box<Type>, Box<Type>),
     TProduct(Vec<Type>),
     TVar(TypeVar),
@@ -82,6 +84,7 @@ impl Type {
         match self {
             Type::TInt => Ok(()),
             Type::TBool => Ok(()),
+            Type::TLaterUnit => Ok(()),
             Type::TUnit => Ok(()),
             Type::TVar(v) => {
                 if *v == var {

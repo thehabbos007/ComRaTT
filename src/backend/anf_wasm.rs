@@ -309,6 +309,10 @@ impl<'a> AnfWasmEmitter<'a> {
                 func.instruction(&Instruction::I32Const(-1));
                 ty.clone()
             }
+            AExpr::Const(Const::CLaterUnit, ty) => {
+                func.instruction(&Instruction::I32Const(-1));
+                ty.clone()
+            }
             AExpr::Var(name, ty) => {
                 if let Some(&local_idx) = self.locals_map.get(name.as_str()) {
                     // we need to identify if this is a function pointer and not just a local
@@ -590,6 +594,7 @@ impl<'a> AnfWasmEmitter<'a> {
             Type::TInt => ValType::I32,
             Type::TBool => ValType::I32,
             Type::TUnit => ValType::I32,
+            Type::TLaterUnit => ValType::I32,
             Type::TFun(_, _) => ValType::I32,
             Type::TProduct(_) => panic!("Product types not supported as value types"),
             Type::TVar(_) => panic!("Type variables not supported as value types"),

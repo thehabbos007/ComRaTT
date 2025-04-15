@@ -54,6 +54,7 @@ fn atomic_typ(input: &mut Input<'_>) -> ModalResult<Type> {
         TokenKind::TBool.value(Type::TBool),
         TokenKind::TInt.value(Type::TInt),
         TokenKind::Unit.value(Type::TUnit),
+        TokenKind::LaterUnit.value(Type::TLaterUnit),
         delimited(TokenKind::LParen, typ, TokenKind::RParen),
         cut_err(fail)
             .context(StrContext::Label("type"))

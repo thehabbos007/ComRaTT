@@ -93,7 +93,7 @@ macro_rules! assert_typed_expr {
 
 pub fn final_type(ty: &Type) -> Type {
     match ty {
-        Type::TInt | Type::TBool | Type::TUnit | Type::TVar(_) => ty.clone(),
+        Type::TInt | Type::TBool | Type::TUnit | Type::TVar(_) | Type::TLaterUnit => ty.clone(),
         Type::TFun(_, t2) => final_type(t2),
         Type::TProduct(ts) => final_type_tproduct(ts),
     }
@@ -305,7 +305,7 @@ pub fn substitute_binding(bind_old: &str, bind_new: &str, expr: TypedExpr) -> Ty
 
 pub fn unpack_type(ty: &Type) -> Vec<Type> {
     match ty {
-        Type::TInt | Type::TBool | Type::TUnit => vec![],
+        Type::TInt | Type::TBool | Type::TUnit | Type::TLaterUnit => vec![],
         Type::TFun(t1, t2) => {
             let mut types = vec![*t1.clone()];
             types.extend(unpack_type(t2));
