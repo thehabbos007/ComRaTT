@@ -106,6 +106,7 @@ fn parse_type_atom(pair: Pair<Rule>) -> Type {
         Rule::int_type => Type::TInt,
         Rule::bool_type => Type::TBool,
         Rule::unit_type => Type::TUnit,
+        Rule::later_unit_type => Type::TLaterUnit,
         Rule::type_expr => parse_type(pair.into_inner()),
         Rule::parenthesis_or_tuple_type => {
             let mut typs = pair
@@ -213,6 +214,7 @@ fn parse_expression_atom(pair: Pair<Rule>) -> Expr {
         Rule::true_lit => Expr::Const(Const::CBool(true)),
         Rule::false_lit => Expr::Const(Const::CBool(false)),
         Rule::unit_lit => Expr::Const(Const::CUnit),
+        Rule::later_unit_lit => Expr::Const(Const::CLaterUnit),
         Rule::identifier => Expr::Var(pair.as_str().to_string()),
         Rule::term => {
             let mut app_expr = pair.into_inner();

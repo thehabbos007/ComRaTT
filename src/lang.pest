@@ -14,11 +14,12 @@ output_def   = { identifier ~ "<-" ~ expr }
 
 // Types
 type_expr   =  { atomic_type ~ (type_op ~ atomic_type)* }
-atomic_type = _{ int_type | bool_type | unit_type | parenthesis_or_tuple_type }
+atomic_type = _{ int_type | bool_type | unit_type | later_unit_type | parenthesis_or_tuple_type }
 type_op     = _{ arrow }
 int_type    =  { "int" }
 bool_type   =  { "bool" }
 unit_type   =  { "()" }
+later_unit_type = { "{}" }
 arrow       =  { "->" }
 
 parenthesis_or_tuple_type = {
@@ -74,6 +75,7 @@ integer    = @{ "-"? ~ ("0" | ASCII_NONZERO_DIGIT ~ ASCII_DIGIT*) }
 true_lit   =  { "true" }
 false_lit  =  { "false" }
 unit_lit   =  { "()" }
+later_unit_lit   =  { "{}" }
 
 keyword = _{
     "def"
