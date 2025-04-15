@@ -4,7 +4,6 @@
 
 pub mod anf;
 pub mod backend;
-pub mod error;
 pub mod format;
 pub mod infer;
 pub mod parse;

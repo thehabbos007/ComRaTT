@@ -114,11 +114,6 @@ mod tests {
         TypedExpr::TName(name.to_string(), typ)
     }
 
-    // Helper to create an application expression
-    fn make_app(func: TypedExpr, args: Vec<TypedExpr>, typ: Type) -> TypedExpr {
-        TypedExpr::TApp(Box::new(func), args, typ)
-    }
-
     #[test]
     fn test_multi_arg_lams() {
         // Input:    fun x y -> fun w h -> x + y + w + h
@@ -228,7 +223,7 @@ mod tests {
 
     #[test]
     fn test_nested_lams() {
-        let mut pass = EliminateConsecLam::new();
+        let pass = EliminateConsecLam::new();
 
         // Create a triply-nested lambda: fun x -> fun y -> fun z -> x
         let x_name = make_name("x", Type::TInt);
