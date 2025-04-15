@@ -684,8 +684,47 @@ impl<'a> AnfWasmEmitter<'a> {
                 func.instruction(&Instruction::End);
             }
 
-            CExpr::Tuple(_, _) => panic!("Tuple operations not supported in WASM backend"),
-            CExpr::Access(_, _, _) => panic!("Tuple access not supported in WASM backend"),
+            CExpr::Tuple(exprs, _) => {
+                // Tuples are allocated into the heap.
+                // Nested tuples will be allocated depth first
+
+                let tuple_len = exprs.len() as i32;
+                let tuple_size_bytes = tuple_len * WASM_WORD_SIZE;
+
+                // malloc(closure_size) -> closure_ptr
+                // [i32]
+                self.wasm_emitter.malloc(func, tuple_size_bytes);
+
+                let dup_local_idx = self.locals_map[LOCAL_DUP_I32_NAME];
+                func.instruction(&Instruction::LocalSet(dup_local_idx));
+
+                // populate all tuple exprs
+                for (idx, expr) in exprs.iter().enumerate() {
+                    let expr_offset = WASM_WORD_SIZE * (idx as i32);
+                    let expr_arg = MemArg {
+                        offset: expr_offset as u64,
+                        align: WASM_ALIGNMENT_SIZE,
+                        memory_index: 0,
+                    };
+
+                    func.instruction(&Instruction::LocalGet(dup_local_idx));
+                    let _comp_ty = self.compile_atomic(func, expr);
+                    func.instruction(&Instruction::I32Store(expr_arg));
+                }
+                // return ptr from malloc
+                func.instruction(&Instruction::LocalGet(dup_local_idx));
+            }
+            CExpr::Access(expr, idx, _) => {
+                self.compile_atomic(func, expr);
+
+                let access_arg = MemArg {
+                    offset: (idx * WASM_WORD_SIZE) as u64,
+                    align: WASM_ALIGNMENT_SIZE,
+                    memory_index: 0,
+                };
+
+                func.instruction(&Instruction::I32Load(access_arg));
+            }
         }
     }
 
@@ -719,7 +758,7 @@ impl<'a> AnfWasmEmitter<'a> {
             Type::TUnit => ValType::I32,
             Type::TLaterUnit => ValType::I32,
             Type::TFun(_, _) => ValType::I32,
-            Type::TProduct(_) => panic!("Product types not supported as value types"),
+            Type::TProduct(_) => ValType::I32,
             Type::TVar(_) => panic!("Type variables not supported as value types"),
         }
     }
