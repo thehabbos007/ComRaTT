@@ -123,6 +123,16 @@ impl BindingContext {
                 key
             ),
             BindingContext::Tick(bindings, tick_clock, _) => {
+                // if let Some((ty, clock_opt)) = bindings.get(key) {
+                //     if let Some(clock) = clock_opt {
+                //         if tick_clock.is_subset(clock) {
+                //             return ty.clone();
+                //         }
+                //         panic!("Tried to advance name {} with clock not part of tick", key);
+                //     }
+                //     panic!("Tried to advance name {} without clock", key);
+                // }
+                // panic!("Tried to advance nonexisting name {}", key);
                 let Some((ty, _)) = bindings.get(key) else {
                     panic!("Tried to advance nonexisting name {}", key);
                 };
@@ -244,8 +254,24 @@ impl Inference {
                         ),
                     )
                 }
+                // A sig is a tuple of 2 elements, so the idx must be 0 or 1
+                (Type::TSig(t), type_output) if (idx as usize) < 2 => {
+                    let typ = if idx == 0 {
+                        *t
+                    } else {
+                        // Index '1' will be the later Sig co-inductive type
+                        Type::TFun(Type::TLaterUnit.b(), Type::TSig(t).b())
+                    };
+                    (
+                        typ.clone(),
+                        TypeOutput::new(
+                            type_output.constraints,
+                            TypedExpr::TAccess(type_output.texp.b(), idx, typ),
+                        ),
+                    )
+                }
                 // Is panic the right thing to do? The alternative is to create an insatisfiable constraint maybe?
-                _ => panic!("Type checking access with out-of-bounds index"),
+                _ => panic!("Type checking access with out-of-bounds index or invalid expr"),
             },
             Expr::Tuple(ts) => {
                 if ts.len() < 2 {
@@ -270,6 +296,29 @@ impl Inference {
                     )
                 }
             }
+            Expr::Sig(val, later) => {
+                let (val_ty, mut val_output) = self.infer(context.clone(), *val);
+                let (later_ty, mut later_output) = self.infer(context.clone(), *later);
+                let mut constraints = Vec::new();
+                constraints.append(&mut val_output.constraints);
+                constraints.append(&mut later_output.constraints);
+                constraints.push(Constraint::TypeEqual(
+                    later_ty.clone(),
+                    Type::TFun(Type::TLaterUnit.b(), Type::TSig(val_ty.clone().b()).b()),
+                ));
+
+                (
+                    Type::TSig(val_ty.clone().b()),
+                    TypeOutput::new(
+                        constraints,
+                        TypedExpr::TTuple(
+                            vec![val_output.texp, later_output.texp],
+                            Type::TSig(val_ty.b()),
+                        ),
+                    ),
+                )
+            }
+
             Expr::IfThenElse(condition, then, elseb) => match (
                 self.check(context.clone(), condition, Type::TBool),
                 self.infer(context.clone(), *then),
@@ -581,6 +630,10 @@ impl Inference {
             Type::TBool => Type::TBool,
             Type::TUnit => Type::TUnit,
             Type::TLaterUnit(clock) => Type::TLaterUnit(clock.clone()),
+            Type::TSig(t) => {
+                let t = self.normalize_ty(t);
+                Type::TSig(t.b())
+            }
             Type::TFun(from, to) => {
                 let from = self.normalize_ty(from);
                 let to = self.normalize_ty(to);
@@ -608,6 +661,7 @@ impl Inference {
             // as e.g. two Sig Int should be equal at the type level
             // even though they're not delayed on the same clock.
             (Type::TLaterUnit(_), Type::TLaterUnit(_)) => Ok(()),
+            (Type::TSig(t1), Type::TSig(t2)) => self.unify_ty_ty(&t1, &t2),
             (Type::TFun(fst_from, fst_to), Type::TFun(snd_from, snd_to)) => {
                 self.unify_ty_ty(fst_from.as_ref(), snd_from.as_ref())?;
                 self.unify_ty_ty(fst_to.as_ref(), snd_to.as_ref())
@@ -649,6 +703,10 @@ impl Inference {
             Type::TBool => (BTreeSet::new(), Type::TBool),
             Type::TUnit => (BTreeSet::new(), Type::TUnit),
             Type::TLaterUnit(clock) => (BTreeSet::new(), Type::TLaterUnit(clock)),
+            Type::TSig(t) => {
+                let (mut t_unbound, t) = self.substitute(*t);
+                (t_unbound, Type::TSig(t.b()))
+            }
             Type::TFun(from, to) => {
                 let (mut from_unbound, from) = self.substitute(*from);
                 let (mut to_unbound, to) = self.substitute(*to);

@@ -816,6 +816,7 @@ impl<'a> AnfWasmEmitter<'a> {
             Type::TLaterUnit(_) => ValType::I32,
             Type::TFun(_, _) => ValType::I32,
             Type::TProduct(_) => ValType::I32,
+            Type::TSig(_) => ValType::I32,
             Type::TVar(_) => panic!("Type variables not supported as value types"),
         }
     }

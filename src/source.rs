@@ -49,6 +49,7 @@ pub enum Expr {
     Advance(String),
     Wait(String),
     Tuple(Vec<Expr>),
+    Sig(Box<Expr>, Box<Expr>),
     Access(Box<Expr>, i32),
 }
 
@@ -84,6 +85,7 @@ pub enum Type {
     TLaterUnit(ClockExpr),
     TFun(Box<Type>, Box<Type>),
     TProduct(Vec<Type>),
+    TSig(Box<Type>),
     TVar(TypeVar),
 }
 
@@ -100,6 +102,7 @@ impl Type {
             Type::TBool => Ok(()),
             Type::TLaterUnit(_) => Ok(()),
             Type::TUnit => Ok(()),
+            Type::TSig(_) => Ok(()),
             Type::TVar(v) => {
                 if *v == var {
                     Err(Type::TVar(*v))

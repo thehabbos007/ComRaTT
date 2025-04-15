@@ -16,6 +16,7 @@ pub struct ComRaTTParser;
 
 static BINOP_PARSER: LazyLock<PrattParser<Rule>> = LazyLock::new(|| {
     PrattParser::new()
+        .op(Op::infix(Rule::sig_cons, Assoc::Right))
         .op(Op::infix(Rule::equality_op, Assoc::Left))
         .op(Op::infix(Rule::relational_op, Assoc::Left))
         .op(Op::infix(Rule::add_op, Assoc::Left))
@@ -27,7 +28,7 @@ static CLOCK_PARSER: LazyLock<PrattParser<Rule>> =
 
 static TYPE_PARSER: LazyLock<PrattParser<Rule>> = LazyLock::new(|| {
     PrattParser::new()
-        // .op(Op::prefix(rule))
+        .op(Op::prefix(Rule::signal))
         .op(Op::infix(Rule::arrow, Assoc::Right))
 });
 
@@ -93,6 +94,10 @@ impl Prog {
 fn parse_type(pairs: Pairs<Rule>) -> Type {
     TYPE_PARSER
         .map_primary(|primary| parse_type_atom(primary))
+        .map_prefix(|op, typ| match op.as_rule() {
+            Rule::signal => Type::TSig(Box::new(typ)),
+            _ => unreachable!(),
+        })
         .map_infix(|lhs, op, rhs| match op.as_rule() {
             Rule::arrow => Type::TFun(Box::new(lhs), Box::new(rhs)),
             _ => unreachable!(),
@@ -127,6 +132,10 @@ fn parse_expression(pairs: Pairs<Rule>) -> Expr {
     BINOP_PARSER
         .map_primary(|primary| parse_expression_atom(primary))
         .map_infix(|lhs, op, rhs| {
+            if op.as_rule() == Rule::sig_cons {
+                return Expr::Sig(lhs.b(), rhs.b());
+            }
+
             let op = match op.as_str() {
                 "<" => Binop::Lt,
                 "<=" => Binop::Lte,

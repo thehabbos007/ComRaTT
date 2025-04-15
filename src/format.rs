@@ -111,6 +111,7 @@ impl Display for Type {
             Type::TLaterUnit(clock) => write!(f, "{{{clock}}}"),
             Type::TVar(type_var) => write!(f, "TVar {}", type_var.0),
             Type::TFun(t1, t2) => write!(f, "{} -> {}", t1, t2),
+            Type::TSig(t) => write!(f, "Sig {}", t),
             Type::TProduct(types) => {
                 write!(
                     f,
@@ -166,6 +167,9 @@ impl Expr {
             }
             Expr::Delay(e, c) => format!("delay {{{}}} {}", c, e),
             Expr::Advance(x) => format!("advance {}", x),
+            Expr::Sig(e1, e2) => {
+                format!("{} :: {}", e1, e2)
+            }
             Expr::Tuple(exprs) => {
                 format!(
                     "({})",
