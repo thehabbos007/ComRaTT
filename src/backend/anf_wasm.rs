@@ -21,7 +21,7 @@ const WASM_WORD_SIZE: i32 = 4;
 const WASM_ALIGNMENT_SIZE: u32 = 2;
 const LOCAL_DUP_I32_NAME: &str = "dupi32";
 const FUNCTION_INDEX_OFFSET: u64 = 0;
-const ARITY_OFFSET: u64 = WASM_WORD_SIZE as u64 * 1;
+const ARITY_OFFSET: u64 = WASM_WORD_SIZE as u64;
 const POPULATE_OFFSET: u64 = WASM_WORD_SIZE as u64 * 2;
 
 pub struct AnfWasmEmitter<'a> {
@@ -493,59 +493,59 @@ impl<'a> AnfWasmEmitter<'a> {
                 // Assuming that the lambda will always have either a () or {}
                 // argument.
                 assert_eq!(lam_args.len(), 1, "Length of closure args should be 1");
-                if let Some((_, arg_ty)) = lam_args.first() {
-                    if let Type::TLaterUnit = arg_ty {
-                        // At this point the stack top is a pointer to the closure heap.
-                        // The clock is a hardcoded bogus value atm. but will have to be
-                        // based on either a concrete "wait" expression or a clock-of expression later.
-                        // This will probably just be a recursive call to self.compile_atomic
-                        // that ends up in those two cases.
+                if let Some((_, arg_ty)) = lam_args.first()
+                    && let Type::TLaterUnit = arg_ty
+                {
+                    // At this point the stack top is a pointer to the closure heap.
+                    // The clock is a hardcoded bogus value atm. but will have to be
+                    // based on either a concrete "wait" expression or a clock-of expression later.
+                    // This will probably just be a recursive call to self.compile_atomic
+                    // that ends up in those two cases.
 
-                        // DROP CLOSURE HEAP POINTER
-                        func.instruction(&Instruction::Drop);
+                    // DROP CLOSURE HEAP POINTER
+                    func.instruction(&Instruction::Drop);
 
-                        // ALLOCATE SPACE IN LOCATION HEAP AND GET PTR
-                        self.location_malloc(func);
+                    // ALLOCATE SPACE IN LOCATION HEAP AND GET PTR
+                    self.location_malloc(func);
 
-                        // POPULATE CLOSURE PART OF LOCATION AT OFFSET 0
-                        let closure_arg = MemArg {
-                            offset: 0,
-                            align: WASM_ALIGNMENT_SIZE,
-                            memory_index: LOCATION_HEAP_INDEX,
-                        };
+                    // POPULATE CLOSURE PART OF LOCATION AT OFFSET 0
+                    let closure_arg = MemArg {
+                        offset: 0,
+                        align: WASM_ALIGNMENT_SIZE,
+                        memory_index: LOCATION_HEAP_INDEX,
+                    };
 
-                        // GET THE PTR TO HEAP
-                        func.instruction(&Instruction::LocalGet(dup_local_idx));
+                    // GET THE PTR TO HEAP
+                    func.instruction(&Instruction::LocalGet(dup_local_idx));
 
-                        // STORE IT
-                        func.instruction(&Instruction::I32Store(closure_arg));
+                    // STORE IT
+                    func.instruction(&Instruction::I32Store(closure_arg));
 
-                        // NOW THE STACK IS EMPTY AND WE NEED NEED TO STORE THE CLOCK.
-                        // LOCATION HEAP ALLOCATION ARE FIXED SIZE, SO WE CAN ARITHMETIC OURSELVES OUT OF
-                        // NOT HAVING THE PTR.
+                    // NOW THE STACK IS EMPTY AND WE NEED NEED TO STORE THE CLOCK.
+                    // LOCATION HEAP ALLOCATION ARE FIXED SIZE, SO WE CAN ARITHMETIC OURSELVES OUT OF
+                    // NOT HAVING THE PTR.
 
-                        // GET THE START OF NEXT ALLOCATION ($next_location)
-                        func.instruction(&Instruction::GlobalGet(1));
+                    // GET THE START OF NEXT ALLOCATION ($next_location)
+                    func.instruction(&Instruction::GlobalGet(1));
 
-                        // SUBTRACT 4 TO GET CLOCK OFFSET
-                        func.instruction(&Instruction::I32Const(4));
-                        func.instruction(&Instruction::I32Sub);
+                    // SUBTRACT 4 TO GET CLOCK OFFSET
+                    func.instruction(&Instruction::I32Const(4));
+                    func.instruction(&Instruction::I32Sub);
 
-                        // STORE BOGUS CLOCK FOR NOW
-                        func.instruction(&Instruction::I32Const(42));
+                    // STORE BOGUS CLOCK FOR NOW
+                    func.instruction(&Instruction::I32Const(42));
 
-                        let clock_arg = MemArg {
-                            offset: 0,
-                            align: WASM_ALIGNMENT_SIZE,
-                            memory_index: LOCATION_HEAP_INDEX,
-                        };
-                        func.instruction(&Instruction::I32Store(clock_arg));
+                    let clock_arg = MemArg {
+                        offset: 0,
+                        align: WASM_ALIGNMENT_SIZE,
+                        memory_index: LOCATION_HEAP_INDEX,
+                    };
+                    func.instruction(&Instruction::I32Store(clock_arg));
 
-                        // RETURN THE BASE POINTER FOR LOCATION
-                        func.instruction(&Instruction::GlobalGet(1));
-                        func.instruction(&Instruction::I32Const(8));
-                        func.instruction(&Instruction::I32Sub);
-                    }
+                    // RETURN THE BASE POINTER FOR LOCATION
+                    func.instruction(&Instruction::GlobalGet(1));
+                    func.instruction(&Instruction::I32Const(8));
+                    func.instruction(&Instruction::I32Sub);
                 }
 
                 lam_typ.clone()

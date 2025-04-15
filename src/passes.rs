@@ -49,7 +49,7 @@ pub fn run_program_passes_anf(prog: TypedProg) -> AnfProg {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::source::{Binop, Const, Type};
+    use crate::source::{Binop, Type};
     use crate::types::{TypedExpr, TypedToplevel};
 
     #[test]

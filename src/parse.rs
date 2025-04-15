@@ -3,16 +3,12 @@ use std::{assert_matches::assert_matches, collections::HashSet, sync::LazyLock};
 use itertools::Itertools;
 use pest::{
     iterators::{Pair, Pairs},
-    pratt_parser::{self, Assoc, Op, PrattParser},
+    pratt_parser::{Assoc, Op, PrattParser},
     Parser,
 };
 use pest_derive::Parser;
 
-use crate::{
-    error::ComRaTTError,
-    range::Range,
-    source::{Binop, Const, Expr, Prog, Toplevel, Type},
-};
+use crate::source::{Binop, Const, Expr, Prog, Toplevel, Type};
 
 #[derive(Parser)]
 #[grammar = "lang.pest"]
