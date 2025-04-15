@@ -185,7 +185,6 @@ impl WasmEmitter<'_> {
         self.func_map
             .insert("location_malloc", LOCATION_MALLOC_FUN_IDX);
         self.func_args.insert("location_malloc", vec![]);
-        dbg!(LOCATION_MALLOC_FUN_IDX);
         self.type_map
             .insert("location_malloc", LOCATION_MALLOC_FUN_IDX);
 
