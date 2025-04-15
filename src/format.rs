@@ -86,6 +86,7 @@ impl Display for Const {
             Const::CBool(true) => write!(f, "true"),
             Const::CBool(false) => write!(f, "false"),
             Const::CUnit => write!(f, "()"),
+            Const::CLaterUnit => write!(f, "{{}}"),
         }
     }
 }
@@ -96,6 +97,7 @@ impl Display for Type {
             Type::TInt => write!(f, "int"),
             Type::TBool => write!(f, "bool"),
             Type::TUnit => write!(f, "()"),
+            Type::TLaterUnit => write!(f, "{{}}"),
             Type::TVar(type_var) => write!(f, "TVar {}", type_var.0),
             Type::TFun(t1, t2) => write!(f, "{} -> {}", t1, t2),
             Type::TProduct(types) => {

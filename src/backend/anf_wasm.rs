@@ -9,6 +9,7 @@ use std::iter;
 use std::ops::{Deref, DerefMut};
 
 use crate::anf::{AExpr, AnfExpr, AnfProg, AnfToplevel, CExpr};
+use crate::backend::wasm_emitter::{CLOSURE_HEAP_INDEX, LOCATION_HEAP_INDEX};
 use crate::source::{Binop, Const, Type};
 use crate::types::count_tfun_args;
 
@@ -27,6 +28,7 @@ pub struct AnfWasmEmitter<'a> {
     wasm_emitter: WasmEmitter<'a>,
 
     dispatch_offset: u32,
+    location_dispatch_offset: u32,
     prog: &'a AnfProg,
 }
 
@@ -48,6 +50,7 @@ impl<'a> AnfWasmEmitter<'a> {
         Self {
             wasm_emitter: WasmEmitter::new(),
             dispatch_offset: 0,
+            location_dispatch_offset: 0,
             prog,
         }
     }
@@ -60,12 +63,14 @@ impl<'a> AnfWasmEmitter<'a> {
         }
 
         self.dispatch_offset = self.function_section.len();
+        self.location_dispatch_offset = self.function_section.len() + 1;
 
         for def in &self.prog.0 {
             self.process_function(def);
         }
 
         self.gen_dispatch();
+        self.gen_location_dispatch();
 
         self.declare_table_entries();
 
@@ -163,7 +168,7 @@ impl<'a> AnfWasmEmitter<'a> {
                 offset: FUNCTION_INDEX_OFFSET
                     + ((2 + func_args.len() as u64 - 1) * WASM_WORD_SIZE as u64),
                 align: WASM_ALIGNMENT_SIZE,
-                memory_index: 0,
+                memory_index: CLOSURE_HEAP_INDEX,
             };
             for _ in (0..func_args.len()).rev() {
                 // Closure pointer on stack
@@ -205,6 +210,64 @@ impl<'a> AnfWasmEmitter<'a> {
                     Type::TFun(Type::TInt.b(), Type::TInt.b()),
                 ),
             ],
+            &Type::TInt,
+        );
+
+        self.function_section.function(type_idx);
+        self.code_section.function(&func);
+        self.func_map.insert(name, func_idx);
+
+        self.export_section.export(name, ExportKind::Func, func_idx);
+
+        self.function_name_map.append(func_idx, name);
+        self.type_name_map.append(type_idx, name);
+
+        let mut locals_name_map = NameMap::new();
+        self.locals_map
+            .iter()
+            .sorted_by_key(|l| l.1)
+            .for_each(|(name, idx)| {
+                locals_name_map.append(*idx, name);
+            });
+        self.locals_name_map.append(func_idx, &locals_name_map);
+    }
+
+    fn gen_location_dispatch(&mut self) {
+        let name = "location_dispatch";
+
+        let params = [];
+        self.locals_map.clear();
+
+        let mut func = Function::new_with_locals_types(params.iter().cloned());
+
+        // Load closure heap ptr from location heap ptr
+        let loc_heap_load_arg = MemArg {
+            offset: 0, // TODO NAME THIS CONST
+            align: WASM_ALIGNMENT_SIZE,
+            memory_index: LOCATION_HEAP_INDEX,
+        };
+        func.instruction(&Instruction::LocalGet(0));
+        func.instruction(&Instruction::I32Load(loc_heap_load_arg));
+
+        // Call dispatch with the closure pointer and unit argument
+        let dispatch_type_index = self.type_map["dispatch"];
+        func.instruction(&Instruction::I32Const(-1));
+        func.instruction(&Instruction::I32Const(self.dispatch_offset as i32));
+        func.instruction(&Instruction::ReturnCallIndirect {
+            type_index: dispatch_type_index,
+            table_index: 0,
+        });
+
+        func.instruction(&Instruction::End);
+
+        let func_idx = self.function_section.len();
+        let type_idx = self.register_function_type(
+            name,
+            &[(
+                "location_ptr".to_owned(),
+                // This type is irrelevant. I just want to produce a "i32"
+                Type::TFun(Type::TInt.b(), Type::TInt.b()),
+            )],
             &Type::TInt,
         );
 
@@ -309,6 +372,10 @@ impl<'a> AnfWasmEmitter<'a> {
                 func.instruction(&Instruction::I32Const(-1));
                 ty.clone()
             }
+            AExpr::Const(Const::CLaterUnit, ty) => {
+                func.instruction(&Instruction::I32Const(-1));
+                ty.clone()
+            }
             AExpr::Var(name, ty) => {
                 if let Some(&local_idx) = self.locals_map.get(name.as_str()) {
                     // we need to identify if this is a function pointer and not just a local
@@ -384,7 +451,7 @@ impl<'a> AnfWasmEmitter<'a> {
                 let fp_arg = MemArg {
                     offset: FUNCTION_INDEX_OFFSET,
                     align: WASM_ALIGNMENT_SIZE,
-                    memory_index: 0,
+                    memory_index: CLOSURE_HEAP_INDEX,
                 };
                 func.instruction(&Instruction::I32Const(*fun_idx as i32));
                 func.instruction(&Instruction::I32Store(fp_arg));
@@ -392,7 +459,7 @@ impl<'a> AnfWasmEmitter<'a> {
                 let arity_arg = MemArg {
                     offset: ARITY_OFFSET,
                     align: WASM_ALIGNMENT_SIZE,
-                    memory_index: 0,
+                    memory_index: CLOSURE_HEAP_INDEX,
                 };
                 func.instruction(&Instruction::LocalGet(dup_local_idx));
                 // All bound variables in the lambda are the variables yet to be populated.
@@ -406,7 +473,7 @@ impl<'a> AnfWasmEmitter<'a> {
                     let arg_arg = MemArg {
                         offset: arg_offset as u64,
                         align: WASM_ALIGNMENT_SIZE,
-                        memory_index: 0,
+                        memory_index: CLOSURE_HEAP_INDEX,
                     };
 
                     func.instruction(&Instruction::LocalGet(dup_local_idx));
@@ -420,6 +487,66 @@ impl<'a> AnfWasmEmitter<'a> {
                 }
                 // return ptr from malloc
                 func.instruction(&Instruction::LocalGet(dup_local_idx));
+
+                // If this is an async closure, call location_malloc instead.
+                // Populate that and return the pointer to location heap.
+                // Assuming that the lambda will always have either a () or {}
+                // argument.
+                assert_eq!(lam_args.len(), 1, "Length of closure args should be 1");
+                if let Some((_, arg_ty)) = lam_args.first() {
+                    if let Type::TLaterUnit = arg_ty {
+                        // At this point the stack top is a pointer to the closure heap.
+                        // The clock is a hardcoded bogus value atm. but will have to be
+                        // based on either a concrete "wait" expression or a clock-of expression later.
+                        // This will probably just be a recursive call to self.compile_atomic
+                        // that ends up in those two cases.
+
+                        // DROP CLOSURE HEAP POINTER
+                        func.instruction(&Instruction::Drop);
+
+                        // ALLOCATE SPACE IN LOCATION HEAP AND GET PTR
+                        self.location_malloc(func);
+
+                        // POPULATE CLOSURE PART OF LOCATION AT OFFSET 0
+                        let closure_arg = MemArg {
+                            offset: 0,
+                            align: WASM_ALIGNMENT_SIZE,
+                            memory_index: LOCATION_HEAP_INDEX,
+                        };
+
+                        // GET THE PTR TO HEAP
+                        func.instruction(&Instruction::LocalGet(dup_local_idx));
+
+                        // STORE IT
+                        func.instruction(&Instruction::I32Store(closure_arg));
+
+                        // NOW THE STACK IS EMPTY AND WE NEED NEED TO STORE THE CLOCK.
+                        // LOCATION HEAP ALLOCATION ARE FIXED SIZE, SO WE CAN ARITHMETIC OURSELVES OUT OF
+                        // NOT HAVING THE PTR.
+
+                        // GET THE START OF NEXT ALLOCATION ($next_location)
+                        func.instruction(&Instruction::GlobalGet(1));
+
+                        // SUBTRACT 4 TO GET CLOCK OFFSET
+                        func.instruction(&Instruction::I32Const(4));
+                        func.instruction(&Instruction::I32Sub);
+
+                        // STORE BOGUS CLOCK FOR NOW
+                        func.instruction(&Instruction::I32Const(42));
+
+                        let clock_arg = MemArg {
+                            offset: 0,
+                            align: WASM_ALIGNMENT_SIZE,
+                            memory_index: LOCATION_HEAP_INDEX,
+                        };
+                        func.instruction(&Instruction::I32Store(clock_arg));
+
+                        // RETURN THE BASE POINTER FOR LOCATION
+                        func.instruction(&Instruction::GlobalGet(1));
+                        func.instruction(&Instruction::I32Const(8));
+                        func.instruction(&Instruction::I32Sub);
+                    }
+                }
 
                 lam_typ.clone()
             }
@@ -472,13 +599,13 @@ impl<'a> AnfWasmEmitter<'a> {
                         let arity_arg = MemArg {
                             offset: ARITY_OFFSET,
                             align: WASM_ALIGNMENT_SIZE,
-                            memory_index: 0,
+                            memory_index: CLOSURE_HEAP_INDEX,
                         };
 
                         let populate_arg = MemArg {
                             offset: POPULATE_OFFSET,
                             align: WASM_ALIGNMENT_SIZE,
-                            memory_index: 0,
+                            memory_index: CLOSURE_HEAP_INDEX,
                         };
 
                         for arg in args {
@@ -590,6 +717,7 @@ impl<'a> AnfWasmEmitter<'a> {
             Type::TInt => ValType::I32,
             Type::TBool => ValType::I32,
             Type::TUnit => ValType::I32,
+            Type::TLaterUnit => ValType::I32,
             Type::TFun(_, _) => ValType::I32,
             Type::TProduct(_) => panic!("Product types not supported as value types"),
             Type::TVar(_) => panic!("Type variables not supported as value types"),

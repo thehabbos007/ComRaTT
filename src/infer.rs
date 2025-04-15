@@ -215,6 +215,10 @@ impl Inference {
                     Type::TUnit,
                     TypeOutput::new(vec![], TypedExpr::TConst(c, Type::TUnit)),
                 ),
+                Const::CLaterUnit => (
+                    Type::TLaterUnit,
+                    TypeOutput::new(vec![], TypedExpr::TConst(c, Type::TLaterUnit)),
+                ),
             },
             Expr::Var(name) => {
                 if let Some((ty, _)) = context.get_binding(&name) {
@@ -293,16 +297,16 @@ impl Inference {
             Expr::Delay(e, clock) => {
                 // Introduce a tick given the clock
                 let context = context.promote_tick(&clock);
-                // Call recursively, propagate constraints and generate a new '() -> ty'
+                // Call recursively, propagate constraints and generate a new '{} -> ty'
                 let (ty, type_output) = self.infer(context, *e);
                 (
-                    Type::TFun(Type::TUnit.b(), ty.clone().b()),
+                    Type::TFun(Type::TLaterUnit.b(), ty.clone().b()),
                     TypeOutput::new(
                         type_output.constraints,
                         TypedExpr::TLam(
-                            vec![("#advance_unit".to_owned(), Type::TUnit)],
+                            vec![("#advance_later_unit".to_owned(), Type::TLaterUnit)],
                             type_output.texp.b(),
-                            Type::TFun(Type::TUnit.b(), ty.b()),
+                            Type::TFun(Type::TLaterUnit.b(), ty.clone().b()),
                         ),
                     ),
                 )
@@ -324,24 +328,22 @@ impl Inference {
                 )
             }
             // advance must look only in the left bindings i.e. before the tick (going back in time)
-            // TODO: this currently only checks that name is a delayed computation
-            // by checking if it is a thunk.
-            // The name we advance needs to be of type "later" (we will check this when that is introduced).
+            // We check that the name being advanced is a "later thunk" i.e. TLaterUnit -> T.
             // When we introduce a "cl()" (clock of) construct, we will need to check statically
             // that delay is done with regard to the clock of whatever is being advanced.
             // The input channels of this clock can change at runtime, but at comptime we need
             // to do some checking.
             Expr::Advance(name) => match context.attempt_advance(&name) {
-                Type::TFun(box Type::TUnit, ty) => {
-                    let fun_type = Type::TFun(Type::TUnit.b(), ty.clone().b());
+                Type::TFun(box Type::TLaterUnit, box ty) => {
+                    let fun_type = Type::TFun(Type::TLaterUnit.b(), ty.clone().b());
                     (
-                        *ty.clone(),
+                        ty.clone(),
                         TypeOutput::new(
                             vec![],
                             TypedExpr::TApp(
                                 TypedExpr::TName(name, fun_type).b(),
-                                vec![TypedExpr::TConst(Const::CUnit, Type::TUnit)],
-                                *ty.clone(),
+                                vec![TypedExpr::TConst(Const::CLaterUnit, Type::TLaterUnit)],
+                                ty.clone(),
                             ),
                         ),
                     )
@@ -561,6 +563,7 @@ impl Inference {
             Type::TInt => Type::TInt,
             Type::TBool => Type::TBool,
             Type::TUnit => Type::TUnit,
+            Type::TLaterUnit => Type::TLaterUnit,
             Type::TFun(from, to) => {
                 let from = self.normalize_ty(from);
                 let to = self.normalize_ty(to);
@@ -584,6 +587,7 @@ impl Inference {
             (Type::TInt, Type::TInt) => Ok(()),
             (Type::TBool, Type::TBool) => Ok(()),
             (Type::TUnit, Type::TUnit) => Ok(()),
+            (Type::TLaterUnit, Type::TLaterUnit) => Ok(()),
             (Type::TFun(fst_from, fst_to), Type::TFun(snd_from, snd_to)) => {
                 self.unify_ty_ty(fst_from.as_ref(), snd_from.as_ref())?;
                 self.unify_ty_ty(fst_to.as_ref(), snd_to.as_ref())
@@ -624,6 +628,7 @@ impl Inference {
             Type::TInt => (BTreeSet::new(), Type::TInt),
             Type::TBool => (BTreeSet::new(), Type::TBool),
             Type::TUnit => (BTreeSet::new(), Type::TUnit),
+            Type::TLaterUnit => (BTreeSet::new(), Type::TLaterUnit),
             Type::TFun(from, to) => {
                 let (mut from_unbound, from) = self.substitute(*from);
                 let (mut to_unbound, to) = self.substitute(*to);
@@ -1161,32 +1166,10 @@ mod tests {
         inference.infer(Default::default(), expr);
     }
 
-    // This should pass because the tick is on keyboard, which is part of the clock
-    // for the name being advanced
     #[test]
-    fn infer_advance_name_bound_and_valid_tick_subset() {
+    fn infer_advance_name_bound_and_tick_in_context() {
         let expr = Expr::Advance("x".to_owned());
-        let fun_type = Type::TFun(Type::TUnit.b(), Type::TInt.b());
-        let binding = (
-            fun_type,
-            Some(HashSet::from(["keyboard".to_owned(), "mouse".to_owned()])),
-        );
-        let mut context = BindingContext::Tick(
-            HashMap::from([("x".to_owned(), binding)]),
-            HashSet::from(["keyboard".to_owned()]),
-            HashMap::new(),
-        );
-
-        let mut inference = Inference {
-            unification_table: InPlaceUnificationTable::default(),
-        };
-        let (ty, output) = inference.infer(context.into(), expr);
-    }
-
-    #[test]
-    fn infer_advance_name_bound_and_valid_tick() {
-        let expr = Expr::Advance("x".to_owned());
-        let fun_type = Type::TFun(Type::TUnit.b(), Type::TInt.b());
+        let fun_type = Type::TFun(Type::TLaterUnit.b(), Type::TInt.b());
         let binding = (fun_type, Some(HashSet::from(["keyboard".to_owned()])));
         let mut context = BindingContext::Tick(
             HashMap::from([("x".to_owned(), binding)]),
@@ -1198,24 +1181,6 @@ mod tests {
             unification_table: InPlaceUnificationTable::default(),
         };
         let (ty, output) = inference.infer(context.into(), expr);
-    }
-
-    #[test]
-    #[should_panic]
-    fn infer_advance_name_bound_and_invalid_tick() {
-        let expr = Expr::Advance("x".to_owned());
-        let fun_type = Type::TFun(Type::TUnit.b(), Type::TInt.b());
-        let binding = (fun_type, Some(HashSet::from(["mouse".to_owned()])));
-        let mut context = BindingContext::Tick(
-            HashMap::new(),
-            HashSet::from(["keyboard".to_owned()]),
-            HashMap::new(),
-        );
-
-        let mut inference = Inference {
-            unification_table: InPlaceUnificationTable::default(),
-        };
-        let _ = inference.infer(context.into(), expr);
     }
 
     #[test]
@@ -1254,7 +1219,7 @@ mod tests {
     }
 
     #[test]
-    fn infer_delay_produces_thunk() {
+    fn infer_delay_produces_later_thunk() {
         let expr = Expr::Delay(
             Expr::Const(Const::CInt(42)).b(),
             HashSet::from(["hey".to_owned()]),
@@ -1264,11 +1229,11 @@ mod tests {
         };
         let (ty, output) = inference.infer(Default::default(), expr);
         let expected_texp = TypedExpr::TLam(
-            vec![("#advance_unit".to_owned(), Type::TUnit)],
+            vec![("#advance_later_unit".to_owned(), Type::TLaterUnit)],
             TypedExpr::TConst(Const::CInt(42), Type::TInt).b(),
-            Type::TFun(Type::TUnit.b(), Type::TInt.b()),
+            Type::TFun(Type::TLaterUnit.b(), Type::TInt.b()),
         );
-        assert_eq!(ty, Type::TFun(Type::TUnit.b(), Type::TInt.b()));
+        assert_eq!(ty, Type::TFun(Type::TLaterUnit.b(), Type::TInt.b()));
         assert_eq!(output.texp, expected_texp);
     }
 

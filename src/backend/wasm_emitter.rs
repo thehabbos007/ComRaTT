@@ -32,14 +32,22 @@ pub struct WasmEmitter<'a> {
     pub func_args: HashMap<&'a str, Vec<(&'a str, Type)>>,
 
     pub locals_map: HashMap<&'a str, u32>,
+    parsed_modules: u32,
 }
+
+pub const CLOSURE_HEAP_INDEX: u32 = 0;
+pub const LOCATION_HEAP_INDEX: u32 = 1;
 
 // const MALLOC_ARGS: [(&str, Type); 1] = [("size", Type::TInt)];
 const MALLOC_FUN_IDX: u32 = 0;
-const MALLOC_BODY: &str = r#"
+const LOCATION_MALLOC_FUN_IDX: u32 = 1;
+
+const MALLOC_MODULE: &str = r#"
 (module
     (global $next_ptr (mut i32) (i32.const 0))
+    (global $next_location (mut i32) (i32.const 0))
     (type $malloc (func (param i32) (result i32)))
+    (type $location_malloc (func (result i32)))
     (func $malloc (export "malloc") (param $size i32) (result i32)
         ;; Define a local to hold the current value i.e. the beginning
         ;; of this new allocation
@@ -54,6 +62,24 @@ const MALLOC_BODY: &str = r#"
         (i32.add)
         ;; Write new offset to the global
         (global.set $next_ptr)
+        ;; Return $old i.e. the beginning of this new allocation
+        (local.get $old)
+    )
+
+    (func $location_malloc (export "location_malloc") (result i32)
+        ;; Define a local to hold the current value i.e. the beginning
+        ;; of this new allocation
+        (local $old i32)
+        ;; Put the current ptr on the stack, write it to $old and put the value
+        ;; on the stack again
+        (global.get $next_location)
+        (local.tee $old)
+        ;; Put 8 on the stack: 4 bytes for clock and 4 bytes for ptr to closure heap
+        (i32.const 8)
+        ;; Add $old and 8
+        (i32.add)
+        ;; Write new offset to the global
+        (global.set $next_location)
         ;; Return $old i.e. the beginning of this new allocation
         (local.get $old)
     )
@@ -88,6 +114,8 @@ impl WasmEmitter<'_> {
             func_args: HashMap::new(),
 
             locals_map: HashMap::new(),
+
+            parsed_modules: 0,
         }
     }
 
@@ -100,11 +128,22 @@ impl WasmEmitter<'_> {
             page_size_log2: None,
         });
 
+        self.memory_section.memory(MemoryType {
+            minimum: 1,
+            maximum: None,
+            memory64: false,
+            shared: false,
+            page_size_log2: None,
+        });
+
         // Table export is really only needed for debugging
-        self.export_section.export("heap", ExportKind::Memory, 0);
+        self.export_section
+            .export("heap", ExportKind::Memory, CLOSURE_HEAP_INDEX);
+        self.export_section
+            .export("location", ExportKind::Memory, LOCATION_HEAP_INDEX);
         self.export_section.export("table", ExportKind::Table, 0);
 
-        self.gen_malloc().unwrap();
+        self.gen_module().unwrap();
     }
 
     pub fn finalize_emit(mut self) -> Vec<u8> {
@@ -135,13 +174,20 @@ impl WasmEmitter<'_> {
         self.module.finish()
     }
 
-    fn gen_malloc(&mut self) -> Result<()> {
-        let bytes = wat::parse_str(MALLOC_BODY)?;
-        self.parse_wasm_module(&bytes).context("add malloc")?;
+    fn gen_module(&mut self) -> Result<()> {
+        let bytes = wat::parse_str(MALLOC_MODULE)?;
+        self.parse_wasm_module(&bytes).context("add module")?;
 
         self.func_map.insert("malloc", MALLOC_FUN_IDX);
         self.func_args.insert("malloc", vec![("size", Type::TInt)]);
-        self.type_map.insert("malloc", 0);
+        self.type_map.insert("malloc", MALLOC_FUN_IDX);
+
+        self.func_map
+            .insert("location_malloc", LOCATION_MALLOC_FUN_IDX);
+        self.func_args.insert("location_malloc", vec![]);
+        dbg!(LOCATION_MALLOC_FUN_IDX);
+        self.type_map
+            .insert("location_malloc", LOCATION_MALLOC_FUN_IDX);
 
         Ok(())
     }
@@ -179,6 +225,7 @@ impl WasmEmitter<'_> {
                                 Name::Function(funcs) => {
                                     funcs.into_iter().map(|x| x.unwrap()).for_each(
                                         |Naming { index, name }| {
+                                            let index = index + self.parsed_modules;
                                             self.function_name_map.append(index, name);
                                         },
                                     );
@@ -187,6 +234,7 @@ impl WasmEmitter<'_> {
                                     locals.into_iter().map(|x| x.unwrap()).for_each(
                                         |IndirectNaming { index, names }| {
                                             let mut name_map = NameMap::new();
+                                            let index = index + self.parsed_modules;
                                             names.into_iter().map(|x| x.unwrap()).for_each(
                                                 |Naming { index, name }| {
                                                     name_map.append(index, name);
@@ -199,6 +247,7 @@ impl WasmEmitter<'_> {
                                 Name::Type(types) => {
                                     types.into_iter().map(|x| x.unwrap()).for_each(
                                         |Naming { index, name }| {
+                                            let index = index + self.parsed_modules;
                                             self.type_name_map.append(index, name);
                                         },
                                     );
@@ -212,6 +261,8 @@ impl WasmEmitter<'_> {
             };
         }
 
+        self.parsed_modules += 1;
+
         Ok(())
     }
 
@@ -222,6 +273,13 @@ impl WasmEmitter<'_> {
         func.instruction(&Instruction::I32Const(size_bytes));
         func.instruction(&Instruction::Call(MALLOC_FUN_IDX));
     }
+
+    pub fn location_malloc(&self, func: &mut Function) {
+        // location_malloc is in the wasm blob as index `LOCATION_MALLOC_FUN_IDX` function
+        // inject code that invokes this function
+
+        func.instruction(&Instruction::Call(LOCATION_MALLOC_FUN_IDX));
+    }
 }
 #[cfg(test)]
 mod tests {
@@ -231,8 +289,8 @@ mod tests {
     use wasmtime_wast::WastContext;
 
     #[test]
-    fn parse_malloc() {
-        wat::parse_str(MALLOC_BODY).unwrap();
+    fn parse_malloc_module() {
+        wat::parse_str(MALLOC_MODULE).unwrap();
     }
 
     #[test]
@@ -263,7 +321,7 @@ mod tests {
         (assert_return (invoke "malloc" (i32.const 1)) (i32.const 24))
         "#;
 
-        let malloc_test = format!("{MALLOC_BODY}{test}");
+        let malloc_test = format!("{MALLOC_MODULE}{test}");
         test_wast(malloc_test);
     }
 

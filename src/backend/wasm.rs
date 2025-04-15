@@ -140,6 +140,7 @@ impl<'a> BareWasmEmitter<'a> {
             Type::TInt => ValType::I32,
             Type::TBool => ValType::I32,
             Type::TUnit => ValType::I32,
+            Type::TLaterUnit => ValType::I32,
             Type::TFun(_, _) => panic!("Function types not supported as value types"),
             Type::TProduct(_) => panic!("Product types not supported as value types"),
             Type::TVar(_) => panic!("Type variables not supported as value types"),
@@ -156,7 +157,7 @@ impl<'a> BareWasmEmitter<'a> {
                 Const::CBool(b) => {
                     func.instruction(&Instruction::I32Const(*b as i32));
                 }
-                Const::CUnit => {
+                Const::CUnit | Const::CLaterUnit => {
                     func.instruction(&Instruction::I32Const(-1));
                 }
             },
