@@ -120,16 +120,10 @@ impl BindingContext {
                 key
             ),
             BindingContext::Tick(bindings, tick_clock, _) => {
-                if let Some((ty, clock_opt)) = bindings.get(key) {
-                    if let Some(clock) = clock_opt {
-                        if tick_clock.is_subset(clock) {
-                            return ty.clone();
-                        }
-                        panic!("Tried to advance name {} with clock not part of tick", key);
-                    }
-                    panic!("Tried to advance name {} without clock", key);
-                }
-                panic!("Tried to advance nonexisting name {}", key);
+                let Some((ty, _)) = bindings.get(key) else {
+                    panic!("Tried to advance nonexisting name {}", key);
+                };
+                ty.clone()
             }
         }
     }
