@@ -1,0 +1,2 @@
+main : (int) -> (bool * int)
+def main x = (true, 2);

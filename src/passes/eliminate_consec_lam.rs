@@ -71,7 +71,7 @@ impl EliminateConsecLam {
             TypedExpr::TAccess(arg, access, ty) => {
                 TypedExpr::TAccess(arg.map_box(|v| self.fuse_lams(v)), access, ty)
             }
-            TypedExpr::TName(_, _) | TypedExpr::TConst(_, _) => expr,
+            TypedExpr::TName(_, _) | TypedExpr::TConst(_, _) | TypedExpr::TWait(_, _) => expr,
         }
     }
 }

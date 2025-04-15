@@ -1,0 +1,98 @@
+program = _{ SOI ~ toplevel* ~ EOI }
+
+toplevel = _{
+    (function_def | channel_def | output_def) ~ ";"
+}
+
+function_args = { identifier* }
+
+function_def = {
+    identifier ~ ":" ~ type_expr ~ "def" ~ identifier ~ function_args ~ "=" ~ expr
+}
+channel_def  = { "chan" ~ identifier ~ ":" ~ type_expr }
+output_def   = { identifier ~ "<-" ~ expr }
+
+// Types
+type_expr   =  { atomic_type ~ (type_op ~ atomic_type)* }
+atomic_type = _{ int_type | bool_type | unit_type | parenthesis_or_tuple_type }
+type_op     = _{ arrow }
+int_type    =  { "int" }
+bool_type   =  { "bool" }
+unit_type   =  { "()" }
+arrow       =  { "->" }
+
+parenthesis_or_tuple_type = {
+    "(" ~ type_expr ~ ("*" ~ type_expr)* ~ ")"
+}
+
+term = { primary ~ (primary*) }
+expr = { (term ~ (infix ~ term)*) }
+
+channel_set = { "{" ~ identifier+ ~ "}" }
+
+let_expr     = { "let" ~ identifier ~ "=" ~ expr ~ "in" ~ expr }
+fun_expr     = { "fun" ~ function_args ~ "->" ~ expr }
+if_expr      = { "if" ~ expr ~ "then" ~ expr ~ "else" ~ expr }
+delay_expr   = { "delay" ~ channel_set ~ expr }
+advance_expr = { "advance" ~ identifier }
+wait_expr    = { "wait" ~ identifier }
+
+primary = _{
+    let_expr
+  | fun_expr
+  | if_expr
+  | delay_expr
+  | advance_expr
+  | wait_expr
+  | parenthesis_or_tuple
+  | integer
+  | true_lit
+  | false_lit
+  | unit_lit
+  | !keyword ~ identifier
+}
+
+parenthesis_or_tuple = {
+    "(" ~ expr ~ ("," ~ expr)* ~ ")"
+}
+
+infix = _{
+    equality_op
+  | relational_op
+  | add_op
+  | mul_op
+}
+
+equality_op   = { "=" | "<>" }
+relational_op = { "<=" | ">=" | "<" | ">" }
+add_op        = { "+" | "-" }
+mul_op        = { "*" | "/" }
+
+// Terminals
+identifier = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+integer    = @{ "-"? ~ ("0" | ASCII_NONZERO_DIGIT ~ ASCII_DIGIT*) }
+true_lit   =  { "true" }
+false_lit  =  { "false" }
+unit_lit   =  { "()" }
+
+keyword = _{
+    "def"
+  | "let"
+  | "in"
+  | "if"
+  | "then"
+  | "else"
+  | "fun"
+  | "chan"
+  | "delay"
+  | "advance"
+  | "wait"
+  | "true"
+  | "false"
+}
+
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
+COMMENT    = _{
+    "/*" ~ (!"*/" ~ ANY)* ~ "*/"
+  | "//" ~ (!("\n") ~ ANY)*
+}

@@ -336,7 +336,7 @@ impl<'a> AnfWasmEmitter<'a> {
                 let func_idx = self.func_map[name.as_str()];
                 self.locals_name_map.append(func_idx, &locals_name_map)
             }
-            AnfToplevel::Channel(_) => {}
+            AnfToplevel::Channel(_, _) => {}
             AnfToplevel::Output(_, _) => {}
         }
     }

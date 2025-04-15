@@ -107,7 +107,7 @@ impl<'a> BareWasmEmitter<'a> {
                 self.locals_name_map.append(func_idx, &locals_name_map)
             }
 
-            TypedToplevel::Channel(_) => {}
+            TypedToplevel::Channel(_, _) => {}
             TypedToplevel::Output(_, _) => {}
         }
     }

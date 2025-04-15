@@ -81,6 +81,7 @@ impl ANFConversion {
                 let body_anf = self.normalize(*body);
                 AnfExpr::AExpr(AExpr::Lam(params, Box::new(body_anf), ty))
             }
+            TypedExpr::TWait(name, _) => unimplemented!("normalize wait on {name}"),
         }
     }
 
@@ -127,7 +128,7 @@ impl Pass<TypedProg, AnfProg> for ANFConversion {
                     let anf_body = self.normalize(*body);
                     AnfToplevel::FunDef(name, args, anf_body, ty)
                 }
-                TypedToplevel::Channel(chan) => AnfToplevel::Channel(chan),
+                TypedToplevel::Channel(chan, typ) => AnfToplevel::Channel(chan, typ),
                 TypedToplevel::Output(name, body) => {
                     let (aexpr, _) = self.normalize_atom(*body);
                     AnfToplevel::Output(name, aexpr)

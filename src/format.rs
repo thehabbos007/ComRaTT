@@ -33,6 +33,7 @@ impl TypedExpr {
                 Expr::Tuple(exprs.iter().map(|e| e.untyped()).collect_vec())
             }
             TypedExpr::TAccess(e, i, _) => Expr::Access(e.untyped().b(), *i),
+            TypedExpr::TWait(name, _) => Expr::Wait(name.clone()),
         }
     }
 }
@@ -46,7 +47,7 @@ impl TypedToplevel {
                 args.clone().into_iter().map(|(name, _)| name).collect_vec(),
                 body.untyped(),
             ),
-            TypedToplevel::Channel(name) => Toplevel::Channel(name.to_owned()),
+            TypedToplevel::Channel(name, t) => Toplevel::Channel(name.to_owned(), t.clone()),
             TypedToplevel::Output(name, typed_expr) => {
                 Toplevel::Output(name.to_owned(), typed_expr.untyped())
             }
@@ -165,6 +166,7 @@ impl Expr {
                 )
             }
             Expr::Access(e, i) => format!("{}.{}", e, i),
+            Expr::Wait(i) => format!("wait {}", i),
         }
     }
 }
@@ -188,7 +190,7 @@ impl Toplevel {
                     body
                 )
             }
-            Toplevel::Channel(channel) => format!("chan {channel};"),
+            Toplevel::Channel(channel, t) => format!("chan {channel}: {t};"),
             Toplevel::Output(out, expr) => format!("{} <- {}", out, expr),
         }
     }
@@ -247,6 +249,7 @@ impl Display for TypedExpr {
                 write!(f, "({})", exprs_str)
             }
             TypedExpr::TAccess(e, i, _) => write!(f, "{}.{}", e, i),
+            TypedExpr::TWait(name, _) => write!(f, "wait {}", name),
         }
     }
 }
@@ -262,7 +265,7 @@ impl Display for TypedToplevel {
                     .join(", ");
                 writeln!(f, "def {}({}) : {} =\n  {}", name, param_str, ret_ty, body)
             }
-            TypedToplevel::Channel(name) => writeln!(f, "channel {};", name),
+            TypedToplevel::Channel(name, ty) => writeln!(f, "channel {} : {};", name, ty),
             TypedToplevel::Output(name, expr) => writeln!(f, "{} <- {};", name, expr),
         }
     }
@@ -298,7 +301,7 @@ impl Display for AnfToplevel {
                     .join(", ");
                 writeln!(f, "def {}({}) : {} =\n  {}", name, param_str, ret_ty, body)
             }
-            AnfToplevel::Channel(name) => writeln!(f, "channel {};", name),
+            AnfToplevel::Channel(name, typ) => writeln!(f, "channel {} : {};", name, typ),
             AnfToplevel::Output(name, aexpr) => writeln!(f, "{} <- {};", name, aexpr),
         }
     }

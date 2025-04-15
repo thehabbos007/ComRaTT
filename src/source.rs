@@ -34,6 +34,7 @@ pub enum Expr {
     IfThenElse(Box<Expr>, Box<Expr>, Box<Expr>),
     Delay(Box<Expr>, HashSet<String>),
     Advance(String),
+    Wait(String),
     Tuple(Vec<Expr>),
     Access(Box<Expr>, i32),
 }
@@ -112,7 +113,7 @@ pub enum Toplevel {
     /// A top level function defintion. The type provided is a type for the entire expression,
     /// including args and return type.
     FunDef(String, Type, Vec<String>, Expr),
-    Channel(String),
+    Channel(String, Type),
     Output(String, Expr),
 }
 
