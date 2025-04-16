@@ -316,13 +316,13 @@ impl Inference {
                     panic!("Type checking wait on unbound channel {}", name)
                 };
                 (
-                    Type::TFun(Type::TUnit.b(), ty.clone().b()),
+                    Type::TFun(Type::TLaterUnit.b(), ty.clone().b()),
                     TypeOutput::new(
                         Vec::new(),
                         TypedExpr::TLam(
-                            vec![("#advance_unit".to_owned(), Type::TUnit)],
+                            vec![("#advance_later_unit".to_owned(), Type::TLaterUnit)],
                             TypedExpr::TWait(name, ty.clone()).b(),
-                            Type::TFun(Type::TUnit.b(), ty.clone().b()),
+                            Type::TFun(Type::TLaterUnit.b(), ty.clone().b()),
                         ),
                     ),
                 )
