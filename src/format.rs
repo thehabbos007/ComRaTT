@@ -11,7 +11,7 @@ use crate::{
 impl TypedExpr {
     pub fn untyped(&self) -> Expr {
         match self {
-            TypedExpr::TConst(c, _) => Expr::Const(*c),
+            TypedExpr::TConst(c, _) => Expr::Const(c.clone()),
             TypedExpr::TName(x, _) => Expr::Var(x.clone()),
             TypedExpr::TLam(args, body, _) => Expr::Lam(
                 args.clone().into_iter().map(|(name, _)| name).collect_vec(),
@@ -91,13 +91,24 @@ impl Display for Const {
     }
 }
 
+impl Display for ClockExpr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ClockExpr::Cl(v) => write!(f, "cl({v})"),
+            ClockExpr::Union(cl1, cl2) => write!(f, "{cl1} ⊔ {cl2}"),
+            ClockExpr::Wait(v) => write!(f, "cl(wait_{v})"),
+            ClockExpr::Never => write!(f, "never"),
+        }
+    }
+}
+
 impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Type::TInt => write!(f, "int"),
             Type::TBool => write!(f, "bool"),
             Type::TUnit => write!(f, "()"),
-            Type::TLaterUnit => write!(f, "{{}}"),
+            Type::TLaterUnit(clock) => write!(f, "{{{clock}}}"),
             Type::TVar(type_var) => write!(f, "TVar {}", type_var.0),
             Type::TFun(t1, t2) => write!(f, "{} -> {}", t1, t2),
             Type::TProduct(types) => {
@@ -153,7 +164,7 @@ impl Expr {
             Expr::IfThenElse(cond, then_branch, else_branch) => {
                 format!("if {} then {} else {}", cond, then_branch, else_branch)
             }
-            Expr::Delay(e, c) => format!("delay {{{}}} {}", c.iter().join(" "), e),
+            Expr::Delay(e, c) => format!("delay {{{}}} {}", c, e),
             Expr::Advance(x) => format!("advance {}", x),
             Expr::Tuple(exprs) => {
                 format!(

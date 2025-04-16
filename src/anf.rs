@@ -87,7 +87,7 @@ pub enum AnfToplevel {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AnfProg(pub Vec<AnfToplevel>);
+pub struct AnfProg(pub Vec<AnfToplevel>, pub Vec<(Sym, Type)>);
 
 impl Deref for AnfProg {
     type Target = Vec<AnfToplevel>;

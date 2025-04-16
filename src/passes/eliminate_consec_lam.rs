@@ -23,7 +23,7 @@ impl Pass for EliminateConsecLam {
             })
             .collect_vec();
 
-        defs.into()
+        TypedProg(defs, prog.1)
     }
 }
 
@@ -294,7 +294,7 @@ mod tests {
             construct_type(&["Int", "Int", "Int"]),
         );
 
-        let prog = TypedProg(vec![fun_def]);
+        let prog = TypedProg(vec![fun_def], vec![]);
         let result = pass.run(prog);
 
         // Check the result

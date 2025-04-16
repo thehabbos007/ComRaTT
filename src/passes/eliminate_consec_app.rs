@@ -34,7 +34,7 @@ impl Pass for EliminateConsecApp {
             })
             .collect_vec();
 
-        defs.into()
+        TypedProg(defs, prog.1)
     }
 }
 
@@ -337,24 +337,27 @@ mod tests {
         let expr = TypedExpr::TApp(Box::new(bloo_x_x_x), vec![five], Type::TInt);
 
         // Create the top-level program with the bloo function definition
-        let toplevel = TypedProg(vec![
-            TypedToplevel::TFunDef(
-                "bloo".to_owned(),
-                vec![
-                    ("x".to_owned(), Type::TInt),
-                    ("y".to_owned(), Type::TInt),
-                    ("z".to_owned(), Type::TInt),
-                ],
-                bloo_body.b(),
-                Type::TInt,
-            ),
-            TypedToplevel::TFunDef(
-                "main".to_owned(),
-                vec![("x".to_owned(), Type::TInt)],
-                expr.b(),
-                Type::TInt,
-            ),
-        ]);
+        let toplevel = TypedProg(
+            vec![
+                TypedToplevel::TFunDef(
+                    "bloo".to_owned(),
+                    vec![
+                        ("x".to_owned(), Type::TInt),
+                        ("y".to_owned(), Type::TInt),
+                        ("z".to_owned(), Type::TInt),
+                    ],
+                    bloo_body.b(),
+                    Type::TInt,
+                ),
+                TypedToplevel::TFunDef(
+                    "main".to_owned(),
+                    vec![("x".to_owned(), Type::TInt)],
+                    expr.b(),
+                    Type::TInt,
+                ),
+            ],
+            Default::default(),
+        );
 
         let result = eliminator.run(toplevel);
 

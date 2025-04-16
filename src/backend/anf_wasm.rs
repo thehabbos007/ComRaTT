@@ -9,8 +9,8 @@ use std::iter;
 use std::ops::{Deref, DerefMut};
 
 use crate::anf::{AExpr, AnfExpr, AnfProg, AnfToplevel, CExpr};
-use crate::backend::wasm_emitter::{CLOSURE_HEAP_INDEX, LOCATION_HEAP_INDEX};
-use crate::source::{Binop, Const, Type};
+use crate::backend::wasm_emitter::{CLOCK_OF_FUN_IDX, CLOSURE_HEAP_INDEX, LOCATION_HEAP_INDEX};
+use crate::source::{Binop, ClockExpr, Const, Type};
 use crate::types::count_tfun_args;
 
 use super::wasm_emitter::WasmEmitter;
@@ -23,6 +23,7 @@ const LOCAL_DUP_I32_NAME: &str = "dupi32";
 const FUNCTION_INDEX_OFFSET: u64 = 0;
 const ARITY_OFFSET: u64 = WASM_WORD_SIZE as u64;
 const POPULATE_OFFSET: u64 = WASM_WORD_SIZE as u64 * 2;
+const LOCATION_HEAP_CLOSURE_PTR_OFFSET: u64 = 0;
 
 pub struct AnfWasmEmitter<'a> {
     wasm_emitter: WasmEmitter<'a>,
@@ -119,10 +120,10 @@ impl<'a> AnfWasmEmitter<'a> {
         // returns anything (could be numeric value, could be pointer, could be bool, the sky is the limit)
         // (func (param i32) (result i32))
         let name = "dispatch";
-        // TODO: we assume an invariant where we have a partially applied function with one remaining argument
-        //   so the dispatch function will take a closure and that last argument.
-        //   In an ideal world, we would populate the closure fully (failing if we are "over applying")
-        //   before passing it on to dispatch.
+        // We assume an invariant where we have a partially applied function with one remaining argument
+        // so the dispatch function will take a closure and that last argument.
+        // In an ideal world, we would populate the closure fully (failing if we are "over applying")
+        // before passing it on to dispatch.
         let params = [ValType::I32, ValType::I32];
         self.locals_map.clear();
         // self.locals_map.insert("closure_ptr", 0);
@@ -242,7 +243,7 @@ impl<'a> AnfWasmEmitter<'a> {
 
         // Load closure heap ptr from location heap ptr
         let loc_heap_load_arg = MemArg {
-            offset: 0, // TODO NAME THIS CONST
+            offset: LOCATION_HEAP_CLOSURE_PTR_OFFSET,
             align: WASM_ALIGNMENT_SIZE,
             memory_index: LOCATION_HEAP_INDEX,
         };
@@ -338,6 +339,57 @@ impl<'a> AnfWasmEmitter<'a> {
             }
             AnfToplevel::Channel(_, _) => {}
             AnfToplevel::Output(_, _) => {}
+        }
+    }
+
+    /// Generate a bit from a channel name.
+    /// We store clocks as i32s in WASM.
+    /// Each channel is represented by a bit, a union clock is a bit pattern.
+    /// Thus we only allow 32 unique channels.
+    fn channel_to_index(&self, channel_name: &str) -> i32 {
+        let index = self
+            .prog
+            .1
+            .iter()
+            .position(|(name, _)| *name == channel_name)
+            .expect(&format!(
+                "Failed to lookup and generate index of channel {channel_name}"
+            ));
+
+        2_u32.pow(index as u32) as i32
+    }
+
+    fn generate_clock_of_binding_call(&self, binding: &str, func: &mut Function) {
+        // The binding refers to a delayed computation
+        // which will be a ptr at this point.
+        let Some(&local_idx) = self.locals_map.get(binding) else {
+            panic!("ClockExpr Cl({}) referred to non-local binding while compiling delayed computation", binding);
+        };
+        func.instruction(&Instruction::LocalGet(local_idx));
+        func.instruction(&Instruction::I32Const(CLOCK_OF_FUN_IDX as i32));
+        func.instruction(&Instruction::CallIndirect {
+            type_index: CLOCK_OF_FUN_IDX,
+            table_index: 0,
+        });
+    }
+
+    fn gen_clock_of(&self, clock: &ClockExpr, func: &mut Function) {
+        match clock {
+            crate::source::ClockExpr::Never => {
+                func.instruction(&Instruction::I32Const(0));
+            }
+            crate::source::ClockExpr::Wait(channel_name) => {
+                let channel_index = self.channel_to_index(channel_name);
+                func.instruction(&Instruction::I32Const(channel_index));
+            }
+            crate::source::ClockExpr::Cl(binding) => {
+                self.generate_clock_of_binding_call(binding, func);
+            }
+            crate::source::ClockExpr::Union(c1, c2) => {
+                self.gen_clock_of(c1, func);
+                self.gen_clock_of(c2, func);
+                func.instruction(&Instruction::I32Or);
+            }
         }
     }
 
@@ -494,7 +546,7 @@ impl<'a> AnfWasmEmitter<'a> {
                 // argument.
                 assert_eq!(lam_args.len(), 1, "Length of closure args should be 1");
                 if let Some((_, arg_ty)) = lam_args.first()
-                    && let Type::TLaterUnit = arg_ty
+                    && let Type::TLaterUnit(clock) = arg_ty
                 {
                     // At this point the stack top is a pointer to the closure heap.
                     // The clock is a hardcoded bogus value atm. but will have to be
@@ -532,8 +584,10 @@ impl<'a> AnfWasmEmitter<'a> {
                     func.instruction(&Instruction::I32Const(4));
                     func.instruction(&Instruction::I32Sub);
 
-                    // STORE BOGUS CLOCK FOR NOW
-                    func.instruction(&Instruction::I32Const(42));
+                    // INSPECT CLOCK EXPRESSION TO DETERMINE HOW TO POPULATE CLOCK PART OF LOCATION
+                    // - Wait on channel directly: insert a channel index
+                    // - Cl(v) and union case: generate code to look up the clock at runtime
+                    self.gen_clock_of(clock, func);
 
                     let clock_arg = MemArg {
                         offset: 0,
@@ -756,7 +810,11 @@ impl<'a> AnfWasmEmitter<'a> {
             Type::TInt => ValType::I32,
             Type::TBool => ValType::I32,
             Type::TUnit => ValType::I32,
-            Type::TLaterUnit => ValType::I32,
+            // We do not care about the clock here
+            // because TLaterUnit is only symbolic.
+            // At the WASM level it is just an i32 unit argument
+            // for a thunk.
+            Type::TLaterUnit(_) => ValType::I32,
             Type::TFun(_, _) => ValType::I32,
             Type::TProduct(_) => ValType::I32,
             Type::TVar(_) => panic!("Type variables not supported as value types"),
@@ -800,12 +858,15 @@ mod tests {
 
     #[test]
     fn test_atomic_const() {
-        let prog = AnfProg(vec![AnfToplevel::FunDef(
-            "main".to_string(),
-            vec![],
-            AnfExpr::AExpr(AExpr::Const(Const::CInt(42), Type::TInt)),
-            Type::TInt,
-        )]);
+        let prog = AnfProg(
+            vec![AnfToplevel::FunDef(
+                "main".to_string(),
+                vec![],
+                AnfExpr::AExpr(AExpr::Const(Const::CInt(42), Type::TInt)),
+                Type::TInt,
+            )],
+            Default::default(),
+        );
 
         let emitter = AnfWasmEmitter::new(&prog);
         let wasm = emitter.emit();
@@ -814,12 +875,15 @@ mod tests {
 
     #[test]
     fn test_atomic_variable() {
-        let prog = AnfProg(vec![AnfToplevel::FunDef(
-            "main".to_string(),
-            vec![("x".to_string(), Type::TInt)],
-            AnfExpr::AExpr(AExpr::Var("x".to_string(), Type::TInt)),
-            Type::TInt,
-        )]);
+        let prog = AnfProg(
+            vec![AnfToplevel::FunDef(
+                "main".to_string(),
+                vec![("x".to_string(), Type::TInt)],
+                AnfExpr::AExpr(AExpr::Var("x".to_string(), Type::TInt)),
+                Type::TInt,
+            )],
+            Default::default(),
+        );
 
         let emitter = AnfWasmEmitter::new(&prog);
         let wasm = emitter.emit();
@@ -828,17 +892,20 @@ mod tests {
 
     #[test]
     fn test_simple_arithmetic() {
-        let prog = AnfProg(vec![AnfToplevel::FunDef(
-            "main".to_string(),
-            vec![],
-            AnfExpr::CExp(CExpr::Prim(
-                Binop::Add,
-                AExpr::Const(Const::CInt(40), Type::TInt),
-                AExpr::Const(Const::CInt(2), Type::TInt),
+        let prog = AnfProg(
+            vec![AnfToplevel::FunDef(
+                "main".to_string(),
+                vec![],
+                AnfExpr::CExp(CExpr::Prim(
+                    Binop::Add,
+                    AExpr::Const(Const::CInt(40), Type::TInt),
+                    AExpr::Const(Const::CInt(2), Type::TInt),
+                    Type::TInt,
+                )),
                 Type::TInt,
-            )),
-            Type::TInt,
-        )]);
+            )],
+            Default::default(),
+        );
 
         let emitter = AnfWasmEmitter::new(&prog);
         let wasm = emitter.emit();
@@ -847,22 +914,25 @@ mod tests {
 
     #[test]
     fn test_let_binding() {
-        let prog = AnfProg(vec![AnfToplevel::FunDef(
-            "main".to_string(),
-            vec![],
-            AnfExpr::Let(
-                "x".to_string(),
-                Type::TInt,
-                Box::new(AnfExpr::CExp(CExpr::Prim(
-                    Binop::Add,
-                    AExpr::Const(Const::CInt(1), Type::TInt),
-                    AExpr::Const(Const::CInt(2), Type::TInt),
+        let prog = AnfProg(
+            vec![AnfToplevel::FunDef(
+                "main".to_string(),
+                vec![],
+                AnfExpr::Let(
+                    "x".to_string(),
                     Type::TInt,
-                ))),
-                Box::new(AnfExpr::AExpr(AExpr::Var("x".to_string(), Type::TInt))),
-            ),
-            Type::TInt,
-        )]);
+                    Box::new(AnfExpr::CExp(CExpr::Prim(
+                        Binop::Add,
+                        AExpr::Const(Const::CInt(1), Type::TInt),
+                        AExpr::Const(Const::CInt(2), Type::TInt),
+                        Type::TInt,
+                    ))),
+                    Box::new(AnfExpr::AExpr(AExpr::Var("x".to_string(), Type::TInt))),
+                ),
+                Type::TInt,
+            )],
+            Default::default(),
+        );
 
         let emitter = AnfWasmEmitter::new(&prog);
         let wasm = emitter.emit();
@@ -871,32 +941,35 @@ mod tests {
 
     #[test]
     fn test_nested_let_bindings() {
-        let prog = AnfProg(vec![AnfToplevel::FunDef(
-            "main".to_string(),
-            vec![],
-            AnfExpr::Let(
-                "x".to_string(),
-                Type::TInt,
-                Box::new(AnfExpr::CExp(CExpr::Prim(
-                    Binop::Add,
-                    AExpr::Const(Const::CInt(1), Type::TInt),
-                    AExpr::Const(Const::CInt(2), Type::TInt),
-                    Type::TInt,
-                ))),
-                Box::new(AnfExpr::Let(
-                    "y".to_string(),
+        let prog = AnfProg(
+            vec![AnfToplevel::FunDef(
+                "main".to_string(),
+                vec![],
+                AnfExpr::Let(
+                    "x".to_string(),
                     Type::TInt,
                     Box::new(AnfExpr::CExp(CExpr::Prim(
                         Binop::Add,
-                        AExpr::Var("x".to_string(), Type::TInt),
-                        AExpr::Const(Const::CInt(3), Type::TInt),
+                        AExpr::Const(Const::CInt(1), Type::TInt),
+                        AExpr::Const(Const::CInt(2), Type::TInt),
                         Type::TInt,
                     ))),
-                    Box::new(AnfExpr::AExpr(AExpr::Var("y".to_string(), Type::TInt))),
-                )),
-            ),
-            Type::TInt,
-        )]);
+                    Box::new(AnfExpr::Let(
+                        "y".to_string(),
+                        Type::TInt,
+                        Box::new(AnfExpr::CExp(CExpr::Prim(
+                            Binop::Add,
+                            AExpr::Var("x".to_string(), Type::TInt),
+                            AExpr::Const(Const::CInt(3), Type::TInt),
+                            Type::TInt,
+                        ))),
+                        Box::new(AnfExpr::AExpr(AExpr::Var("y".to_string(), Type::TInt))),
+                    )),
+                ),
+                Type::TInt,
+            )],
+            Default::default(),
+        );
 
         let emitter = AnfWasmEmitter::new(&prog);
         let wasm = emitter.emit();
@@ -905,27 +978,30 @@ mod tests {
 
     #[test]
     fn test_function_call() {
-        let prog = AnfProg(vec![
-            AnfToplevel::FunDef(
-                "id".to_string(),
-                vec![("x".to_string(), Type::TInt)],
-                AnfExpr::AExpr(AExpr::Var("x".to_string(), Type::TInt)),
-                Type::TInt,
-            ),
-            AnfToplevel::FunDef(
-                "main".to_string(),
-                vec![],
-                AnfExpr::CExp(CExpr::App(
-                    AExpr::Var(
-                        "id".to_string(),
-                        Type::TFun(Box::new(Type::TInt), Box::new(Type::TInt)),
-                    ),
-                    vec![AExpr::Const(Const::CInt(42), Type::TInt)],
+        let prog = AnfProg(
+            vec![
+                AnfToplevel::FunDef(
+                    "id".to_string(),
+                    vec![("x".to_string(), Type::TInt)],
+                    AnfExpr::AExpr(AExpr::Var("x".to_string(), Type::TInt)),
                     Type::TInt,
-                )),
-                Type::TInt,
-            ),
-        ]);
+                ),
+                AnfToplevel::FunDef(
+                    "main".to_string(),
+                    vec![],
+                    AnfExpr::CExp(CExpr::App(
+                        AExpr::Var(
+                            "id".to_string(),
+                            Type::TFun(Box::new(Type::TInt), Box::new(Type::TInt)),
+                        ),
+                        vec![AExpr::Const(Const::CInt(42), Type::TInt)],
+                        Type::TInt,
+                    )),
+                    Type::TInt,
+                ),
+            ],
+            Default::default(),
+        );
 
         let emitter = AnfWasmEmitter::new(&prog);
         let wasm = emitter.emit();
@@ -934,17 +1010,20 @@ mod tests {
 
     #[test]
     fn test_conditional() {
-        let prog = AnfProg(vec![AnfToplevel::FunDef(
-            "main".to_string(),
-            vec![],
-            AnfExpr::CExp(CExpr::IfThenElse(
-                AExpr::Const(Const::CBool(true), Type::TBool),
-                Box::new(AnfExpr::AExpr(AExpr::Const(Const::CInt(1), Type::TInt))),
-                Box::new(AnfExpr::AExpr(AExpr::Const(Const::CInt(0), Type::TInt))),
+        let prog = AnfProg(
+            vec![AnfToplevel::FunDef(
+                "main".to_string(),
+                vec![],
+                AnfExpr::CExp(CExpr::IfThenElse(
+                    AExpr::Const(Const::CBool(true), Type::TBool),
+                    Box::new(AnfExpr::AExpr(AExpr::Const(Const::CInt(1), Type::TInt))),
+                    Box::new(AnfExpr::AExpr(AExpr::Const(Const::CInt(0), Type::TInt))),
+                    Type::TInt,
+                )),
                 Type::TInt,
-            )),
-            Type::TInt,
-        )]);
+            )],
+            Default::default(),
+        );
 
         let emitter = AnfWasmEmitter::new(&prog);
         let wasm = emitter.emit();
@@ -956,47 +1035,50 @@ mod tests {
         // Computes: let x = 1 + 2 in
         //          let y = x + 3 in
         //          if y > 5 then y else 0
-        let prog = AnfProg(vec![AnfToplevel::FunDef(
-            "main".to_string(),
-            vec![],
-            AnfExpr::Let(
-                "x".to_string(),
-                Type::TInt,
-                Box::new(AnfExpr::CExp(CExpr::Prim(
-                    Binop::Add,
-                    AExpr::Const(Const::CInt(1), Type::TInt),
-                    AExpr::Const(Const::CInt(2), Type::TInt),
-                    Type::TInt,
-                ))),
-                Box::new(AnfExpr::Let(
-                    "y".to_string(),
+        let prog = AnfProg(
+            vec![AnfToplevel::FunDef(
+                "main".to_string(),
+                vec![],
+                AnfExpr::Let(
+                    "x".to_string(),
                     Type::TInt,
                     Box::new(AnfExpr::CExp(CExpr::Prim(
                         Binop::Add,
-                        AExpr::Var("x".to_string(), Type::TInt),
-                        AExpr::Const(Const::CInt(3), Type::TInt),
+                        AExpr::Const(Const::CInt(1), Type::TInt),
+                        AExpr::Const(Const::CInt(2), Type::TInt),
                         Type::TInt,
                     ))),
                     Box::new(AnfExpr::Let(
-                        "cond".to_string(),
+                        "y".to_string(),
                         Type::TInt,
                         Box::new(AnfExpr::CExp(CExpr::Prim(
-                            Binop::Gt,
-                            AExpr::Var("y".to_string(), Type::TInt),
-                            AExpr::Const(Const::CInt(5), Type::TInt),
-                            Type::TBool,
-                        ))),
-                        Box::new(AnfExpr::CExp(CExpr::IfThenElse(
-                            AExpr::Var("cond".to_string(), Type::TBool),
-                            Box::new(AnfExpr::AExpr(AExpr::Var("y".to_string(), Type::TInt))),
-                            Box::new(AnfExpr::AExpr(AExpr::Const(Const::CInt(0), Type::TInt))),
+                            Binop::Add,
+                            AExpr::Var("x".to_string(), Type::TInt),
+                            AExpr::Const(Const::CInt(3), Type::TInt),
                             Type::TInt,
                         ))),
+                        Box::new(AnfExpr::Let(
+                            "cond".to_string(),
+                            Type::TInt,
+                            Box::new(AnfExpr::CExp(CExpr::Prim(
+                                Binop::Gt,
+                                AExpr::Var("y".to_string(), Type::TInt),
+                                AExpr::Const(Const::CInt(5), Type::TInt),
+                                Type::TBool,
+                            ))),
+                            Box::new(AnfExpr::CExp(CExpr::IfThenElse(
+                                AExpr::Var("cond".to_string(), Type::TBool),
+                                Box::new(AnfExpr::AExpr(AExpr::Var("y".to_string(), Type::TInt))),
+                                Box::new(AnfExpr::AExpr(AExpr::Const(Const::CInt(0), Type::TInt))),
+                                Type::TInt,
+                            ))),
+                        )),
                     )),
-                )),
-            ),
-            Type::TInt,
-        )]);
+                ),
+                Type::TInt,
+            )],
+            Default::default(),
+        );
 
         let emitter = AnfWasmEmitter::new(&prog);
         let wasm = emitter.emit();
@@ -1007,15 +1089,18 @@ mod tests {
     #[test]
     #[should_panic(expected = "Function types not supported as value types")]
     fn test_unsupported_function_type() {
-        let prog = AnfProg(vec![AnfToplevel::FunDef(
-            "main".to_string(),
-            vec![],
-            AnfExpr::AExpr(AExpr::Const(
-                Const::CUnit,
+        let prog = AnfProg(
+            vec![AnfToplevel::FunDef(
+                "main".to_string(),
+                vec![],
+                AnfExpr::AExpr(AExpr::Const(
+                    Const::CUnit,
+                    Type::TFun(Box::new(Type::TUnit), Box::new(Type::TUnit)),
+                )),
                 Type::TFun(Box::new(Type::TUnit), Box::new(Type::TUnit)),
-            )),
-            Type::TFun(Box::new(Type::TUnit), Box::new(Type::TUnit)),
-        )]);
+            )],
+            Default::default(),
+        );
 
         let emitter = AnfWasmEmitter::new(&prog);
         emitter.emit();
@@ -1023,30 +1108,33 @@ mod tests {
 
     #[test]
     fn test_complex_if_then_else() {
-        let prog = TypedProg(vec![TypedToplevel::TFunDef(
-            "test".into(),
-            vec![("n".into(), Type::TInt)],
-            TypedExpr::TIfThenElse(
-                TypedExpr::TPrim(
-                    Binop::Gt,
+        let prog = TypedProg(
+            vec![TypedToplevel::TFunDef(
+                "test".into(),
+                vec![("n".into(), Type::TInt)],
+                TypedExpr::TIfThenElse(
                     TypedExpr::TPrim(
-                        Binop::Mul,
-                        TypedExpr::TName("n".into(), Type::TInt).b(),
-                        TypedExpr::TName("n".into(), Type::TInt).b(),
-                        Type::TInt,
+                        Binop::Gt,
+                        TypedExpr::TPrim(
+                            Binop::Mul,
+                            TypedExpr::TName("n".into(), Type::TInt).b(),
+                            TypedExpr::TName("n".into(), Type::TInt).b(),
+                            Type::TInt,
+                        )
+                        .b(),
+                        TypedExpr::TConst(Const::CInt(2), Type::TInt).b(),
+                        Type::TBool,
                     )
                     .b(),
-                    TypedExpr::TConst(Const::CInt(2), Type::TInt).b(),
+                    TypedExpr::TConst(Const::CBool(true), Type::TBool).b(),
+                    TypedExpr::TConst(Const::CBool(false), Type::TBool).b(),
                     Type::TBool,
                 )
                 .b(),
-                TypedExpr::TConst(Const::CBool(true), Type::TBool).b(),
-                TypedExpr::TConst(Const::CBool(false), Type::TBool).b(),
                 Type::TBool,
-            )
-            .b(),
-            Type::TBool,
-        )]);
+            )],
+            Default::default(),
+        );
 
         let prog = ANFConversion::new().run(prog);
 
@@ -1058,38 +1146,41 @@ mod tests {
 
     #[test]
     fn test_multiple_functions() {
-        let prog = AnfProg(vec![
-            AnfToplevel::FunDef(
-                "add".to_string(),
-                vec![("x".to_string(), Type::TInt), ("y".to_string(), Type::TInt)],
-                AnfExpr::CExp(CExpr::Prim(
-                    Binop::Add,
-                    AExpr::Var("x".to_string(), Type::TInt),
-                    AExpr::Var("y".to_string(), Type::TInt),
+        let prog = AnfProg(
+            vec![
+                AnfToplevel::FunDef(
+                    "add".to_string(),
+                    vec![("x".to_string(), Type::TInt), ("y".to_string(), Type::TInt)],
+                    AnfExpr::CExp(CExpr::Prim(
+                        Binop::Add,
+                        AExpr::Var("x".to_string(), Type::TInt),
+                        AExpr::Var("y".to_string(), Type::TInt),
+                        Type::TInt,
+                    )),
                     Type::TInt,
-                )),
-                Type::TInt,
-            ),
-            AnfToplevel::FunDef(
-                "main".to_string(),
-                vec![],
-                AnfExpr::CExp(CExpr::App(
-                    AExpr::Var(
-                        "add".to_string(),
-                        Type::TFun(
-                            Box::new(Type::TInt),
-                            Box::new(Type::TFun(Box::new(Type::TInt), Box::new(Type::TInt))),
+                ),
+                AnfToplevel::FunDef(
+                    "main".to_string(),
+                    vec![],
+                    AnfExpr::CExp(CExpr::App(
+                        AExpr::Var(
+                            "add".to_string(),
+                            Type::TFun(
+                                Box::new(Type::TInt),
+                                Box::new(Type::TFun(Box::new(Type::TInt), Box::new(Type::TInt))),
+                            ),
                         ),
-                    ),
-                    vec![
-                        AExpr::Const(Const::CInt(40), Type::TInt),
-                        AExpr::Const(Const::CInt(2), Type::TInt),
-                    ],
+                        vec![
+                            AExpr::Const(Const::CInt(40), Type::TInt),
+                            AExpr::Const(Const::CInt(2), Type::TInt),
+                        ],
+                        Type::TInt,
+                    )),
                     Type::TInt,
-                )),
-                Type::TInt,
-            ),
-        ]);
+                ),
+            ],
+            Default::default(),
+        );
 
         let emitter = AnfWasmEmitter::new(&prog);
         let wasm = emitter.emit();

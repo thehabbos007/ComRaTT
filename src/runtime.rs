@@ -45,6 +45,20 @@ impl Runtime {
             .expect("Failed to call main function");
         println!("Reactive machine received ptr {res:?} from calling main");
 
+        let clos = instance.get_memory(&mut store, "heap").unwrap();
+        let loc = instance.get_memory(&mut store, "location").unwrap();
+        println!("closure {:?}", &clos.data(&mut store)[..48]);
+        println!("location {:?}", &loc.data(&mut store)[..48]);
+
+        // Clock of testing
+        let clock_of = instance
+            .get_typed_func::<i32, i32>(&mut store, "clock_of")
+            .expect("Failed to retrieve clock of function");
+
+        let clock = clock_of
+            .call(&mut store, res)
+            .expect("failed to call clock of");
+        println!("clock for {res} is {clock}");
 
         // call dispatch with the closure pointer returned from main
         // and supply the unit argument
