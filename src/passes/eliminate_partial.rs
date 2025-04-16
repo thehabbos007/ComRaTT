@@ -28,7 +28,7 @@ impl Pass for PartialElimination {
             })
             .collect_vec();
 
-        defs.into()
+        TypedProg(defs, prog.1)
     }
 }
 

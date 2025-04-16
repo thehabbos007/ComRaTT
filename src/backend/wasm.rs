@@ -140,7 +140,8 @@ impl<'a> BareWasmEmitter<'a> {
             Type::TInt => ValType::I32,
             Type::TBool => ValType::I32,
             Type::TUnit => ValType::I32,
-            Type::TLaterUnit => ValType::I32,
+            // TODO do we need to consider clocks here?
+            Type::TLaterUnit(_) => ValType::I32,
             Type::TFun(_, _) => panic!("Function types not supported as value types"),
             Type::TProduct(_) => panic!("Product types not supported as value types"),
             Type::TVar(_) => panic!("Type variables not supported as value types"),
@@ -256,12 +257,15 @@ mod tests {
 
     #[test]
     fn test_const_int() {
-        let prog = TypedProg(vec![TypedToplevel::TFunDef(
-            "main".to_string(),
-            vec![],
-            Box::new(TypedExpr::TConst(Const::CInt(42), Type::TInt)),
-            Type::TInt,
-        )]);
+        let prog = TypedProg(
+            vec![TypedToplevel::TFunDef(
+                "main".to_string(),
+                vec![],
+                Box::new(TypedExpr::TConst(Const::CInt(42), Type::TInt)),
+                Type::TInt,
+            )],
+            Default::default(),
+        );
 
         let emitter = BareWasmEmitter::new(&prog);
         let wasm = emitter.emit();
@@ -271,17 +275,20 @@ mod tests {
 
     #[test]
     fn test_arithmetic() {
-        let prog = TypedProg(vec![TypedToplevel::TFunDef(
-            "main".to_string(),
-            vec![],
-            Box::new(TypedExpr::TPrim(
-                Binop::Add,
-                Box::new(TypedExpr::TConst(Const::CInt(40), Type::TInt)),
-                Box::new(TypedExpr::TConst(Const::CInt(2), Type::TInt)),
+        let prog = TypedProg(
+            vec![TypedToplevel::TFunDef(
+                "main".to_string(),
+                vec![],
+                Box::new(TypedExpr::TPrim(
+                    Binop::Add,
+                    Box::new(TypedExpr::TConst(Const::CInt(40), Type::TInt)),
+                    Box::new(TypedExpr::TConst(Const::CInt(2), Type::TInt)),
+                    Type::TInt,
+                )),
                 Type::TInt,
-            )),
-            Type::TInt,
-        )]);
+            )],
+            Default::default(),
+        );
 
         let emitter = BareWasmEmitter::new(&prog);
         let wasm = emitter.emit();
@@ -291,17 +298,20 @@ mod tests {
 
     #[test]
     fn test_if_else() {
-        let prog = TypedProg(vec![TypedToplevel::TFunDef(
-            "main".to_string(),
-            vec![],
-            Box::new(TypedExpr::TIfThenElse(
-                Box::new(TypedExpr::TConst(Const::CBool(true), Type::TBool)),
-                Box::new(TypedExpr::TConst(Const::CInt(1), Type::TInt)),
-                Box::new(TypedExpr::TConst(Const::CInt(0), Type::TInt)),
+        let prog = TypedProg(
+            vec![TypedToplevel::TFunDef(
+                "main".to_string(),
+                vec![],
+                Box::new(TypedExpr::TIfThenElse(
+                    Box::new(TypedExpr::TConst(Const::CBool(true), Type::TBool)),
+                    Box::new(TypedExpr::TConst(Const::CInt(1), Type::TInt)),
+                    Box::new(TypedExpr::TConst(Const::CInt(0), Type::TInt)),
+                    Type::TInt,
+                )),
                 Type::TInt,
-            )),
-            Type::TInt,
-        )]);
+            )],
+            Default::default(),
+        );
 
         let emitter = BareWasmEmitter::new(&prog);
         let wasm = emitter.emit();
@@ -311,29 +321,32 @@ mod tests {
 
     #[test]
     fn test_function_call() {
-        let prog = TypedProg(vec![
-            // id(x) = x
-            TypedToplevel::TFunDef(
-                "id".to_string(),
-                vec![("x".to_string(), Type::TInt)],
-                Box::new(TypedExpr::TName("x".to_string(), Type::TInt)),
-                Type::TInt,
-            ),
-            // main() = id(42)
-            TypedToplevel::TFunDef(
-                "main".to_string(),
-                vec![],
-                Box::new(TypedExpr::TApp(
-                    Box::new(TypedExpr::TName(
-                        "id".to_string(),
-                        Type::TFun(Box::new(Type::TInt), Box::new(Type::TInt)),
-                    )),
-                    vec![TypedExpr::TConst(Const::CInt(42), Type::TInt)],
+        let prog = TypedProg(
+            vec![
+                // id(x) = x
+                TypedToplevel::TFunDef(
+                    "id".to_string(),
+                    vec![("x".to_string(), Type::TInt)],
+                    Box::new(TypedExpr::TName("x".to_string(), Type::TInt)),
                     Type::TInt,
-                )),
-                Type::TInt,
-            ),
-        ]);
+                ),
+                // main() = id(42)
+                TypedToplevel::TFunDef(
+                    "main".to_string(),
+                    vec![],
+                    Box::new(TypedExpr::TApp(
+                        Box::new(TypedExpr::TName(
+                            "id".to_string(),
+                            Type::TFun(Box::new(Type::TInt), Box::new(Type::TInt)),
+                        )),
+                        vec![TypedExpr::TConst(Const::CInt(42), Type::TInt)],
+                        Type::TInt,
+                    )),
+                    Type::TInt,
+                ),
+            ],
+            Default::default(),
+        );
 
         let emitter = BareWasmEmitter::new(&prog);
         let wasm = emitter.emit();
@@ -343,17 +356,20 @@ mod tests {
 
     #[test]
     fn test_let_binding() {
-        let prog = TypedProg(vec![TypedToplevel::TFunDef(
-            "main".to_string(),
-            vec![],
-            Box::new(TypedExpr::TLet(
-                "x".to_string(),
+        let prog = TypedProg(
+            vec![TypedToplevel::TFunDef(
+                "main".to_string(),
+                vec![],
+                Box::new(TypedExpr::TLet(
+                    "x".to_string(),
+                    Type::TInt,
+                    Box::new(TypedExpr::TConst(Const::CInt(42), Type::TInt)),
+                    Box::new(TypedExpr::TName("x".to_string(), Type::TInt)),
+                )),
                 Type::TInt,
-                Box::new(TypedExpr::TConst(Const::CInt(42), Type::TInt)),
-                Box::new(TypedExpr::TName("x".to_string(), Type::TInt)),
-            )),
-            Type::TInt,
-        )]);
+            )],
+            Default::default(),
+        );
 
         let emitter = BareWasmEmitter::new(&prog);
         let wasm = emitter.emit();
@@ -363,17 +379,20 @@ mod tests {
 
     #[test]
     fn test_comparison() {
-        let prog = TypedProg(vec![TypedToplevel::TFunDef(
-            "main".to_string(),
-            vec![],
-            Box::new(TypedExpr::TPrim(
-                Binop::Lt,
-                Box::new(TypedExpr::TConst(Const::CInt(1), Type::TInt)),
-                Box::new(TypedExpr::TConst(Const::CInt(2), Type::TInt)),
+        let prog = TypedProg(
+            vec![TypedToplevel::TFunDef(
+                "main".to_string(),
+                vec![],
+                Box::new(TypedExpr::TPrim(
+                    Binop::Lt,
+                    Box::new(TypedExpr::TConst(Const::CInt(1), Type::TInt)),
+                    Box::new(TypedExpr::TConst(Const::CInt(2), Type::TInt)),
+                    Type::TBool,
+                )),
                 Type::TBool,
-            )),
-            Type::TBool,
-        )]);
+            )],
+            Default::default(),
+        );
 
         let emitter = BareWasmEmitter::new(&prog);
         let wasm = emitter.emit();
@@ -384,12 +403,15 @@ mod tests {
     #[test]
     #[should_panic(expected = "Product types not supported as value types")]
     fn test_unsupported_product_type() {
-        let prog = TypedProg(vec![TypedToplevel::TFunDef(
-            "main".to_string(),
-            vec![],
-            Box::new(TypedExpr::TConst(Const::CUnit, Type::TProduct(vec![]))),
-            Type::TProduct(vec![]),
-        )]);
+        let prog = TypedProg(
+            vec![TypedToplevel::TFunDef(
+                "main".to_string(),
+                vec![],
+                Box::new(TypedExpr::TConst(Const::CUnit, Type::TProduct(vec![]))),
+                Type::TProduct(vec![]),
+            )],
+            Default::default(),
+        );
 
         let emitter = BareWasmEmitter::new(&prog);
         emitter.emit();
@@ -398,15 +420,18 @@ mod tests {
     #[test]
     #[should_panic(expected = "Function types not supported as value types")]
     fn test_unsupported_function_type() {
-        let prog = TypedProg(vec![TypedToplevel::TFunDef(
-            "main".to_string(),
-            vec![],
-            Box::new(TypedExpr::TConst(
-                Const::CUnit,
+        let prog = TypedProg(
+            vec![TypedToplevel::TFunDef(
+                "main".to_string(),
+                vec![],
+                Box::new(TypedExpr::TConst(
+                    Const::CUnit,
+                    Type::TFun(Box::new(Type::TUnit), Box::new(Type::TUnit)),
+                )),
                 Type::TFun(Box::new(Type::TUnit), Box::new(Type::TUnit)),
-            )),
-            Type::TFun(Box::new(Type::TUnit), Box::new(Type::TUnit)),
-        )]);
+            )],
+            Default::default(),
+        );
 
         let emitter = BareWasmEmitter::new(&prog);
         emitter.emit();
@@ -414,40 +439,43 @@ mod tests {
 
     #[test]
     fn test_multiple_functions() {
-        let prog = TypedProg(vec![
-            // add(x, y) = x + y
-            TypedToplevel::TFunDef(
-                "add".to_string(),
-                vec![("x".to_string(), Type::TInt), ("y".to_string(), Type::TInt)],
-                Box::new(TypedExpr::TPrim(
-                    Binop::Add,
-                    Box::new(TypedExpr::TName("x".to_string(), Type::TInt)),
-                    Box::new(TypedExpr::TName("y".to_string(), Type::TInt)),
-                    Type::TInt,
-                )),
-                Type::TInt,
-            ),
-            // main() = add(40, 2)
-            TypedToplevel::TFunDef(
-                "main".to_string(),
-                vec![],
-                Box::new(TypedExpr::TApp(
-                    Box::new(TypedExpr::TName(
-                        "add".to_string(),
-                        Type::TFun(
-                            Box::new(Type::TInt),
-                            Box::new(Type::TFun(Box::new(Type::TInt), Box::new(Type::TInt))),
-                        ),
+        let prog = TypedProg(
+            vec![
+                // add(x, y) = x + y
+                TypedToplevel::TFunDef(
+                    "add".to_string(),
+                    vec![("x".to_string(), Type::TInt), ("y".to_string(), Type::TInt)],
+                    Box::new(TypedExpr::TPrim(
+                        Binop::Add,
+                        Box::new(TypedExpr::TName("x".to_string(), Type::TInt)),
+                        Box::new(TypedExpr::TName("y".to_string(), Type::TInt)),
+                        Type::TInt,
                     )),
-                    vec![
-                        TypedExpr::TConst(Const::CInt(40), Type::TInt),
-                        TypedExpr::TConst(Const::CInt(2), Type::TInt),
-                    ],
                     Type::TInt,
-                )),
-                Type::TInt,
-            ),
-        ]);
+                ),
+                // main() = add(40, 2)
+                TypedToplevel::TFunDef(
+                    "main".to_string(),
+                    vec![],
+                    Box::new(TypedExpr::TApp(
+                        Box::new(TypedExpr::TName(
+                            "add".to_string(),
+                            Type::TFun(
+                                Box::new(Type::TInt),
+                                Box::new(Type::TFun(Box::new(Type::TInt), Box::new(Type::TInt))),
+                            ),
+                        )),
+                        vec![
+                            TypedExpr::TConst(Const::CInt(40), Type::TInt),
+                            TypedExpr::TConst(Const::CInt(2), Type::TInt),
+                        ],
+                        Type::TInt,
+                    )),
+                    Type::TInt,
+                ),
+            ],
+            Default::default(),
+        );
 
         let emitter = BareWasmEmitter::new(&prog);
         let wasm = emitter.emit();
@@ -457,22 +485,25 @@ mod tests {
 
     #[test]
     fn test_local_variable_access() {
-        let prog = TypedProg(vec![TypedToplevel::TFunDef(
-            "main".to_string(),
-            vec![("x".to_string(), Type::TInt)],
-            Box::new(TypedExpr::TLet(
-                "y".to_string(),
-                Type::TInt,
-                Box::new(TypedExpr::TPrim(
-                    Binop::Add,
-                    Box::new(TypedExpr::TName("x".to_string(), Type::TInt)),
-                    Box::new(TypedExpr::TConst(Const::CInt(1), Type::TInt)),
+        let prog = TypedProg(
+            vec![TypedToplevel::TFunDef(
+                "main".to_string(),
+                vec![("x".to_string(), Type::TInt)],
+                Box::new(TypedExpr::TLet(
+                    "y".to_string(),
                     Type::TInt,
+                    Box::new(TypedExpr::TPrim(
+                        Binop::Add,
+                        Box::new(TypedExpr::TName("x".to_string(), Type::TInt)),
+                        Box::new(TypedExpr::TConst(Const::CInt(1), Type::TInt)),
+                        Type::TInt,
+                    )),
+                    Box::new(TypedExpr::TName("y".to_string(), Type::TInt)),
                 )),
-                Box::new(TypedExpr::TName("y".to_string(), Type::TInt)),
-            )),
-            Type::TInt,
-        )]);
+                Type::TInt,
+            )],
+            Default::default(),
+        );
 
         let emitter = BareWasmEmitter::new(&prog);
         let wasm = emitter.emit();
@@ -482,27 +513,30 @@ mod tests {
 
     #[test]
     fn test_nested_let_bindings() {
-        let prog = TypedProg(vec![TypedToplevel::TFunDef(
-            "main".to_string(),
-            vec![],
-            Box::new(TypedExpr::TLet(
-                "x".to_string(),
-                Type::TInt,
-                Box::new(TypedExpr::TConst(Const::CInt(1), Type::TInt)),
+        let prog = TypedProg(
+            vec![TypedToplevel::TFunDef(
+                "main".to_string(),
+                vec![],
                 Box::new(TypedExpr::TLet(
-                    "y".to_string(),
+                    "x".to_string(),
                     Type::TInt,
-                    Box::new(TypedExpr::TConst(Const::CInt(2), Type::TInt)),
-                    Box::new(TypedExpr::TPrim(
-                        Binop::Add,
-                        Box::new(TypedExpr::TName("x".to_string(), Type::TInt)),
-                        Box::new(TypedExpr::TName("y".to_string(), Type::TInt)),
+                    Box::new(TypedExpr::TConst(Const::CInt(1), Type::TInt)),
+                    Box::new(TypedExpr::TLet(
+                        "y".to_string(),
                         Type::TInt,
+                        Box::new(TypedExpr::TConst(Const::CInt(2), Type::TInt)),
+                        Box::new(TypedExpr::TPrim(
+                            Binop::Add,
+                            Box::new(TypedExpr::TName("x".to_string(), Type::TInt)),
+                            Box::new(TypedExpr::TName("y".to_string(), Type::TInt)),
+                            Type::TInt,
+                        )),
                     )),
                 )),
-            )),
-            Type::TInt,
-        )]);
+                Type::TInt,
+            )],
+            Default::default(),
+        );
 
         let emitter = BareWasmEmitter::new(&prog);
         let wasm = emitter.emit();
@@ -513,12 +547,15 @@ mod tests {
     #[test]
     #[should_panic(expected = "Undeclared variable: undefined")]
     fn test_undefined_variable() {
-        let prog = TypedProg(vec![TypedToplevel::TFunDef(
-            "main".to_string(),
-            vec![],
-            Box::new(TypedExpr::TName("undefined".to_string(), Type::TInt)),
-            Type::TInt,
-        )]);
+        let prog = TypedProg(
+            vec![TypedToplevel::TFunDef(
+                "main".to_string(),
+                vec![],
+                Box::new(TypedExpr::TName("undefined".to_string(), Type::TInt)),
+                Type::TInt,
+            )],
+            Default::default(),
+        );
 
         let emitter = BareWasmEmitter::new(&prog);
         let wasm = emitter.emit();
@@ -528,27 +565,30 @@ mod tests {
 
     #[test]
     fn pretty_wasm() {
-        let prog = TypedProg(vec![TypedToplevel::TFunDef(
-            "main".to_string(),
-            vec![],
-            Box::new(TypedExpr::TLet(
-                "x".to_string(),
-                Type::TInt,
-                Box::new(TypedExpr::TConst(Const::CInt(1), Type::TInt)),
+        let prog = TypedProg(
+            vec![TypedToplevel::TFunDef(
+                "main".to_string(),
+                vec![],
                 Box::new(TypedExpr::TLet(
-                    "y".to_string(),
+                    "x".to_string(),
                     Type::TInt,
-                    Box::new(TypedExpr::TConst(Const::CInt(2), Type::TInt)),
-                    Box::new(TypedExpr::TPrim(
-                        Binop::Add,
-                        Box::new(TypedExpr::TName("x".to_string(), Type::TInt)),
-                        Box::new(TypedExpr::TName("y".to_string(), Type::TInt)),
+                    Box::new(TypedExpr::TConst(Const::CInt(1), Type::TInt)),
+                    Box::new(TypedExpr::TLet(
+                        "y".to_string(),
                         Type::TInt,
+                        Box::new(TypedExpr::TConst(Const::CInt(2), Type::TInt)),
+                        Box::new(TypedExpr::TPrim(
+                            Binop::Add,
+                            Box::new(TypedExpr::TName("x".to_string(), Type::TInt)),
+                            Box::new(TypedExpr::TName("y".to_string(), Type::TInt)),
+                            Type::TInt,
+                        )),
                     )),
                 )),
-            )),
-            Type::TInt,
-        )]);
+                Type::TInt,
+            )],
+            Default::default(),
+        );
 
         let emitter = BareWasmEmitter::new(&prog);
         let wasm = emitter.emit();

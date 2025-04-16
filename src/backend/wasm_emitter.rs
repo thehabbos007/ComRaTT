@@ -41,7 +41,7 @@ pub const LOCATION_HEAP_INDEX: u32 = 1;
 // const MALLOC_ARGS: [(&str, Type); 1] = [("size", Type::TInt)];
 const MALLOC_FUN_IDX: u32 = 0;
 const LOCATION_MALLOC_FUN_IDX: u32 = 1;
-const CLOCK_OF_FUN_IDX: u32 = 2;
+pub const CLOCK_OF_FUN_IDX: u32 = 2;
 
 const PREGEN_MODULE: &str = r#"
 (module

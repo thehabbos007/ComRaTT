@@ -1,5 +1,5 @@
 use ena::unify::{EqUnifyValue, UnifyKey};
-use std::{collections::HashSet, ops::Deref};
+use std::ops::Deref;
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub enum Binop {
@@ -15,7 +15,20 @@ pub enum Binop {
     Gte,
 }
 
-#[derive(PartialEq, Eq, Debug, Clone, Copy)]
+/// Clock Expr. 𝜃 ::= cl (𝑣) | 𝜃 ⊔ 𝜃 ′
+#[derive(PartialEq, Eq, Debug, Clone, PartialOrd, Ord, Hash)]
+pub enum ClockExpr {
+    /// Empty clock
+    Never,
+    /// Cl(v) where v is a binding
+    Cl(String),
+    /// The union case 𝜃 ⊔ 𝜃 ′
+    Union(Box<ClockExpr>, Box<ClockExpr>),
+    /// Cl(v) special case, where v is the name of a channel
+    Wait(String),
+}
+
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub enum Const {
     CInt(i32),
     CBool(bool),
@@ -32,7 +45,7 @@ pub enum Expr {
     Prim(Binop, Box<Expr>, Box<Expr>),
     Let(String, Box<Expr>, Box<Expr>),
     IfThenElse(Box<Expr>, Box<Expr>, Box<Expr>),
-    Delay(Box<Expr>, HashSet<String>),
+    Delay(Box<Expr>, ClockExpr),
     Advance(String),
     Wait(String),
     Tuple(Vec<Expr>),
@@ -68,7 +81,7 @@ pub enum Type {
     TInt,
     TBool,
     TUnit,
-    TLaterUnit,
+    TLaterUnit(ClockExpr),
     TFun(Box<Type>, Box<Type>),
     TProduct(Vec<Type>),
     TVar(TypeVar),
@@ -85,7 +98,7 @@ impl Type {
         match self {
             Type::TInt => Ok(()),
             Type::TBool => Ok(()),
-            Type::TLaterUnit => Ok(()),
+            Type::TLaterUnit(_) => Ok(()),
             Type::TUnit => Ok(()),
             Type::TVar(v) => {
                 if *v == var {
