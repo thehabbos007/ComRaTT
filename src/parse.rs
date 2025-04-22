@@ -110,7 +110,7 @@ fn parse_type_atom(pair: Pair<Rule>) -> Type {
         Rule::int_type => Type::TInt,
         Rule::bool_type => Type::TBool,
         Rule::unit_type => Type::TUnit,
-        Rule::later_unit_type => Type::TLaterUnit(ClockExpr::Never),
+        Rule::later_unit_type => Type::TLaterUnit(ClockExpr::Symbolic),
         Rule::type_expr => parse_type(pair.into_inner()),
         Rule::parenthesis_or_tuple_type => {
             let mut typs = pair

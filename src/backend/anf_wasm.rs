@@ -390,6 +390,9 @@ impl<'a> AnfWasmEmitter<'a> {
                 self.gen_clock_of(c2, func);
                 func.instruction(&Instruction::I32Or);
             }
+            crate::source::ClockExpr::Symbolic => {
+                panic!("Tried to generate clock of from symbolic clockexpr")
+            }
         }
     }
 

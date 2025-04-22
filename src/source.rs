@@ -18,6 +18,8 @@ pub enum Binop {
 /// Clock Expr. 𝜃 ::= cl (𝑣) | 𝜃 ⊔ 𝜃 ′
 #[derive(PartialEq, Eq, Debug, Clone, PartialOrd, Ord, Hash)]
 pub enum ClockExpr {
+    /// Dummy variant used where clocks dont matter but we need a TLaterUnit
+    Symbolic,
     /// Empty clock
     Never,
     /// Cl(v) where v is a binding

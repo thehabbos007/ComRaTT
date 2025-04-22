@@ -884,9 +884,10 @@ impl Inference {
                     // type expr
                     let mut context = context.clone();
                     let (expr_type, mut output) = self.infer(context, expr);
-                    // push tfun () -> int constraint, because we want a closure
-                    // from unit to ptr
-                    let expected_type = Type::TFun(Type::TUnit.b(), Type::TInt.b());
+                    // push tfun {} -> int constraint, because we want a closure
+                    // from laterunit to ptr
+                    let expected_type =
+                        Type::TFun(Type::TLaterUnit(ClockExpr::Symbolic).b(), Type::TInt.b());
                     output
                         .constraints
                         .push(Constraint::TypeEqual(expr_type.clone(), expected_type));

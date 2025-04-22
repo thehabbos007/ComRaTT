@@ -98,6 +98,7 @@ impl Display for ClockExpr {
             ClockExpr::Union(cl1, cl2) => write!(f, "{cl1} ⊔ {cl2}"),
             ClockExpr::Wait(v) => write!(f, "cl(wait_{v})"),
             ClockExpr::Never => write!(f, "never"),
+            ClockExpr::Symbolic => write!(f, ""),
         }
     }
 }
