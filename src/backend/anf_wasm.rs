@@ -632,23 +632,27 @@ impl<'a> AnfWasmEmitter<'a> {
             }
 
             CExpr::App(f, args, _) => {
-                match f {
-                    AExpr::Var(_, Type::TFun(..)) => (),
-                    _ => {
-                        // We don't want this behaviour
-                        // when dispatching a closure.
-                        for arg in args {
-                            self.compile_atomic(func, arg);
-                        }
-                    }
+                enum Scope {
+                    TopLevel(u32),
+                    Local(u32),
+                    Unknown,
                 }
-                match f {
-                    AExpr::Var(name, Type::TFun(_, box Type::TFun(..))) => {
-                        // Get the function index from the closure
-                        let Some(&local_idx) = self.locals_map.get(name.as_str()) else {
-                            panic!("Got non-local variable [{}] in closure call", name);
-                        };
 
+                let name = match f {
+                    AExpr::Var(name, _) => name.as_str(),
+                    _ => panic!("Function call target must be a variable or a top-level function"),
+                };
+
+                let scoped_name = self
+                    .locals_map
+                    .get(name)
+                    .cloned()
+                    .map(Scope::Local)
+                    .or_else(|| self.func_map.get(name).cloned().map(Scope::TopLevel))
+                    .unwrap_or(Scope::Unknown);
+
+                match (scoped_name, f) {
+                    (Scope::Local(local_idx), AExpr::Var(_, Type::TFun(_, box Type::TFun(..)))) => {
                         // Read the arity from the closure pointer
                         let arity_arg = MemArg {
                             offset: ARITY_OFFSET,
@@ -686,11 +690,7 @@ impl<'a> AnfWasmEmitter<'a> {
                             func.instruction(&Instruction::I32Store(populate_arg));
                         }
                     }
-                    AExpr::Var(name, Type::TFun(..)) => {
-                        let Some(&local_idx) = self.locals_map.get(name.as_str()) else {
-                            panic!("Got non-local variable [{}] in closure call", name);
-                        };
-
+                    (Scope::Local(local_idx), AExpr::Var(_, Type::TFun(..))) => {
                         func.instruction(&Instruction::LocalGet(local_idx));
                         // In the cases where we call dispatch with a closure pointer,
                         // we want the stack to look like the following before return_call_indirect
@@ -712,16 +712,15 @@ impl<'a> AnfWasmEmitter<'a> {
                             table_index: 0,
                         });
                     }
-                    AExpr::Var(name, _) => {
-                        if let Some(&local_idx) = self.locals_map.get(name.as_str()) {
-                            func.instruction(&Instruction::LocalGet(local_idx));
-                        } else if let Some(&func_idx) = self.func_map.get(name.as_str()) {
-                            func.instruction(&Instruction::Call(func_idx));
-                        } else {
-                            panic!("Undefined variable: {}", name);
+                    (Scope::TopLevel(func_idx), _) => {
+                        for arg in args {
+                            self.compile_atomic(func, arg);
                         }
+                        func.instruction(&Instruction::Call(func_idx));
                     }
-                    _ => panic!("Function call target must be a variable"),
+                    _ => panic!(
+                        "Function call target must be a (closure) variable or a top-level function"
+                    ),
                 }
             }
 
