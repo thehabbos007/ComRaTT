@@ -68,7 +68,7 @@ impl TypedToplevel {
 }
 
 #[derive(PartialEq, Eq, Debug, Clone)]
-pub struct TypedProg(pub Vec<TypedToplevel>);
+pub struct TypedProg(pub Vec<TypedToplevel>, pub Vec<(Sym, Type)>);
 
 impl Deref for TypedProg {
     type Target = Vec<TypedToplevel>;
@@ -80,7 +80,7 @@ impl Deref for TypedProg {
 
 impl From<Vec<TypedToplevel>> for TypedProg {
     fn from(v: Vec<TypedToplevel>) -> Self {
-        TypedProg(v)
+        TypedProg(v, vec![])
     }
 }
 
@@ -96,7 +96,7 @@ macro_rules! assert_typed_expr {
 
 pub fn final_type(ty: &Type) -> Type {
     match ty {
-        Type::TInt | Type::TBool | Type::TUnit | Type::TVar(_) | Type::TLaterUnit => ty.clone(),
+        Type::TInt | Type::TBool | Type::TUnit | Type::TVar(_) | Type::TLaterUnit(_) => ty.clone(),
         Type::TFun(_, t2) => final_type(t2),
         Type::TProduct(ts) => final_type_tproduct(ts),
     }
@@ -313,7 +313,7 @@ pub fn substitute_binding(bind_old: &str, bind_new: &str, expr: TypedExpr) -> Ty
 
 pub fn unpack_type(ty: &Type) -> Vec<Type> {
     match ty {
-        Type::TInt | Type::TBool | Type::TUnit | Type::TLaterUnit => vec![],
+        Type::TInt | Type::TBool | Type::TUnit | Type::TLaterUnit(_) => vec![],
         Type::TFun(t1, t2) => {
             let mut types = vec![*t1.clone()];
             types.extend(unpack_type(t2));

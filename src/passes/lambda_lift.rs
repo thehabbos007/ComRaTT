@@ -68,11 +68,10 @@ impl Pass for LambdaLift {
 
         let lifted_lambdas = lifted_lambdas.into_iter().flatten().collect_vec();
 
-        lifted_defs
-            .into_iter()
-            .chain(lifted_lambdas)
-            .collect_vec()
-            .into()
+        TypedProg(
+            lifted_defs.into_iter().chain(lifted_lambdas).collect_vec(),
+            prog.1,
+        )
     }
 }
 

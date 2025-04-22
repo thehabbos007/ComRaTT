@@ -55,26 +55,29 @@ mod tests {
     #[test]
     fn test_run_program_passes_lambda_lifting() {
         // fun x -> (fun y -> x + y) -> lifted function + closure
-        let prog = TypedProg(vec![TypedToplevel::TFunDef(
-            "main".to_owned(),
-            vec![("x".to_owned(), Type::TInt)],
-            TypedExpr::TLam(
-                vec![("y".to_owned(), Type::TInt)],
-                TypedExpr::TPrim(
-                    Binop::Add,
-                    TypedExpr::TName("x".to_owned(), Type::TInt).b(),
-                    TypedExpr::TName("y".to_owned(), Type::TInt).b(),
-                    Type::TInt,
+        let prog = TypedProg(
+            vec![TypedToplevel::TFunDef(
+                "main".to_owned(),
+                vec![("x".to_owned(), Type::TInt)],
+                TypedExpr::TLam(
+                    vec![("y".to_owned(), Type::TInt)],
+                    TypedExpr::TPrim(
+                        Binop::Add,
+                        TypedExpr::TName("x".to_owned(), Type::TInt).b(),
+                        TypedExpr::TName("y".to_owned(), Type::TInt).b(),
+                        Type::TInt,
+                    )
+                    .b(),
+                    Type::TFun(Type::TInt.b(), Type::TInt.b()),
                 )
                 .b(),
-                Type::TFun(Type::TInt.b(), Type::TInt.b()),
-            )
-            .b(),
-            Type::TFun(
-                Type::TInt.b(),
-                Type::TFun(Type::TInt.b(), Type::TInt.b()).b(),
-            ),
-        )]);
+                Type::TFun(
+                    Type::TInt.b(),
+                    Type::TFun(Type::TInt.b(), Type::TInt.b()).b(),
+                ),
+            )],
+            vec![],
+        );
 
         let result = run_program_passes(prog);
 

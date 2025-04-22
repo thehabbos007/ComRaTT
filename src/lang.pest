@@ -30,12 +30,16 @@ tuple_access = { primary ~ ("." ~ integer)* }
 term         = { tuple_access+ }
 expr         = { (term ~ (infix ~ term)*) }
 
-channel_set = { "{" ~ identifier+ ~ "}" }
+
+clock_union = { "U" | "⊔" }
+clock_wait = { "wait" ~ (!"cl(") ~ identifier}
+clock_base = { "cl(" ~ (clock_wait | identifier) ~ ")" | "(" ~ clock_base ~ ")" }
+clock_expr = { clock_base ~ (clock_union ~ clock_base)* }
 
 let_expr     = { "let" ~ identifier ~ "=" ~ expr ~ "in" ~ expr }
 fun_expr     = { "fun" ~ function_args ~ "->" ~ expr }
 if_expr      = { "if" ~ expr ~ "then" ~ expr ~ "else" ~ expr }
-delay_expr   = { "delay" ~ channel_set ~ expr }
+delay_expr   = { "delay" ~ "{" ~ clock_expr ~ "}" ~ expr }
 advance_expr = { "advance" ~ identifier }
 wait_expr    = { "wait" ~ identifier }
 

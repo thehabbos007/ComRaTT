@@ -135,7 +135,8 @@ impl Pass<TypedProg, AnfProg> for ANFConversion {
                 }
             })
             .collect();
-        AnfProg(toplevel)
+
+        AnfProg(toplevel, input.1)
     }
 }
 
@@ -317,27 +318,30 @@ mod tests {
         //           let tmp_0 = x + 1 in
         //           let tmp_1 = 2 + 3 in
         //           tmp_0 + tmp_1
-        let prog = TypedProg(vec![TypedToplevel::TFunDef(
-            "f".to_string(),
-            vec![("x".to_string(), Type::TInt)],
-            Box::new(TypedExpr::TPrim(
-                Binop::Add,
+        let prog = TypedProg(
+            vec![TypedToplevel::TFunDef(
+                "f".to_string(),
+                vec![("x".to_string(), Type::TInt)],
                 Box::new(TypedExpr::TPrim(
                     Binop::Add,
-                    Box::new(TypedExpr::TName("x".to_string(), Type::TInt)),
-                    Box::new(TypedExpr::TConst(Const::CInt(1), Type::TInt)),
+                    Box::new(TypedExpr::TPrim(
+                        Binop::Add,
+                        Box::new(TypedExpr::TName("x".to_string(), Type::TInt)),
+                        Box::new(TypedExpr::TConst(Const::CInt(1), Type::TInt)),
+                        Type::TInt,
+                    )),
+                    Box::new(TypedExpr::TPrim(
+                        Binop::Add,
+                        Box::new(TypedExpr::TConst(Const::CInt(2), Type::TInt)),
+                        Box::new(TypedExpr::TConst(Const::CInt(3), Type::TInt)),
+                        Type::TInt,
+                    )),
                     Type::TInt,
                 )),
-                Box::new(TypedExpr::TPrim(
-                    Binop::Add,
-                    Box::new(TypedExpr::TConst(Const::CInt(2), Type::TInt)),
-                    Box::new(TypedExpr::TConst(Const::CInt(3), Type::TInt)),
-                    Type::TInt,
-                )),
-                Type::TInt,
-            )),
-            Type::TFun(Box::new(Type::TInt), Box::new(Type::TInt)),
-        )]);
+                Type::TFun(Box::new(Type::TInt), Box::new(Type::TInt)),
+            )],
+            Default::default(),
+        );
 
         let mut converter = ANFConversion::new();
         let result = converter.run(prog);

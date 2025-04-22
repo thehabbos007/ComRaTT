@@ -41,13 +41,15 @@ pub const LOCATION_HEAP_INDEX: u32 = 1;
 // const MALLOC_ARGS: [(&str, Type); 1] = [("size", Type::TInt)];
 const MALLOC_FUN_IDX: u32 = 0;
 const LOCATION_MALLOC_FUN_IDX: u32 = 1;
+pub const CLOCK_OF_FUN_IDX: u32 = 2;
 
-const MALLOC_MODULE: &str = r#"
+const PREGEN_MODULE: &str = r#"
 (module
     (global $next_ptr (mut i32) (i32.const 0))
     (global $next_location (mut i32) (i32.const 0))
     (type $malloc (func (param i32) (result i32)))
     (type $location_malloc (func (result i32)))
+    (type $clock_of (func (param i32) (result i32)))
     (func $malloc (export "malloc") (param $size i32) (result i32)
         ;; Define a local to hold the current value i.e. the beginning
         ;; of this new allocation
@@ -82,6 +84,14 @@ const MALLOC_MODULE: &str = r#"
         (global.set $next_location)
         ;; Return $old i.e. the beginning of this new allocation
         (local.get $old)
+    )
+
+    (func $clock_of (export "clock_of") (param $location_ptr i32) (result i32)
+        ;; Push the location ptr
+        (local.get $location_ptr)
+
+        ;; Load the clock part (2nd half) of the allocation from the location heap
+        (i32.load 1 offset=4)
     )
 )
 "#;
@@ -175,7 +185,7 @@ impl WasmEmitter<'_> {
     }
 
     fn gen_module(&mut self) -> Result<()> {
-        let bytes = wat::parse_str(MALLOC_MODULE)?;
+        let bytes = wat::parse_str(PREGEN_MODULE)?;
         self.parse_wasm_module(&bytes).context("add module")?;
 
         self.func_map.insert("malloc", MALLOC_FUN_IDX);
@@ -185,9 +195,13 @@ impl WasmEmitter<'_> {
         self.func_map
             .insert("location_malloc", LOCATION_MALLOC_FUN_IDX);
         self.func_args.insert("location_malloc", vec![]);
-        dbg!(LOCATION_MALLOC_FUN_IDX);
         self.type_map
             .insert("location_malloc", LOCATION_MALLOC_FUN_IDX);
+
+        self.func_map.insert("clock_of", CLOCK_OF_FUN_IDX);
+        self.func_args
+            .insert("clock_of", vec![("location_ptr", Type::TInt)]);
+        self.type_map.insert("clock_of", CLOCK_OF_FUN_IDX);
 
         Ok(())
     }
@@ -289,12 +303,12 @@ mod tests {
     use wasmtime_wast::WastContext;
 
     #[test]
-    fn parse_malloc_module() {
-        wat::parse_str(MALLOC_MODULE).unwrap();
+    fn parse_pregen_module() {
+        wat::parse_str(PREGEN_MODULE).unwrap();
     }
 
     #[test]
-    fn test_malloc_generation() -> Result<()> {
+    fn test_pregeneration() -> Result<()> {
         // Create a new emitter
         let mut emitter = WasmEmitter::new();
 
@@ -321,12 +335,22 @@ mod tests {
         (assert_return (invoke "malloc" (i32.const 1)) (i32.const 24))
         "#;
 
-        let malloc_test = format!("{MALLOC_MODULE}{test}");
+        let malloc_test = format!("{PREGEN_MODULE}{test}");
         test_wast(malloc_test);
     }
 
     fn test_wast(wast: String) {
-        let engine = wasmtime::Engine::default();
+        // TODO
+        // This is causing tests to fail because the pregenerated module
+        // refers to memory 1 which is injected during codegen
+        // and not present in the str.
+        let mut config = wasmtime::Config::new();
+        config.wasm_gc(true);
+        config.wasm_multi_memory(true);
+        config.wasm_function_references(true);
+        config.wasm_tail_call(true);
+        let engine =
+            wasmtime::Engine::new(&config).expect("Failed to initialize Engine in test_wast");
         let store = wasmtime::Store::new(&engine, ());
         let mut ctx = WastContext::new(store);
         ctx.run_buffer("inline_test", wast.as_bytes()).unwrap();
