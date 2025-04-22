@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::fmt::{write, Display};
 
 use itertools::Itertools;
 
@@ -347,6 +347,7 @@ impl Display for AExpr {
                     .join(" ");
                 write!(f, "(fun {} -> {})", args_str, body)
             }
+            AExpr::Wait(name, _) => write!(f, "wait {}", &name),
         }
     }
 }

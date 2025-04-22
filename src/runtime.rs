@@ -1,14 +1,23 @@
+use std::{
+    clone,
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
+
 use wasmtime::*;
+
+use crate::source::Type;
 
 pub struct Runtime {
     engine: Engine,
     program: Vec<u8>, // boxed slice pls
+    channels: Vec<(String, Type)>,
 }
 
 // An initial, naive version that does not consider non-main functions, input channels, transitions
 // or anything advanced.
 impl Runtime {
-    pub fn init(program: &[u8]) -> Self {
+    pub fn init(program: &[u8], channels: Vec<(String, Type)>) -> Self {
         let mut config = Config::new();
         config.wasm_gc(true);
         config.wasm_multi_memory(true);
@@ -19,14 +28,62 @@ impl Runtime {
 
         let program = program.to_vec();
 
-        Runtime { engine, program }
+        Runtime {
+            engine,
+            program,
+            channels,
+        }
     }
 
     pub fn run(&self) {
+        #[allow(unused)]
+        #[derive(Debug)]
+        enum ChanTyp {
+            I32(i32),
+            TupI32(i32, i32),
+        }
+        let init_channel_map = self
+            .channels
+            .iter()
+            .enumerate()
+            .map(|(chan_idx, (_, typ))| {
+                (
+                    2i32.pow(chan_idx as u32),
+                    match typ {
+                        Type::TInt => ChanTyp::I32(0),
+                        Type::TProduct(typs) if typs == &[Type::TInt, Type::TInt] => {
+                            ChanTyp::TupI32(0, 0)
+                        }
+                        typ => panic!("Unsupported type for channel mapping {}", typ),
+                    },
+                )
+            })
+            .collect::<HashMap<_, _>>();
+
+        let channels: Arc<Mutex<HashMap<i32, ChanTyp>>> = Arc::new(Mutex::new(init_channel_map));
+
+        let chan = channels.clone();
+
         let module =
             Module::new(&self.engine, &self.program).expect("Failed to init ComRaTT module");
+
         let mut store: Store<u32> = Store::new(&self.engine, 4);
-        let instance = Instance::new(&mut store, &module, &[]).expect("Failed to init instance");
+
+        let wait_ffi = move |channel: i32| -> i32 {
+            let channels = chan.lock().unwrap();
+            println!(
+                "Runtime requested channel {} value: {:?}",
+                channel, channels[&channel]
+            );
+            match channels[&channel] {
+                ChanTyp::I32(val) => val,
+                ChanTyp::TupI32(_, _) => todo!("We need to malloc tuples"),
+            }
+        };
+        let wait = Func::wrap(&mut store, wait_ffi);
+
+        let instance =
+            Instance::new(&mut store, &module, &[wait.into()]).expect("Failed to init instance");
         let location_dispatch = instance
             .get_typed_func::<i32, i32>(&mut store, "location_dispatch")
             .expect("Failed to retrieve dispatch function");

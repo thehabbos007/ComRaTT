@@ -123,16 +123,6 @@ impl BindingContext {
                 key
             ),
             BindingContext::Tick(bindings, tick_clock, _) => {
-                // if let Some((ty, clock_opt)) = bindings.get(key) {
-                //     if let Some(clock) = clock_opt {
-                //         if tick_clock.is_subset(clock) {
-                //             return ty.clone();
-                //         }
-                //         panic!("Tried to advance name {} with clock not part of tick", key);
-                //     }
-                //     panic!("Tried to advance name {} without clock", key);
-                // }
-                // panic!("Tried to advance nonexisting name {}", key);
                 let Some((ty, _)) = bindings.get(key) else {
                     panic!("Tried to advance nonexisting name {}", key);
                 };
@@ -260,7 +250,7 @@ impl Inference {
                         *t
                     } else {
                         // Index '1' will be the later Sig co-inductive type
-                        Type::TFun(Type::TLaterUnit.b(), Type::TSig(t).b())
+                        Type::TFun(unimplemented!(), Type::TSig(t).b())
                     };
                     (
                         typ.clone(),
@@ -304,7 +294,7 @@ impl Inference {
                 constraints.append(&mut later_output.constraints);
                 constraints.push(Constraint::TypeEqual(
                     later_ty.clone(),
-                    Type::TFun(Type::TLaterUnit.b(), Type::TSig(val_ty.clone().b()).b()),
+                    Type::TFun(unimplemented!(), Type::TSig(val_ty.clone().b()).b()),
                 ));
 
                 (

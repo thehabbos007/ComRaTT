@@ -81,7 +81,7 @@ impl ANFConversion {
                 let body_anf = self.normalize(*body);
                 AnfExpr::AExpr(AExpr::Lam(params, Box::new(body_anf), ty))
             }
-            TypedExpr::TWait(name, _) => unimplemented!("normalize wait on {name}"),
+            TypedExpr::TWait(name, typ) => AnfExpr::AExpr(AExpr::Wait(name, typ)),
         }
     }
 

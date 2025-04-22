@@ -8,6 +8,7 @@ pub enum AExpr {
     Const(Const, Type),
     Var(Sym, Type),
     Lam(Vec<(Sym, Type)>, Box<AnfExpr>, Type),
+    Wait(Sym, Type),
 }
 
 impl AExpr {
@@ -16,6 +17,7 @@ impl AExpr {
             AExpr::Const(_, ty) => ty.clone(),
             AExpr::Var(_, ty) => ty.clone(),
             AExpr::Lam(.., ty) => ty.clone(),
+            AExpr::Wait(_, ty) => ty.clone(),
         }
     }
 }

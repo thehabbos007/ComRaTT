@@ -17,6 +17,7 @@ pub struct WasmEmitter<'a> {
     pub function_section: FunctionSection,
     pub export_section: ExportSection,
     pub memory_section: MemorySection,
+    pub import_section: ImportSection,
     pub code_section: CodeSection,
     pub global_section: GlobalSection,
     pub element_section: ElementSection,
@@ -39,17 +40,20 @@ pub const CLOSURE_HEAP_INDEX: u32 = 0;
 pub const LOCATION_HEAP_INDEX: u32 = 1;
 
 // const MALLOC_ARGS: [(&str, Type); 1] = [("size", Type::TInt)];
-const MALLOC_FUN_IDX: u32 = 0;
-const LOCATION_MALLOC_FUN_IDX: u32 = 1;
-pub const CLOCK_OF_FUN_IDX: u32 = 2;
+pub const WAIT_FUN_IDX: u32 = 0;
+const MALLOC_FUN_IDX: u32 = 1;
+const LOCATION_MALLOC_FUN_IDX: u32 = 2;
+pub const CLOCK_OF_FUN_IDX: u32 = 3;
 
 const PREGEN_MODULE: &str = r#"
 (module
+    (type $wait (func (param i32) (result i32)))
+    (import "ffi" "wait" (func $wait (type $wait)))
+
     (global $next_ptr (mut i32) (i32.const 0))
     (global $next_location (mut i32) (i32.const 0))
+
     (type $malloc (func (param i32) (result i32)))
-    (type $location_malloc (func (result i32)))
-    (type $clock_of (func (param i32) (result i32)))
     (func $malloc (export "malloc") (param $size i32) (result i32)
         ;; Define a local to hold the current value i.e. the beginning
         ;; of this new allocation
@@ -68,6 +72,7 @@ const PREGEN_MODULE: &str = r#"
         (local.get $old)
     )
 
+    (type $location_malloc (func (result i32)))
     (func $location_malloc (export "location_malloc") (result i32)
         ;; Define a local to hold the current value i.e. the beginning
         ;; of this new allocation
@@ -86,6 +91,7 @@ const PREGEN_MODULE: &str = r#"
         (local.get $old)
     )
 
+    (type $clock_of (func (param i32) (result i32)))
     (func $clock_of (export "clock_of") (param $location_ptr i32) (result i32)
         ;; Push the location ptr
         (local.get $location_ptr)
@@ -110,6 +116,7 @@ impl WasmEmitter<'_> {
             function_section: FunctionSection::new(),
             export_section: ExportSection::new(),
             memory_section: MemorySection::new(),
+            import_section: ImportSection::new(),
             code_section: CodeSection::new(),
             global_section: GlobalSection::new(),
             element_section: ElementSection::new(),
@@ -127,6 +134,10 @@ impl WasmEmitter<'_> {
 
             parsed_modules: 0,
         }
+    }
+
+    pub fn next_fun_index(&self) -> u32 {
+        self.func_map.len() as u32
     }
 
     pub fn prepare_emit(&mut self) {
@@ -158,7 +169,7 @@ impl WasmEmitter<'_> {
 
     pub fn finalize_emit(mut self) -> Vec<u8> {
         self.module.section(&self.type_section);
-        self.module.section(&ImportSection::new());
+        self.module.section(&self.import_section);
         self.module.section(&self.function_section);
 
         let mut tables = TableSection::new();
@@ -187,6 +198,10 @@ impl WasmEmitter<'_> {
     fn gen_module(&mut self) -> Result<()> {
         let bytes = wat::parse_str(PREGEN_MODULE)?;
         self.parse_wasm_module(&bytes).context("add module")?;
+
+        self.func_map.insert("wait", WAIT_FUN_IDX);
+        self.func_args.insert("wait", vec![("channel", Type::TInt)]);
+        self.type_map.insert("wait", WAIT_FUN_IDX);
 
         self.func_map.insert("malloc", MALLOC_FUN_IDX);
         self.func_args.insert("malloc", vec![("size", Type::TInt)]);
@@ -229,6 +244,8 @@ impl WasmEmitter<'_> {
                 Payload::CodeSectionEntry(func_body) => {
                     RoundtripReencoder.parse_function_body(&mut self.code_section, func_body)?
                 }
+                Payload::ImportSection(import_section) => RoundtripReencoder
+                    .parse_import_section(&mut self.import_section, import_section)?,
                 Payload::FunctionSection(func) => {
                     RoundtripReencoder.parse_function_section(&mut self.function_section, func)?
                 }

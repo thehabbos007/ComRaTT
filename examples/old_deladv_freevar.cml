@@ -2,7 +2,5 @@ chan keyboard : int;
 
 main : int -> {} -> int
 def main x =
-    // let waited = wait keyboard in
-    // let del = delay {cl(waited)} x in
-    let del = delay {cl(wait keyboard)} x in
-    delay {cl(del)} (advance del);
+    let del = wait keyboard in
+    delay {cl(wait keyboard)} (advance del);

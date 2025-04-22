@@ -13,7 +13,7 @@ use crate::backend::wasm_emitter::{CLOCK_OF_FUN_IDX, CLOSURE_HEAP_INDEX, LOCATIO
 use crate::source::{Binop, ClockExpr, Const, Type};
 use crate::types::count_tfun_args;
 
-use super::wasm_emitter::WasmEmitter;
+use super::wasm_emitter::{WasmEmitter, WAIT_FUN_IDX};
 
 const WASM_WORD_SIZE: i32 = 4;
 // const WASM_DWORD_SIZE: i32 = 8;
@@ -63,8 +63,8 @@ impl<'a> AnfWasmEmitter<'a> {
             self.forward_declare_functions(def);
         }
 
-        self.dispatch_offset = self.function_section.len();
-        self.location_dispatch_offset = self.function_section.len() + 1;
+        self.dispatch_offset = self.next_fun_index();
+        self.location_dispatch_offset = self.next_fun_index() + 1;
 
         for def in &self.prog.0 {
             self.process_function(def);
@@ -95,7 +95,7 @@ impl<'a> AnfWasmEmitter<'a> {
 
         //Elements::Functions(())
         // self.element_section.active(table_index, offset, elements)
-        let func_idx = self.function_section.len();
+        let func_idx = self.next_fun_index();
         let type_idx = self.register_function_type(name, args, ret_type);
 
         self.function_section.function(type_idx);
@@ -195,7 +195,7 @@ impl<'a> AnfWasmEmitter<'a> {
         // End function block
         func.instruction(&Instruction::End);
 
-        let func_idx = self.function_section.len();
+        let func_idx = self.next_fun_index();
         let type_idx = self.register_function_type(
             name,
             &[
@@ -261,7 +261,7 @@ impl<'a> AnfWasmEmitter<'a> {
 
         func.instruction(&Instruction::End);
 
-        let func_idx = self.function_section.len();
+        let func_idx = self.next_fun_index();
         let type_idx = self.register_function_type(
             name,
             &[(
@@ -426,6 +426,13 @@ impl<'a> AnfWasmEmitter<'a> {
             }
             AExpr::Const(Const::CLaterUnit, ty) => {
                 func.instruction(&Instruction::I32Const(-1));
+                ty.clone()
+            }
+
+            AExpr::Wait(name, ty) => {
+                let channel_index = self.channel_to_index(name);
+                func.instruction(&Instruction::I32Const(channel_index));
+                func.instruction(&Instruction::Call(WAIT_FUN_IDX));
                 ty.clone()
             }
             AExpr::Var(name, ty) => {
