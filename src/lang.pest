@@ -13,14 +13,17 @@ channel_def  = { "chan" ~ identifier ~ ":" ~ type_expr }
 output_def   = { identifier ~ "<-" ~ expr }
 
 // Types
-type_expr   =  { atomic_type ~ (type_op ~ atomic_type)* }
-atomic_type = _{ int_type | bool_type | unit_type | later_unit_type | parenthesis_or_tuple_type }
-type_op     = _{ arrow }
-int_type    =  { "int" }
-bool_type   =  { "bool" }
-unit_type   =  { "()" }
-later_unit_type = { "{}" }
-arrow       =  { "->" }
+type_expr   =  { type_prefix* ~ type_primary ~ (type_infix ~ type_prefix* ~ type_primary)* }
+type_infix  = _{ arrow }
+type_prefix = _{ signal }
+
+type_primary    = _{ int_type | bool_type | unit_type | later_unit_type | parenthesis_or_tuple_type }
+int_type        =  { "int" }
+bool_type       =  { "bool" }
+unit_type       =  { "()" }
+later_unit_type =  { "{}" }
+arrow           =  { "->" }
+signal          =  { "Sig" }
 
 parenthesis_or_tuple_type = {
     "(" ~ type_expr ~ ("*" ~ type_expr)* ~ ")"
@@ -30,11 +33,10 @@ tuple_access = { primary ~ ("." ~ integer)* }
 term         = { tuple_access+ }
 expr         = { (term ~ (infix ~ term)*) }
 
-
 clock_union = { "U" | "⊔" }
-clock_wait = { "wait" ~ (!"cl(") ~ identifier}
-clock_base = { "cl(" ~ (clock_wait | identifier) ~ ")" | "(" ~ clock_base ~ ")" }
-clock_expr = { clock_base ~ (clock_union ~ clock_base)* }
+clock_wait  = { "wait" ~ (!"cl(") ~ identifier }
+clock_base  = { "cl(" ~ (clock_wait | identifier) ~ ")" | "(" ~ clock_base ~ ")" }
+clock_expr  = { clock_base ~ (clock_union ~ clock_base)* }
 
 let_expr     = { "let" ~ identifier ~ "=" ~ expr ~ "in" ~ expr }
 fun_expr     = { "fun" ~ function_args ~ "->" ~ expr }
@@ -63,24 +65,26 @@ parenthesis_or_tuple = {
 }
 
 infix = _{
-    equality_op
+    sig_cons
+  | equality_op
   | relational_op
   | add_op
   | mul_op
 }
 
-equality_op   = { "=" | "<>" }
+sig_cons      = { "::" }
+equality_op   = { "<>" | "=" }
 relational_op = { "<=" | ">=" | "<" | ">" }
 add_op        = { "+" | "-" }
 mul_op        = { "*" | "/" }
 
 // Terminals
-identifier = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
-integer    = @{ "-"? ~ ("0" | ASCII_NONZERO_DIGIT ~ ASCII_DIGIT*) }
-true_lit   =  { "true" }
-false_lit  =  { "false" }
-unit_lit   =  { "()" }
-later_unit_lit   =  { "{}" }
+identifier     = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+integer        = @{ "-"? ~ ("0" | ASCII_NONZERO_DIGIT ~ ASCII_DIGIT*) }
+true_lit       =  { "true" }
+false_lit      =  { "false" }
+unit_lit       =  { "()" }
+later_unit_lit =  { "{}" }
 
 keyword = _{
     "def"

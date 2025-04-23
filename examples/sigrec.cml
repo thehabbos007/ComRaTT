@@ -1,0 +1,12 @@
+chan keyboard : int;
+
+kb : {} -> Sig int
+def kb =
+    let kb_v = wait keyboard in
+    delay {keyboard} (advance kb_v :: kb)
+;
+
+
+main: () -> {} -> Sig int
+def main _ = kb
+;

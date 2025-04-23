@@ -45,7 +45,7 @@ fn main() -> Result<(), lexopt::Error> {
             Arg::Value(path) => args.input = Some(path),
             Arg::Long("run") => args.run = true,
             Arg::Long(what) => {
-                eprintln!("The argument '--{}' isn't used/required anymore.", what);
+                eprintln!("The argument '--{}' isn't used.", what);
                 return Ok(());
             }
             _ => return Ok(()),
@@ -66,7 +66,7 @@ fn main() -> Result<(), lexopt::Error> {
     let prog = infer_all(prog);
     let wasm_bytes;
 
-    // You thought the anf did something? Never has.
+    let channels = prog.1.clone();
     if let Ok(bytes) = compile_and_write_prog(prog) {
         wasm_bytes = bytes;
     } else {
@@ -74,7 +74,7 @@ fn main() -> Result<(), lexopt::Error> {
     }
 
     if args.run {
-        let machine = Runtime::init(&wasm_bytes);
+        let machine = Runtime::init(&wasm_bytes, channels);
         machine.run();
     }
 
