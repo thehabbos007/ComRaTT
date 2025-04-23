@@ -375,22 +375,22 @@ impl<'a> AnfWasmEmitter<'a> {
 
     fn gen_clock_of(&self, clock: &ClockExpr, func: &mut Function) {
         match clock {
-            crate::source::ClockExpr::Never => {
+            ClockExpr::Never => {
                 func.instruction(&Instruction::I32Const(0));
             }
-            crate::source::ClockExpr::Wait(channel_name) => {
+            ClockExpr::Wait(channel_name) => {
                 let channel_index = self.channel_to_index(channel_name);
                 func.instruction(&Instruction::I32Const(channel_index));
             }
-            crate::source::ClockExpr::Cl(binding) => {
+            ClockExpr::Cl(binding) => {
                 self.generate_clock_of_binding_call(binding, func);
             }
-            crate::source::ClockExpr::Union(c1, c2) => {
+            ClockExpr::Union(c1, c2) => {
                 self.gen_clock_of(c1, func);
                 self.gen_clock_of(c2, func);
                 func.instruction(&Instruction::I32Or);
             }
-            crate::source::ClockExpr::Symbolic => {
+            ClockExpr::Symbolic => {
                 panic!("Tried to generate clock of from symbolic clockexpr")
             }
         }
@@ -640,7 +640,6 @@ impl<'a> AnfWasmEmitter<'a> {
 
                 func.instruction(&instr);
             }
-
             CExpr::App(f, args, _) => {
                 enum Scope {
                     TopLevel(u32),
@@ -733,7 +732,6 @@ impl<'a> AnfWasmEmitter<'a> {
                     ),
                 }
             }
-
             CExpr::IfThenElse(cond, then_br, else_br, typ) => {
                 self.compile_atomic(func, cond);
 
@@ -746,7 +744,6 @@ impl<'a> AnfWasmEmitter<'a> {
                 self.compile_anf_expr(func, else_br);
                 func.instruction(&Instruction::End);
             }
-
             CExpr::Tuple(exprs, _) => {
                 // Tuples are allocated into the heap.
                 // Nested tuples will be allocated depth first
@@ -788,6 +785,7 @@ impl<'a> AnfWasmEmitter<'a> {
 
                 func.instruction(&Instruction::I32Load(access_arg));
             }
+            CExpr::Sig(aexpr, aexpr1, _) => todo!(),
         }
     }
 

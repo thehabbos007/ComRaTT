@@ -1,4 +1,4 @@
-use std::fmt::{write, Display};
+use std::fmt::Display;
 
 use itertools::Itertools;
 
@@ -34,6 +34,7 @@ impl TypedExpr {
             }
             TypedExpr::TAccess(e, i, _) => Expr::Access(e.untyped().b(), *i),
             TypedExpr::TWait(name, _) => Expr::Wait(name.clone()),
+            TypedExpr::TSig(left, right, _) => Expr::Sig(left.untyped().b(), right.untyped().b()),
         }
     }
 }
@@ -98,7 +99,7 @@ impl Display for ClockExpr {
             ClockExpr::Union(cl1, cl2) => write!(f, "{cl1} ⊔ {cl2}"),
             ClockExpr::Wait(v) => write!(f, "cl(wait_{v})"),
             ClockExpr::Never => write!(f, "never"),
-            ClockExpr::Symbolic => write!(f, ""),
+            ClockExpr::Symbolic => write!(f, "SYMBOLIC"),
         }
     }
 }
@@ -266,6 +267,7 @@ impl Display for TypedExpr {
             }
             TypedExpr::TAccess(e, i, _) => write!(f, "{}.{}", e, i),
             TypedExpr::TWait(name, _) => write!(f, "wait {}", name),
+            TypedExpr::TSig(left, right, _) => write!(f, "{} :: {}", left, right),
         }
     }
 }
@@ -376,6 +378,9 @@ impl Display for CExpr {
             CExpr::Access(tup, idx, _) => write!(f, "{}.{}", tup, idx),
             CExpr::IfThenElse(cond, then_branch, else_branch, _) => {
                 write!(f, "if {} then {} else {}", cond, then_branch, else_branch)
+            }
+            CExpr::Sig(aexpr, aexpr1, _) => {
+                write!(f, "{} :: {}", aexpr, aexpr1)
             }
         }
     }

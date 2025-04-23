@@ -250,7 +250,7 @@ impl Inference {
                         *t
                     } else {
                         // Index '1' will be the later Sig co-inductive type
-                        Type::TFun(unimplemented!(), Type::TSig(t).b())
+                        Type::TFun(Type::TLaterUnit(ClockExpr::Symbolic).b(), Type::TSig(t).b())
                     };
                     (
                         typ.clone(),
@@ -261,7 +261,10 @@ impl Inference {
                     )
                 }
                 // Is panic the right thing to do? The alternative is to create an insatisfiable constraint maybe?
-                _ => panic!("Type checking access with out-of-bounds index or invalid expr"),
+                (typ, type_output) => panic!(
+                    "Type checking access with out-of-bounds index or invalid expr {} [type: {}]",
+                    type_output.texp, typ
+                ),
             },
             Expr::Tuple(ts) => {
                 if ts.len() < 2 {
@@ -294,15 +297,19 @@ impl Inference {
                 constraints.append(&mut later_output.constraints);
                 constraints.push(Constraint::TypeEqual(
                     later_ty.clone(),
-                    Type::TFun(unimplemented!(), Type::TSig(val_ty.clone().b()).b()),
+                    Type::TFun(
+                        Type::TLaterUnit(ClockExpr::Symbolic).b(),
+                        Type::TSig(val_ty.clone().b()).b(),
+                    ),
                 ));
 
                 (
                     Type::TSig(val_ty.clone().b()),
                     TypeOutput::new(
                         constraints,
-                        TypedExpr::TTuple(
-                            vec![val_output.texp, later_output.texp],
+                        TypedExpr::TSig(
+                            val_output.texp.b(),
+                            later_output.texp.b(),
                             Type::TSig(val_ty.b()),
                         ),
                     ),
@@ -811,6 +818,14 @@ impl Inference {
                 let (unbounds, ty) = self.substitute(ty);
                 unbound.extend(unbounds);
                 (unbound, TypedExpr::TAccess(texp.b(), idx, ty))
+            }
+            TypedExpr::TSig(left, right, ty) => {
+                let (mut unbounds, left) = self.substitute_texp(*left);
+                let (unbound, right) = self.substitute_texp(*right);
+                unbounds.extend(unbound);
+                let (unbound, ty) = self.substitute(ty);
+                unbounds.extend(unbound);
+                (unbounds, TypedExpr::TSig(left.b(), right.b(), ty))
             }
         }
     }

@@ -26,6 +26,8 @@ pub enum TypedExpr {
     TAccess(Box<TypedExpr>, i32, Type),
     /// Wait on a channel
     TWait(String, Type),
+    /// Signal constructor
+    TSig(Box<TypedExpr>, Box<TypedExpr>, Type),
 }
 
 impl TypedExpr {
@@ -45,6 +47,7 @@ impl TypedExpr {
             TypedExpr::TTuple(_, ty) => ty.clone(),
             TypedExpr::TAccess(_, _, ty) => ty.clone(),
             TypedExpr::TWait(_, ty) => ty.clone(),
+            TypedExpr::TSig(_, _, ty) => ty.clone(),
         }
     }
 }
@@ -184,6 +187,10 @@ pub fn traverse_locals<'a>(expr: &'a TypedExpr, locals: &mut Vec<(&'a str, Type)
         | TypedExpr::TName(_, _)
         | TypedExpr::TApp(_, _, _)
         | TypedExpr::TWait(_, _) => {}
+        TypedExpr::TSig(left, right, _) => {
+            traverse_locals(left, locals);
+            traverse_locals(right, locals);
+        }
     }
 }
 
@@ -250,6 +257,11 @@ pub fn find_free_vars(
         }
         TypedExpr::TAccess(expr, _, _) => find_free_vars(expr, bound),
         TypedExpr::TWait(_, _) => HashSet::new(),
+        TypedExpr::TSig(left, right, _) => {
+            let mut free = find_free_vars(left, bound);
+            free.extend(find_free_vars(right, bound));
+            free
+        }
     }
 }
 
@@ -304,6 +316,11 @@ pub fn substitute_binding(bind_old: &str, bind_new: &str, expr: TypedExpr) -> Ty
         TypedExpr::TAccess(texp, idx, ty) => TypedExpr::TAccess(
             Box::new(substitute_binding(bind_old, bind_new, *texp)),
             idx,
+            ty,
+        ),
+        TypedExpr::TSig(left, right, ty) => TypedExpr::TSig(
+            Box::new(substitute_binding(bind_old, bind_new, *left)),
+            Box::new(substitute_binding(bind_old, bind_new, *right)),
             ty,
         ),
         TypedExpr::TName(_, _) => expr,

@@ -28,6 +28,7 @@ pub enum CExpr {
     App(AExpr, Vec<AExpr>, Type),
     Tuple(Vec<AExpr>, Type),
     Access(AExpr, i32, Type),
+    Sig(AExpr, AExpr, Type),
     IfThenElse(AExpr, Box<AnfExpr>, Box<AnfExpr>, Type),
 }
 
@@ -39,6 +40,7 @@ impl CExpr {
             CExpr::Tuple(_, ty) => ty.clone(),
             CExpr::Access(_, _, ty) => ty.clone(),
             CExpr::IfThenElse(_, _, _, ty) => ty.clone(),
+            CExpr::Sig(_, _, ty) => ty.clone(),
         }
     }
 
