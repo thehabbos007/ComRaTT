@@ -59,8 +59,8 @@ impl PartialElimination {
         }
     }
 
-    pub fn eliminate_partial(&mut self, aexpr: TypedExpr) -> TypedExpr {
-        match aexpr {
+    pub fn eliminate_partial(&mut self, texpr: TypedExpr) -> TypedExpr {
+        match texpr {
             TypedExpr::TName(name, ty @ Type::TFun(..)) => {
                 let eta_args = unpack_type(&ty);
                 let (lambda_args, app_args) = self.generate_lambda_vars_and_app_vars(&eta_args);
@@ -74,7 +74,7 @@ impl PartialElimination {
                     ty.clone(),
                 )
             }
-            TypedExpr::TConst(_, _) | TypedExpr::TName(_, _) | TypedExpr::TWait(_, _) => aexpr,
+            TypedExpr::TConst(_, _) | TypedExpr::TName(_, _) | TypedExpr::TWait(_, _) => texpr,
             TypedExpr::TPrim(op, left, right, typ) => TypedExpr::TPrim(
                 op,
                 Box::new(self.eliminate_partial(*left)),
