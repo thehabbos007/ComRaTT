@@ -1,5 +1,4 @@
 use std::{
-    clone,
     collections::HashMap,
     sync::{Arc, Mutex},
 };
