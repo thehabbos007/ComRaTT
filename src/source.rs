@@ -53,6 +53,8 @@ pub enum Expr {
     Tuple(Vec<Expr>),
     Sig(Box<Expr>, Box<Expr>),
     Access(Box<Expr>, i32),
+    Box(Box<Expr>),
+    Unbox(Box<Expr>),
 }
 
 impl Expr {

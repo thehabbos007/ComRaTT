@@ -1,0 +1,7 @@
+chan keyboard : int;
+
+main : int -> int
+def main x =
+    // naming the variable "boxed" results in the tokens "unbox box ed" instead of "unbox boxed"
+    let b = box x in
+    unbox b;
