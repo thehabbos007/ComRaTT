@@ -233,6 +233,16 @@ fn parse_expression_atom(pair: Pair<Rule>) -> Expr {
 
             Expr::Tuple(exprs)
         }
+        Rule::box_expr => {
+            let mut box_inner = pair.into_inner();
+            let expr_to_box = parse_expression(box_inner.next().unwrap().into_inner());
+            Expr::Box(expr_to_box.b())
+        }
+        Rule::unbox_expr => {
+            let mut unbox_inner = pair.into_inner();
+            let expr_to_unbox = parse_expression(unbox_inner.next().unwrap().into_inner());
+            Expr::Unbox(expr_to_unbox.b())
+        }
         Rule::integer => Expr::Const(Const::CInt(pair.as_str().parse().unwrap())),
         Rule::true_lit => Expr::Const(Const::CBool(true)),
         Rule::false_lit => Expr::Const(Const::CBool(false)),

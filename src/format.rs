@@ -184,6 +184,8 @@ impl Expr {
             }
             Expr::Access(e, i) => format!("{}.{}", e, i),
             Expr::Wait(i) => format!("wait {}", i),
+            Expr::Box(e) => format!("box {}", e),
+            Expr::Unbox(e) => format!("unbox {}", e),
         }
     }
 }

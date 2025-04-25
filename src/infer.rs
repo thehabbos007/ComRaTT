@@ -595,6 +595,43 @@ impl Inference {
                     TypeOutput::new(body_output.constraints, lambda),
                 )
             }
+            Expr::Box(e) => {
+                // box e = () -> e
+                // allocate as a regular closure
+                // Do we need any constraints on what can be boxed? Probably not.
+                let (ty, type_output) = self.infer(context, *e);
+                (
+                    Type::TFun(Type::TUnit.b(), ty.clone().b()),
+                    TypeOutput::new(
+                        type_output.constraints,
+                        TypedExpr::TLam(
+                            vec![("#box_unit".to_owned(), Type::TUnit)],
+                            type_output.texp.b(),
+                            Type::TFun(Type::TUnit.b(), ty.clone().b()),
+                        ),
+                    ),
+                )
+            }
+            Expr::Unbox(e) => {
+                // unbox e = e ()
+                // e should type check to a unit lambda
+                // Do we need further or other constraints on what can be unboxed?
+                let (ty, type_output) = self.infer(context, *e);
+                match ty {
+                    Type::TFun(box Type::TUnit, box dest_ty) => (
+                        dest_ty.clone(),
+                        TypeOutput::new(
+                            type_output.constraints,
+                            TypedExpr::TApp(
+                                type_output.texp.b(),
+                                vec![TypedExpr::TConst(Const::CUnit, Type::TUnit)],
+                                dest_ty,
+                            ),
+                        ),
+                    ),
+                    _ => panic!("Attempted to unbox a non-thunk {ty}"),
+                }
+            }
         }
     }
 

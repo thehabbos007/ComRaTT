@@ -44,6 +44,8 @@ if_expr      = { "if" ~ expr ~ "then" ~ expr ~ "else" ~ expr }
 delay_expr   = { "delay" ~ "{" ~ clock_expr ~ "}" ~ expr }
 advance_expr = { "advance" ~ identifier }
 wait_expr    = { "wait" ~ identifier }
+box_expr     = { "box" ~ expr }
+unbox_expr     = { "unbox" ~ expr }
 
 primary = _{
     let_expr
@@ -58,6 +60,8 @@ primary = _{
   | false_lit
   | unit_lit
   | !keyword ~ identifier
+  | box_expr
+  | unbox_expr
 }
 
 parenthesis_or_tuple = {
@@ -100,6 +104,8 @@ keyword = _{
   | "wait"
   | "true"
   | "false"
+  | "box"
+  | "unbox"
 }
 
 WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
