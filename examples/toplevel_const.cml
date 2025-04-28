@@ -1,0 +1,7 @@
+chan o: int;
+
+v: int
+def v = 2;
+
+tl : {} -> int
+def tl = delay {cl(wait o)} v;

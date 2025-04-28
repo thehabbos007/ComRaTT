@@ -678,8 +678,7 @@ impl Inference {
             Type::TBox(t) => {
                 let t = self.normalize_ty(t);
                 Type::TBox(t.b())
-
-            },
+            }
         }
     }
 
@@ -871,7 +870,7 @@ impl Inference {
         let mut typed_toplevels = Vec::new();
         for toplevel in &toplevels {
             match toplevel {
-                Toplevel::FunDef(name, fun_ty @ Type::TFun(_, _), args, body) => {
+                Toplevel::FunDef(name, fun_ty, args, body) => {
                     context.insert_binding(name.to_owned(), fun_ty.clone());
                 }
                 Toplevel::Channel(name, ty) => {
@@ -879,10 +878,6 @@ impl Inference {
                     typed_toplevels.push(TypedToplevel::Channel(name.to_owned(), ty.clone()))
                 }
                 Toplevel::Output(name, expr) => {}
-                _ => panic!(
-                    "Error: FunDefs must be functions with at least 1 argument. Got {:?}",
-                    toplevel
-                ),
             }
         }
 
@@ -891,7 +886,7 @@ impl Inference {
 
         for toplevel in toplevels {
             match toplevel {
-                Toplevel::FunDef(name, fun_ty @ Type::TFun(_, _), args, body) => {
+                Toplevel::FunDef(name, fun_ty, args, body) => {
                     let (ret_ty, types) = tfun_len_n(fun_ty.clone(), args.len());
                     let args_with_types = args.into_iter().zip(types.into_iter());
 
@@ -954,7 +949,6 @@ impl Inference {
                         panic!("Error: Unsolved constraints: {:#?}", output.constraints);
                     }
                 }
-                _ => panic!("Error: FunDefs must be functions with at least 1 argument"),
             }
         }
 
