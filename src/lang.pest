@@ -15,7 +15,7 @@ output_def   = { identifier ~ "<-" ~ expr }
 // Types
 type_expr   =  { type_prefix* ~ type_primary ~ (type_infix ~ type_prefix* ~ type_primary)* }
 type_infix  = _{ arrow }
-type_prefix = _{ signal }
+type_prefix = _{ signal | box_type }
 
 type_primary    = _{ int_type | bool_type | unit_type | later_unit_type | parenthesis_or_tuple_type }
 int_type        =  { "int" }
@@ -24,6 +24,7 @@ unit_type       =  { "()" }
 later_unit_type =  { "{}" }
 arrow           =  { "->" }
 signal          =  { "Sig" }
+box_type        =  { "Box" | "□" }
 
 parenthesis_or_tuple_type = {
     "(" ~ type_expr ~ ("*" ~ type_expr)* ~ ")"
@@ -44,6 +45,8 @@ if_expr      = { "if" ~ expr ~ "then" ~ expr ~ "else" ~ expr }
 delay_expr   = { "delay" ~ "{" ~ clock_expr ~ "}" ~ expr }
 advance_expr = { "advance" ~ identifier }
 wait_expr    = { "wait" ~ identifier }
+box_expr     = { "box" ~ expr }
+unbox_expr     = { "unbox" ~ expr }
 
 primary = _{
     let_expr
@@ -57,7 +60,9 @@ primary = _{
   | true_lit
   | false_lit
   | unit_lit
-  | !keyword ~ identifier
+  | identifier
+  | box_expr
+  | unbox_expr
 }
 
 parenthesis_or_tuple = {
@@ -79,7 +84,7 @@ add_op        = { "+" | "-" }
 mul_op        = { "*" | "/" }
 
 // Terminals
-identifier     = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+identifier     = @{ !keyword ~ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
 integer        = @{ "-"? ~ ("0" | ASCII_NONZERO_DIGIT ~ ASCII_DIGIT*) }
 true_lit       =  { "true" }
 false_lit      =  { "false" }
@@ -100,6 +105,8 @@ keyword = _{
   | "wait"
   | "true"
   | "false"
+  | "box"
+  | "unbox"
 }
 
 WHITESPACE = _{ " " | "\t" | "\r" | "\n" }

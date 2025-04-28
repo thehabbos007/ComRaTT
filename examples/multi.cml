@@ -1,0 +1,22 @@
+chan keyboard : int;
+
+no_alloc : int -> int -> int
+def no_alloc x y = x+y;
+
+//alloc_one : {} -> int
+//def alloc_one =
+    //let del_one = delay {cl(wait keyboard)} (no_alloc 40 2) in
+    // delay {cl(del_one)} (advance del_one);
+
+alloc_one : int -> {} -> int
+def alloc_one x =
+    let del_one = delay {cl(wait keyboard)} (no_alloc 40 x) in
+    delay {cl(del_one)} (advance del_one);
+
+alloc_two : int -> {} -> int
+def alloc_two y =
+    let del_two = delay {cl(wait keyboard)} y in
+    delay {cl(del_two)} (advance del_two);
+
+out_one <- alloc_one 2;
+out_two <- alloc_two 69;

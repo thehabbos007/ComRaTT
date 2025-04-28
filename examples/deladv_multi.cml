@@ -1,0 +1,11 @@
+chan apple;
+
+hanno : int -> () -> int
+def hanno x =
+    let dela = delay {apple} x in
+    delay {apple} (advance dela);
+
+main : int -> () -> int
+def main x =
+    let del = delay {apple} x in
+    delay {apple} (advance del);

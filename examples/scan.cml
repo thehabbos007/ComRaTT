@@ -1,0 +1,17 @@
+// scan : stable B ⇒ □ (B → A → B) → B → Sig A → Sig B
+// scan f acc (a :: as) = acc′ :: delay (scan f acc′ (adv as))
+// where acc′ = unbox f acc a
+// we only have ints though, so A = B here..
+// destructure is .0 and .1 tuple syntax use.
+scan : □ (int -> int -> int) -> int -> Sig int -> Sig int
+def scan f acc siga =
+    // no way to destructure siga?
+    let a = siga.0 in
+    let as = siga.1 in
+    let acc_prim = (unbox f) a acc in
+    acc_prim :: delay (scan f acc_prim (adv as))
+
+// sum : Sig Nat → Sig Nat
+// sum = scan (box (𝜆m n → m + n)) 0
+sum : Sig int -> Sig int
+def sum = scan (box (fun m n -> m+n)) 0

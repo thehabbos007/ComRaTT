@@ -53,6 +53,8 @@ pub enum Expr {
     Tuple(Vec<Expr>),
     Sig(Box<Expr>, Box<Expr>),
     Access(Box<Expr>, i32),
+    Box(Box<Expr>),
+    Unbox(Box<Expr>),
 }
 
 impl Expr {
@@ -89,6 +91,7 @@ pub enum Type {
     TProduct(Vec<Type>),
     TSig(Box<Type>),
     TVar(TypeVar),
+    TBox(Box<Type>),
 }
 
 impl EqUnifyValue for Type {}
@@ -105,6 +108,7 @@ impl Type {
             Type::TLaterUnit(_) => Ok(()),
             Type::TUnit => Ok(()),
             Type::TSig(_) => Ok(()),
+            Type::TBox(_) => Ok(()),
             Type::TVar(v) => {
                 if *v == var {
                     Err(Type::TVar(*v))

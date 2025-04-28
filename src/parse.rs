@@ -28,8 +28,9 @@ static CLOCK_PARSER: LazyLock<PrattParser<Rule>> =
 
 static TYPE_PARSER: LazyLock<PrattParser<Rule>> = LazyLock::new(|| {
     PrattParser::new()
-        .op(Op::prefix(Rule::signal))
         .op(Op::infix(Rule::arrow, Assoc::Right))
+        .op(Op::prefix(Rule::signal))
+        .op(Op::prefix(Rule::box_type))
 });
 
 impl Prog {
@@ -96,6 +97,7 @@ fn parse_type(pairs: Pairs<Rule>) -> Type {
         .map_primary(|primary| parse_type_atom(primary))
         .map_prefix(|op, typ| match op.as_rule() {
             Rule::signal => Type::TSig(Box::new(typ)),
+            Rule::box_type => Type::TFun(Box::new(Type::TUnit), Box::new(Type::TBox(Box::new(typ)))),
             _ => unreachable!(),
         })
         .map_infix(|lhs, op, rhs| match op.as_rule() {
@@ -232,6 +234,16 @@ fn parse_expression_atom(pair: Pair<Rule>) -> Expr {
             }
 
             Expr::Tuple(exprs)
+        }
+        Rule::box_expr => {
+            let mut box_inner = pair.into_inner();
+            let expr_to_box = parse_expression(box_inner.next().unwrap().into_inner());
+            Expr::Box(expr_to_box.b())
+        }
+        Rule::unbox_expr => {
+            let mut unbox_inner = pair.into_inner();
+            let expr_to_unbox = parse_expression(unbox_inner.next().unwrap().into_inner());
+            Expr::Unbox(expr_to_unbox.b())
         }
         Rule::integer => Expr::Const(Const::CInt(pair.as_str().parse().unwrap())),
         Rule::true_lit => Expr::Const(Const::CBool(true)),

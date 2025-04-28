@@ -100,6 +100,7 @@ pub fn final_type(ty: &Type) -> Type {
         Type::TFun(_, t2) => final_type(t2),
         Type::TProduct(ts) => final_type_tproduct(ts),
         Type::TSig(_) => todo!(),
+        Type::TBox(_) => ty.clone(),
     }
 }
 
@@ -323,5 +324,6 @@ pub fn unpack_type(ty: &Type) -> Vec<Type> {
         Type::TProduct(ts) => ts.clone(),
         Type::TVar(_) => vec![],
         Type::TSig(_) => vec![],
+        Type::TBox(_) => vec![],
     }
 }
