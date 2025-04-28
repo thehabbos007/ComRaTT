@@ -6,7 +6,8 @@
 scan : □ (int -> int -> int) -> int -> Sig int -> Sig int
 def scan f acc siga =
     // no way to destructure siga?
-    let (a, as) = siga in
+    let a = siga.0 in
+    let as = siga.1 in
     let acc_prim = (unbox f) a acc in
     acc_prim :: delay (scan f acc_prim (adv as))
 
