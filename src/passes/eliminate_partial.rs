@@ -1,6 +1,9 @@
+use std::collections::HashMap;
+
 use crate::source::Type;
 use crate::types::{
-    final_type, substitute_binding, unpack_type, TypedExpr, TypedProg, TypedToplevel,
+    build_function_type, final_type, unpack_type, BindingContext, BindingKind, TypedExpr,
+    TypedProg, TypedToplevel,
 };
 use itertools::Itertools;
 use map_box::Map as _;
@@ -9,11 +12,33 @@ use super::Pass;
 
 #[derive(Debug, Default)]
 pub struct PartialElimination {
+    handle_delayed_closures: bool,
     var_counter: usize,
+    toplevels: BindingContext,
 }
 
 impl Pass for PartialElimination {
     fn run(&mut self, prog: TypedProg) -> TypedProg {
+        self.toplevels = prog
+            .0
+            .iter()
+            .filter_map(|def| match def {
+                TypedToplevel::TFunDef(name, args, _, ret_ty) => {
+                    let ty = build_function_type(
+                        args.iter()
+                            .cloned()
+                            .map(|(_, ty)| ty)
+                            .collect_vec()
+                            .as_slice(),
+                        ret_ty.clone(),
+                    );
+
+                    Some(((name.clone(), ty), BindingKind::Toplevel))
+                }
+                _ => None,
+            })
+            .collect::<HashMap<_, _>>();
+
         let defs = prog.0;
         let defs = defs
             .into_iter()
@@ -33,8 +58,16 @@ impl Pass for PartialElimination {
 }
 
 impl PartialElimination {
-    pub fn new() -> Self {
-        Default::default()
+    pub fn new(handle_delayed_closures: bool) -> Self {
+        Self {
+            handle_delayed_closures,
+            toplevels: HashMap::new(),
+            var_counter: 0,
+        }
+    }
+
+    pub fn set_handle_delayed_closures(&mut self, toggle: bool) {
+        self.handle_delayed_closures = toggle
     }
 
     fn unique_var_name(&mut self, x: &str) -> String {
@@ -59,9 +92,21 @@ impl PartialElimination {
         }
     }
 
+    fn handle_type_is_later_closure(&self, typ: &Type) -> bool {
+        self.handle_delayed_closures || !typ.contains_later_unit()
+    }
+
+    fn handle_later_closure(&self, name: &str, typ: &Type) -> bool {
+        self.handle_type_is_later_closure(typ)
+            && !self.toplevels.contains_key(&(name.to_owned(), typ.clone()))
+    }
+
     pub fn eliminate_partial(&mut self, texpr: TypedExpr) -> TypedExpr {
         match texpr {
-            TypedExpr::TName(name, ty @ Type::TFun(..)) => {
+            TypedExpr::TName(name, ty @ Type::TFun(..))
+                // if self.handle_later_closure(&name, &ty)
+                =>
+            {
                 let eta_args = unpack_type(&ty);
                 let (lambda_args, app_args) = self.generate_lambda_vars_and_app_vars(&eta_args);
                 TypedExpr::TLam(
@@ -85,7 +130,7 @@ impl PartialElimination {
                 TypedExpr::TLam(args, Box::new(self.eliminate_partial(*body)), typ)
             }
             TypedExpr::TApp(fun_expr, args, app_ty @ Type::TFun(_, _))
-                if app_ty.not_composed_later_unit() =>
+                if self.handle_type_is_later_closure(&app_ty) =>
             {
                 let eta_args = unpack_type(&app_ty);
                 let (lambda_args, app_args) = self.generate_lambda_vars_and_app_vars(&eta_args);
@@ -98,10 +143,12 @@ impl PartialElimination {
                 )
             }
             TypedExpr::TApp(fn_expr, args, typ) => TypedExpr::TApp(
-                fn_expr,
-                args.into_iter()
-                    .map(|arg| self.eliminate_partial(arg))
-                    .collect(),
+                fn_expr, args,
+                // Don't think we want to eliminate partials in the args of a TApp because
+                // that means higher order functions in some cases.
+                // args.into_iter()
+                //     .map(|arg| self.eliminate_partial(arg))
+                //     .collect(),
                 typ,
             ),
             TypedExpr::TLet(name, typ, rhs, body) => TypedExpr::TLet(

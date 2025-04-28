@@ -1,20 +1,12 @@
 use crate::source::Type;
 use crate::types::{
-    build_function_type, find_free_vars, substitute_binding, tfun_len_n, TypedExpr, TypedProg,
-    TypedToplevel,
+    build_function_type, find_free_vars, substitute_binding, tfun_len_n, BindingContext,
+    BindingKind, TypedExpr, TypedProg, TypedToplevel,
 };
 use itertools::Itertools;
 use std::collections::{HashMap, HashSet};
 
 use super::Pass;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum BindingKind {
-    Local,
-    Toplevel,
-}
-
-type BindingContext = HashMap<(String, Type), BindingKind>;
 
 #[derive(Debug)]
 pub struct LambdaLift {
@@ -190,14 +182,14 @@ impl LambdaLift {
                     fn_defs,
                 )
             }
-            TypedExpr::TLet(name, typ, rhs, box mut body) => {
+            TypedExpr::TLet(name, typ, rhs, box body) => {
                 let (lifted_rhs, mut rhs_defs) = self.lift_lambdas(*rhs, bound.clone());
                 let mut bound = bound;
                 bound.insert((name.clone(), lifted_rhs.ty().clone()), BindingKind::Local);
 
-                if let TypedExpr::TName(new_name, _) = &lifted_rhs {
-                    body = substitute_binding(&name, new_name, body);
-                }
+                // if let TypedExpr::TName(new_name, _) = &lifted_rhs {
+                //     body = substitute_binding(&name, new_name, body);
+                // }
 
                 let (lifted_body, body_defs) = self.lift_lambdas(body, bound);
 

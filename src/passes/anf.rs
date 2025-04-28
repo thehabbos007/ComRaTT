@@ -1,6 +1,9 @@
+use itertools::Itertools;
+
 use crate::anf::{AExpr, AnfExpr, AnfProg, AnfToplevel, CExpr};
 use crate::passes::Pass;
-use crate::types::{TypedExpr, TypedProg, TypedToplevel};
+use crate::source::Type;
+use crate::types::{final_type, unpack_type, TypedExpr, TypedProg, TypedToplevel};
 
 pub struct ANFConversion {
     counter: usize,
@@ -23,9 +26,30 @@ impl ANFConversion {
         name
     }
 
+    fn generate_closure_type(&mut self, eta_args: &[Type]) -> Vec<Type> {
+        match eta_args {
+            [] => vec![],
+            [typ, rest @ ..] => {
+                let mut lambda = self.generate_closure_type(rest);
+                lambda.insert(0, typ.clone());
+                lambda
+            }
+        }
+    }
+
     fn normalize(&mut self, expr: TypedExpr) -> AnfExpr {
         match expr {
             TypedExpr::TConst(c, ty) => AnfExpr::AExpr(AExpr::Const(c, ty)),
+            // TypedExpr::TName(x, ty @ Type::TFun(..)) => {
+            //     let typs = unpack_type(&ty);
+            //     let args = self.generate_closure_type(&typs);
+
+            //     AnfExpr::AExpr(AExpr::Closure(
+            //         args,
+            //         Box::new(AnfExpr::AExpr(AExpr::Var(x, ty.clone()))),
+            //         final_type(&ty),
+            //     ))
+            // }
             TypedExpr::TName(x, ty) => AnfExpr::AExpr(AExpr::Var(x, ty)),
             TypedExpr::TPrim(op, e1, e2, ty) => {
                 let (e1_anf, bindings1) = self.normalize_atom(*e1);
@@ -79,7 +103,11 @@ impl ANFConversion {
             }
             TypedExpr::TLam(params, body, ty) => {
                 let body_anf = self.normalize(*body);
-                AnfExpr::AExpr(AExpr::Lam(params, Box::new(body_anf), ty))
+                AnfExpr::AExpr(AExpr::Closure(
+                    params.iter().cloned().map(|(_, typ)| typ).collect_vec(),
+                    Box::new(body_anf),
+                    ty,
+                ))
             }
             TypedExpr::TWait(name, typ) => AnfExpr::AExpr(AExpr::Wait(name, typ)),
         }

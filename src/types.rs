@@ -1,4 +1,7 @@
-use std::{collections::HashSet, ops::Deref};
+use std::{
+    collections::{HashMap, HashSet},
+    ops::Deref,
+};
 
 use crate::source::{Binop, Const, Type};
 
@@ -327,3 +330,11 @@ pub fn unpack_type(ty: &Type) -> Vec<Type> {
         Type::TBox(_) => vec![],
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum BindingKind {
+    Local,
+    Toplevel,
+}
+
+pub type BindingContext = HashMap<(String, Type), BindingKind>;

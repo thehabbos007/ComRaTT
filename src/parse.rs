@@ -1,4 +1,4 @@
-use std::{assert_matches::assert_matches, sync::LazyLock};
+use std::{assert_matches::assert_matches, collections::BTreeSet, sync::LazyLock};
 
 use itertools::Itertools;
 use pest::{
@@ -8,7 +8,7 @@ use pest::{
 };
 use pest_derive::Parser;
 
-use crate::source::{Binop, ClockExpr, Const, Expr, Prog, Toplevel, Type};
+use crate::source::{empty_clock_expr, Binop, ClockExpr, Const, Expr, Prog, Toplevel, Type};
 
 #[derive(Parser)]
 #[grammar = "lang.pest"]
@@ -97,7 +97,9 @@ fn parse_type(pairs: Pairs<Rule>) -> Type {
         .map_primary(|primary| parse_type_atom(primary))
         .map_prefix(|op, typ| match op.as_rule() {
             Rule::signal => Type::TSig(Box::new(typ)),
-            Rule::box_type => Type::TFun(Box::new(Type::TUnit), Box::new(Type::TBox(Box::new(typ)))),
+            Rule::box_type => {
+                Type::TFun(Box::new(Type::TUnit), Box::new(Type::TBox(Box::new(typ))))
+            }
             _ => unreachable!(),
         })
         .map_infix(|lhs, op, rhs| match op.as_rule() {
@@ -112,7 +114,7 @@ fn parse_type_atom(pair: Pair<Rule>) -> Type {
         Rule::int_type => Type::TInt,
         Rule::bool_type => Type::TBool,
         Rule::unit_type => Type::TUnit,
-        Rule::later_unit_type => Type::TLaterUnit(ClockExpr::Symbolic),
+        Rule::later_unit_type => Type::TLaterUnit(empty_clock_expr()),
         Rule::type_expr => parse_type(pair.into_inner()),
         Rule::parenthesis_or_tuple_type => {
             let mut typs = pair
@@ -157,20 +159,25 @@ fn parse_expression(pairs: Pairs<Rule>) -> Expr {
         .parse(pairs)
 }
 
-fn parse_clock_atom(pair: Pair<Rule>) -> ClockExpr {
+fn parse_clock_atom(pair: Pair<Rule>) -> Vec<ClockExpr> {
     match pair.as_rule() {
-        Rule::identifier => ClockExpr::Cl(pair.as_str().to_string()),
-        Rule::clock_base => parse_clock_expression(pair.into_inner()),
-        Rule::clock_wait => ClockExpr::Wait(pair.into_inner().next().unwrap().as_str().to_string()),
+        Rule::identifier => vec![ClockExpr::Cl(pair.as_str().to_string())],
+        Rule::clock_wait => vec![ClockExpr::Wait(
+            pair.into_inner().next().unwrap().as_str().to_string(),
+        )],
+        Rule::clock_base => parse_clock_expressions(pair.into_inner()),
         _ => unreachable!("Unknown clock type: {:?}", pair.as_rule()),
     }
 }
 
-fn parse_clock_expression(pairs: Pairs<Rule>) -> ClockExpr {
+fn parse_clock_expressions(pairs: Pairs<Rule>) -> Vec<ClockExpr> {
     CLOCK_PARSER
         .map_primary(|primary| parse_clock_atom(primary))
-        .map_infix(|lhs, op, rhs| match op.as_rule() {
-            Rule::clock_union => ClockExpr::Union(Box::new(lhs), Box::new(rhs)),
+        .map_infix(|mut lhs, op, rhs| match op.as_rule() {
+            Rule::clock_union => {
+                lhs.extend(rhs);
+                lhs
+            }
             rule => unreachable!("Unknown clock expression: {:?}", rule),
         })
         .parse(pairs)
@@ -210,10 +217,10 @@ fn parse_expression_atom(pair: Pair<Rule>) -> Expr {
 
         Rule::delay_expr => {
             let mut delay_inner = pair.into_inner();
-            let clock_expr = parse_clock_expression(delay_inner.next().unwrap().into_inner());
+            let clock_exprs = parse_clock_expressions(delay_inner.next().unwrap().into_inner());
 
             let expr = parse_expression(delay_inner.next().unwrap().into_inner());
-            Expr::Delay(Box::new(expr), clock_expr)
+            Expr::Delay(Box::new(expr), BTreeSet::from_iter(clock_exprs))
         }
         Rule::advance_expr => {
             let channel = pair.into_inner().next().unwrap().as_str().to_string();

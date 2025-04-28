@@ -5,3 +5,15 @@ def kb =
     let kb_v = wait keyboard in
     delay {cl(kb_v)} (advance kb_v :: kb)
 ;
+
+// a: int -> (int -> int) -> (int -> int)
+// TF(Int, TF(TF(Int, Int), TF(Int, Int)))
+//
+//
+// let add x y =  x + y
+//
+//
+// let hof a = a 2
+//
+//
+// let main a = let adder = add a in hof adderV

@@ -8,7 +8,7 @@ use std::{
 use ena::unify::InPlaceUnificationTable;
 
 use crate::{
-    source::{Binop, ClockExpr, Const, Expr, Prog, Toplevel, Type, TypeVar},
+    source::{Binop, ClockExpr, ClockExprs, Const, Expr, Prog, Toplevel, Type, TypeVar},
     types::*,
 };
 
@@ -28,7 +28,7 @@ impl TypeOutput {
     }
 }
 
-type Binding = (Type, Option<ClockExpr>);
+type Binding = (Type, Option<ClockExprs>);
 
 #[derive(Debug, Clone, Default)]
 struct Context {
@@ -61,7 +61,7 @@ impl Context {
         self.bindings_context.get(binding_name)
     }
 
-    fn promote_tick(self, clock: &ClockExpr) -> Self {
+    fn promote_tick(self, clock: &ClockExprs) -> Self {
         Self {
             bindings_context: self.bindings_context.promote_tick(clock),
             channels: self.channels.clone(),
@@ -76,7 +76,7 @@ impl Context {
         &mut self,
         binding_name: Sym,
         value: Type,
-        clock: ClockExpr,
+        clock: ClockExprs,
     ) -> Option<Binding> {
         self.bindings_context
             .insert_clock(binding_name, value, clock)
@@ -97,7 +97,7 @@ enum BindingContext {
     //// Bindings
     Bindings(HashMap<Sym, Binding>),
     // Bindings, the clock for the tick and the bindings after the tick
-    Tick(HashMap<Sym, Binding>, ClockExpr, HashMap<Sym, Binding>),
+    Tick(HashMap<Sym, Binding>, ClockExprs, HashMap<Sym, Binding>),
 }
 
 impl Default for BindingContext {
@@ -142,7 +142,7 @@ impl BindingContext {
         &mut self,
         binding_name: Sym,
         value: Type,
-        clock: ClockExpr,
+        clock: ClockExprs,
     ) -> Option<Binding> {
         match self {
             BindingContext::Bindings(bindings) => {
@@ -154,7 +154,7 @@ impl BindingContext {
         }
     }
 
-    fn binding_clock(&self, binding_name: Sym) -> Option<ClockExpr> {
+    fn binding_clock(&self, binding_name: Sym) -> Option<ClockExprs> {
         match self {
             BindingContext::Bindings(bindings) => bindings
                 .get(&binding_name)
@@ -172,7 +172,7 @@ impl BindingContext {
         }
     }
 
-    fn promote_tick(self, clock: &ClockExpr) -> Self {
+    fn promote_tick(self, clock: &ClockExprs) -> Self {
         match self {
             BindingContext::Bindings(bindings) => {
                 BindingContext::Tick(bindings, clock.clone(), HashMap::new())
@@ -250,7 +250,10 @@ impl Inference {
                         *t
                     } else {
                         // Index '1' will be the later Sig co-inductive type
-                        Type::TFun(Type::TLaterUnit(ClockExpr::Symbolic).b(), Type::TSig(t).b())
+                        Type::TFun(
+                            Type::TLaterUnit(ClockExpr::Symbolic.into()).b(),
+                            Type::TSig(t).b(),
+                        )
                     };
                     (
                         typ.clone(),
@@ -295,7 +298,7 @@ impl Inference {
                 constraints.push(Constraint::TypeEqual(
                     later_ty.clone(),
                     Type::TFun(
-                        Type::TLaterUnit(ClockExpr::Symbolic).b(),
+                        Type::TLaterUnit(ClockExpr::Symbolic.into()).b(),
                         Type::TSig(val_ty.clone().b()).b(),
                     ),
                 ));
@@ -364,7 +367,7 @@ impl Inference {
                 };
                 (
                     Type::TFun(
-                        Type::TLaterUnit(ClockExpr::Wait(name.clone())).b(),
+                        Type::TLaterUnit(ClockExpr::Wait(name.clone()).into()).b(),
                         ty.clone().b(),
                     ),
                     TypeOutput::new(
@@ -372,11 +375,11 @@ impl Inference {
                         TypedExpr::TLam(
                             vec![(
                                 "#advance_later_unit".to_owned(),
-                                Type::TLaterUnit(ClockExpr::Wait(name.clone())),
+                                Type::TLaterUnit(ClockExpr::Wait(name.clone()).into()),
                             )],
                             TypedExpr::TWait(name.clone(), ty.clone()).b(),
                             Type::TFun(
-                                Type::TLaterUnit(ClockExpr::Wait(name.clone())).b(),
+                                Type::TLaterUnit(ClockExpr::Wait(name.clone()).into()).b(),
                                 ty.clone().b(),
                             ),
                         ),
@@ -935,8 +938,10 @@ impl Inference {
                     let (expr_type, mut output) = self.infer(context, expr);
                     // push tfun {} -> int constraint, because we want a closure
                     // from laterunit to ptr
-                    let expected_type =
-                        Type::TFun(Type::TLaterUnit(ClockExpr::Symbolic).b(), Type::TInt.b());
+                    let expected_type = Type::TFun(
+                        Type::TLaterUnit(ClockExpr::Symbolic.into()).b(),
+                        Type::TInt.b(),
+                    );
                     output
                         .constraints
                         .push(Constraint::TypeEqual(expr_type.clone(), expected_type));
@@ -1289,11 +1294,14 @@ mod tests {
     fn infer_advance_name_bound_and_tick_in_context() {
         let clock_expr = ClockExpr::Cl("keyboard".to_owned());
         let expr = Expr::Advance("x".to_owned());
-        let fun_type = Type::TFun(Type::TLaterUnit(clock_expr.clone()).b(), Type::TInt.b());
-        let binding = (fun_type, Some(clock_expr.clone()));
+        let fun_type = Type::TFun(
+            Type::TLaterUnit(clock_expr.clone().into()).b(),
+            Type::TInt.b(),
+        );
+        let binding = (fun_type, Some(clock_expr.clone().into()));
         let mut context = BindingContext::Tick(
             HashMap::from([("x".to_owned(), binding)]),
-            clock_expr.clone(),
+            clock_expr.clone().into(),
             HashMap::new(),
         );
 
@@ -1341,7 +1349,7 @@ mod tests {
     #[test]
     fn infer_delay_produces_later_thunk() {
         let clock_expr = ClockExpr::Cl("hey".to_owned());
-        let expr = Expr::Delay(Expr::Const(Const::CInt(42)).b(), clock_expr.clone());
+        let expr = Expr::Delay(Expr::Const(Const::CInt(42)).b(), clock_expr.clone().into());
         let mut inference = Inference {
             unification_table: InPlaceUnificationTable::default(),
         };
@@ -1349,14 +1357,20 @@ mod tests {
         let expected_texp = TypedExpr::TLam(
             vec![(
                 "#advance_later_unit".to_owned(),
-                Type::TLaterUnit(clock_expr.clone()),
+                Type::TLaterUnit(clock_expr.clone().into()),
             )],
             TypedExpr::TConst(Const::CInt(42), Type::TInt).b(),
-            Type::TFun(Type::TLaterUnit(clock_expr.clone()).b(), Type::TInt.b()),
+            Type::TFun(
+                Type::TLaterUnit(clock_expr.clone().into()).b(),
+                Type::TInt.b(),
+            ),
         );
         assert_eq!(
             ty,
-            Type::TFun(Type::TLaterUnit(clock_expr.clone()).b(), Type::TInt.b())
+            Type::TFun(
+                Type::TLaterUnit(clock_expr.clone().into()).b(),
+                Type::TInt.b()
+            )
         );
         assert_eq!(output.texp, expected_texp);
     }

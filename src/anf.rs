@@ -7,7 +7,7 @@ use std::ops::Deref;
 pub enum AExpr {
     Const(Const, Type),
     Var(Sym, Type),
-    Lam(Vec<(Sym, Type)>, Box<AnfExpr>, Type),
+    Closure(Vec<Type>, Box<AnfExpr>, Type),
     Wait(Sym, Type),
 }
 
@@ -16,7 +16,7 @@ impl AExpr {
         match self {
             AExpr::Const(_, ty) => ty.clone(),
             AExpr::Var(_, ty) => ty.clone(),
-            AExpr::Lam(.., ty) => ty.clone(),
+            AExpr::Closure(.., ty) => ty.clone(),
             AExpr::Wait(_, ty) => ty.clone(),
         }
     }

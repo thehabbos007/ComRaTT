@@ -1,4 +1,4 @@
-use std::fmt::{write, Display};
+use std::fmt::Display;
 
 use itertools::Itertools;
 
@@ -94,11 +94,9 @@ impl Display for Const {
 impl Display for ClockExpr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            ClockExpr::Symbolic => write!(f, "SYMBOLIC"),
             ClockExpr::Cl(v) => write!(f, "cl({v})"),
-            ClockExpr::Union(cl1, cl2) => write!(f, "{cl1} ⊔ {cl2}"),
             ClockExpr::Wait(v) => write!(f, "cl(wait_{v})"),
-            ClockExpr::Never => write!(f, "never"),
-            ClockExpr::Symbolic => write!(f, ""),
         }
     }
 }
@@ -109,7 +107,7 @@ impl Display for Type {
             Type::TInt => write!(f, "int"),
             Type::TBool => write!(f, "bool"),
             Type::TUnit => write!(f, "()"),
-            Type::TLaterUnit(clock) => write!(f, "{{{clock}}}"),
+            Type::TLaterUnit(clock) => write!(f, "{{{:?}}}", clock),
             Type::TVar(type_var) => write!(f, "TVar {}", type_var.0),
             Type::TFun(t1, t2) => write!(f, "{} -> {}", t1, t2),
             Type::TSig(t) => write!(f, "Sig {}", t),
@@ -167,7 +165,7 @@ impl Expr {
             Expr::IfThenElse(cond, then_branch, else_branch) => {
                 format!("if {} then {} else {}", cond, then_branch, else_branch)
             }
-            Expr::Delay(e, c) => format!("delay {{{}}} {}", c, e),
+            Expr::Delay(e, c) => format!("delay {{{:?}}} {}", c, e),
             Expr::Advance(x) => format!("advance {}", x),
             Expr::Sig(e1, e2) => {
                 format!("{} :: {}", e1, e2)
@@ -343,13 +341,13 @@ impl Display for AExpr {
         match self {
             AExpr::Const(c, _) => write!(f, "{}", c),
             AExpr::Var(s, _) => write!(f, "{}", s),
-            AExpr::Lam(args, body, _) => {
+            AExpr::Closure(args, body, _) => {
                 let args_str = args
                     .iter()
-                    .map(|(name, _)| name.clone())
+                    .map(|ty| (&ty).to_string())
                     .collect::<Vec<_>>()
                     .join(" ");
-                write!(f, "(fun {} -> {})", args_str, body)
+                write!(f, "(Clos {} -> {})", args_str, body)
             }
             AExpr::Wait(name, _) => write!(f, "wait {}", &name),
         }
