@@ -125,6 +125,7 @@ impl Display for Type {
                         .join(" * "))
                 )
             }
+            Type::TBox(ty) => write!(f, "□ ({ty})"),
         }
     }
 }

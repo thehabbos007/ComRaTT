@@ -28,8 +28,9 @@ static CLOCK_PARSER: LazyLock<PrattParser<Rule>> =
 
 static TYPE_PARSER: LazyLock<PrattParser<Rule>> = LazyLock::new(|| {
     PrattParser::new()
-        .op(Op::prefix(Rule::signal))
         .op(Op::infix(Rule::arrow, Assoc::Right))
+        .op(Op::prefix(Rule::signal))
+        .op(Op::prefix(Rule::box_type))
 });
 
 impl Prog {
@@ -96,6 +97,7 @@ fn parse_type(pairs: Pairs<Rule>) -> Type {
         .map_primary(|primary| parse_type_atom(primary))
         .map_prefix(|op, typ| match op.as_rule() {
             Rule::signal => Type::TSig(Box::new(typ)),
+            Rule::box_type => Type::TFun(Box::new(Type::TUnit), Box::new(Type::TBox(Box::new(typ)))),
             _ => unreachable!(),
         })
         .map_infix(|lhs, op, rhs| match op.as_rule() {
