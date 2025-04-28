@@ -82,6 +82,16 @@ impl ANFConversion {
                 AnfExpr::AExpr(AExpr::Lam(params, Box::new(body_anf), ty))
             }
             TypedExpr::TWait(name, typ) => AnfExpr::AExpr(AExpr::Wait(name, typ)),
+            TypedExpr::TSig(left, right, typ) => {
+                let (left_anf, mut bindings) = self.normalize_atom(*left);
+                let (right_anf, bindings2) = self.normalize_atom(*right);
+                bindings.extend(bindings2);
+                self.wrap_bindings(
+                    bindings,
+                    vec![],
+                    AnfExpr::CExp(CExpr::Sig(left_anf, right_anf, typ)),
+                )
+            }
         }
     }
 

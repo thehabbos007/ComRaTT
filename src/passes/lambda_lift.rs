@@ -241,6 +241,14 @@ impl LambdaLift {
                 let (lifted_expr, defs) = self.lift_lambdas(*expr, bound);
                 (TypedExpr::TAccess(Box::new(lifted_expr), idx, typ), defs)
             }
+            TypedExpr::TSig(left, right, typ) => {
+                let (lifted_expr, defs) = self.lift_lambdas(*left, bound.clone());
+                let (lifted_expr1, defs1) = self.lift_lambdas(*right, bound);
+                (
+                    TypedExpr::TSig(Box::new(lifted_expr), Box::new(lifted_expr1), typ),
+                    [defs, defs1].concat(),
+                )
+            }
         }
     }
 }

@@ -245,6 +245,18 @@ impl EliminateConsecApp {
                 typ,
             )
             .none_traversal(),
+            TypedExpr::TSig(left, right, ty) => TypedExpr::TSig(
+                Box::new(
+                    self.eliminate_consec(*left, local_scope.clone())
+                        .ignore_traversal_outcome(),
+                ),
+                Box::new(
+                    self.eliminate_consec(*right, local_scope)
+                        .ignore_traversal_outcome(),
+                ),
+                ty,
+            )
+            .none_traversal(),
             TypedExpr::TConst(_, _) | TypedExpr::TName(_, _) | TypedExpr::TWait(_, _) => {
                 expr.none_traversal()
             }

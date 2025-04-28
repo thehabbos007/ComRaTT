@@ -129,6 +129,11 @@ impl PartialElimination {
             TypedExpr::TAccess(texp, idx, typ) => {
                 TypedExpr::TAccess(Box::new(self.eliminate_partial(*texp)), idx, typ)
             }
+            TypedExpr::TSig(left, right, typ) => TypedExpr::TSig(
+                Box::new(self.eliminate_partial(*left)),
+                Box::new(self.eliminate_partial(*right)),
+                typ,
+            ),
         }
     }
 }
