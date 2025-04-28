@@ -593,14 +593,15 @@ impl Inference {
                 // allocate as a regular closure
                 // Do we need any constraints on what can be boxed? Probably not.
                 let (ty, type_output) = self.infer(context, *e);
+                let box_ty = Type::TBox(ty.b());
                 (
-                    Type::TFun(Type::TUnit.b(), ty.clone().b()),
+                    Type::TFun(Type::TUnit.b(), box_ty.clone().b()),
                     TypeOutput::new(
                         type_output.constraints,
                         TypedExpr::TLam(
                             vec![("#box_unit".to_owned(), Type::TUnit)],
                             type_output.texp.b(),
-                            Type::TFun(Type::TUnit.b(), ty.clone().b()),
+                            Type::TFun(Type::TUnit.b(), box_ty.b()),
                         ),
                     ),
                 )
@@ -611,7 +612,7 @@ impl Inference {
                 // Do we need further or other constraints on what can be unboxed?
                 let (ty, type_output) = self.infer(context, *e);
                 match ty {
-                    Type::TFun(box Type::TUnit, box dest_ty) => (
+                    Type::TFun(box Type::TUnit, box Type::TBox(box dest_ty)) => (
                         dest_ty.clone(),
                         TypeOutput::new(
                             type_output.constraints,
@@ -622,7 +623,7 @@ impl Inference {
                             ),
                         ),
                     ),
-                    _ => panic!("Attempted to unbox a non-thunk {ty}"),
+                    _ => panic!("Tried to unbox something not boxed {ty}"),
                 }
             }
         }
@@ -674,6 +675,11 @@ impl Inference {
                 Some(ty) => self.normalize_ty(&ty),
                 None => Type::TVar(self.unification_table.find(*v)),
             },
+            Type::TBox(t) => {
+                let t = self.normalize_ty(t);
+                Type::TBox(t.b())
+
+            },
         }
     }
 
@@ -711,6 +717,7 @@ impl Inference {
                     .unify_var_value(v, Some(ty))
                     .map_err(|(l, r)| TypeError::TypeNotEqual(l, r))
             }
+            (Type::TBox(t1), Type::TBox(t2)) => self.unify_ty_ty(&t1, &t2),
             (left, right) => Err(TypeError::TypeNotEqual(left, right)),
         }
     }
@@ -730,6 +737,10 @@ impl Inference {
             Type::TBool => (BTreeSet::new(), Type::TBool),
             Type::TUnit => (BTreeSet::new(), Type::TUnit),
             Type::TLaterUnit(clock) => (BTreeSet::new(), Type::TLaterUnit(clock)),
+            Type::TBox(t) => {
+                let (mut t_unbound, t) = self.substitute(*t);
+                (t_unbound, Type::TBox(t.b()))
+            }
             Type::TSig(t) => {
                 let (mut t_unbound, t) = self.substitute(*t);
                 (t_unbound, Type::TSig(t.b()))
@@ -868,7 +879,10 @@ impl Inference {
                     typed_toplevels.push(TypedToplevel::Channel(name.to_owned(), ty.clone()))
                 }
                 Toplevel::Output(name, expr) => {}
-                _ => panic!("Error: FunDefs must be functions with at least 1 argument"),
+                _ => panic!(
+                    "Error: FunDefs must be functions with at least 1 argument. Got {:?}",
+                    toplevel
+                ),
             }
         }
 

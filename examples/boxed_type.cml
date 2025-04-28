@@ -1,0 +1,8 @@
+// main : box (int -> int) -> int -> int
+// def main f x = f x;
+
+
+// parser not smart enough to not do box (int -> int) without parens
+// main : Box int -> int
+main : Box int -> int
+def main x = unbox x;

@@ -91,6 +91,7 @@ pub enum Type {
     TProduct(Vec<Type>),
     TSig(Box<Type>),
     TVar(TypeVar),
+    TBox(Box<Type>),
 }
 
 impl EqUnifyValue for Type {}
@@ -107,6 +108,7 @@ impl Type {
             Type::TLaterUnit(_) => Ok(()),
             Type::TUnit => Ok(()),
             Type::TSig(_) => Ok(()),
+            Type::TBox(_) => Ok(()),
             Type::TVar(v) => {
                 if *v == var {
                     Err(Type::TVar(*v))
