@@ -250,7 +250,7 @@ impl Inference {
                         *t
                     } else {
                         // Index '1' will be the later Sig co-inductive type
-                        Type::TFun(unimplemented!(), Type::TSig(t).b())
+                        Type::TFun(Type::TLaterUnit(ClockExpr::Symbolic).b(), Type::TSig(t).b())
                     };
                     (
                         typ.clone(),
@@ -294,7 +294,10 @@ impl Inference {
                 constraints.append(&mut later_output.constraints);
                 constraints.push(Constraint::TypeEqual(
                     later_ty.clone(),
-                    Type::TFun(unimplemented!(), Type::TSig(val_ty.clone().b()).b()),
+                    Type::TFun(
+                        Type::TLaterUnit(ClockExpr::Symbolic).b(),
+                        Type::TSig(val_ty.clone().b()).b(),
+                    ),
                 ));
 
                 (

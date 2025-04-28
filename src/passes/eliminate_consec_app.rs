@@ -126,7 +126,7 @@ impl EliminateConsecApp {
                     .iter()
                     .find_map(|toplevel| match toplevel {
                         TypedToplevel::TFunDef(top_fun, top_args, _, _) if top_fun == fun => {
-                            let take = top_args.len() - 1;
+                            let take = top_args.len().saturating_sub(1);
 
                             Some(TraverseOutcome::new(take))
                         }

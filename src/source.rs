@@ -101,6 +101,13 @@ impl Type {
         Box::new(self)
     }
 
+    pub fn not_later_unit(&self) -> bool {
+        match self {
+            Type::TFun(box Type::TLaterUnit(_), _) | Type::TLaterUnit(_) => false,
+            _ => true,
+        }
+    }
+
     pub fn occurs_check(&self, var: TypeVar) -> Result<(), Type> {
         match self {
             Type::TInt => Ok(()),

@@ -84,7 +84,9 @@ impl PartialElimination {
             TypedExpr::TLam(args, body, typ) => {
                 TypedExpr::TLam(args, Box::new(self.eliminate_partial(*body)), typ)
             }
-            TypedExpr::TApp(fun_expr, args, app_ty @ Type::TFun(_, _)) => {
+            TypedExpr::TApp(fun_expr, args, app_ty @ Type::TFun(_, _))
+                if app_ty.not_composed_later_unit() =>
+            {
                 let eta_args = unpack_type(&app_ty);
                 let (lambda_args, app_args) = self.generate_lambda_vars_and_app_vars(&eta_args);
                 let mut all_args = args;
@@ -102,9 +104,6 @@ impl PartialElimination {
                     .collect(),
                 typ,
             ),
-            TypedExpr::TLet(bind_old, _, box TypedExpr::TName(bind_new, _), body) => {
-                self.eliminate_partial(substitute_binding(&bind_old, &bind_new, *body))
-            }
             TypedExpr::TLet(name, typ, rhs, body) => TypedExpr::TLet(
                 name,
                 typ,

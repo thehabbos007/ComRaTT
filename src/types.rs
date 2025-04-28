@@ -99,7 +99,7 @@ pub fn final_type(ty: &Type) -> Type {
         Type::TInt | Type::TBool | Type::TUnit | Type::TVar(_) | Type::TLaterUnit(_) => ty.clone(),
         Type::TFun(_, t2) => final_type(t2),
         Type::TProduct(ts) => final_type_tproduct(ts),
-        Type::TSig(_) => todo!(),
+        Type::TSig(_) => ty.clone(),
         Type::TBox(_) => ty.clone(),
     }
 }
