@@ -795,7 +795,7 @@ impl<'a> AnfWasmEmitter<'a> {
                     (Scope::Local(local_idx), AExpr::Var(_, Type::TFun(..) | Type::TLater(_, _))) => {
                         func.instruction(&Instruction::LocalGet(local_idx));
                         // In the cases where we call dispatch with a closure pointer,
-                        // we want the stack to look like the following before return_call_indirect
+                        // we want the stack to look like the following before call_indirect
                         // - Pointer to closure
                         // - Last argument for closure application
                         // - Table index for dispatch function
@@ -807,7 +807,7 @@ impl<'a> AnfWasmEmitter<'a> {
                         }
 
                         func.instruction(&Instruction::I32Const(self.dispatch_offset as i32));
-                        func.instruction(&Instruction::ReturnCallIndirect {
+                        func.instruction(&Instruction::CallIndirect {
                             type_index: self.dispatch_offset,
                             table_index: 0,
                         });

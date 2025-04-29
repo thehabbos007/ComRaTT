@@ -8,15 +8,17 @@ def no_alloc x y = x+y;
     //let del_one = delay {cl(wait keyboard)} (no_alloc 40 2) in
     // delay {cl(del_one)} (advance del_one);
 
-alloc_one : int -> O int
+// this requires either never or a recursive definition
+// never could be cool
+alloc_one : int -> O Sig int
 def alloc_one x =
     let del_one = delay {cl(wait keyboard)} (no_alloc 40 x) in
     delay {cl(del_one)} (advance del_one);
 
-alloc_two : int -> O int
+alloc_two : int -> O Sig int
 def alloc_two y =
     let del_two = delay {cl(wait keyboard)} y in
     delay {cl(del_two)} (advance del_two);
 
 print <- alloc_one 2;
-print <- alloc_one 69;
+print <- alloc_two 69;

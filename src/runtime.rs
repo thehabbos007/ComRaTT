@@ -76,7 +76,7 @@ impl Runtime {
                 (
                     2i32.pow(chan_idx as u32),
                     match typ {
-                        Type::TInt => ChanTyp::I32(0),
+                        Type::TInt => ChanTyp::I32(333),
                         Type::TProduct(typs) if typs == &[Type::TInt, Type::TInt] => {
                             ChanTyp::TupI32(0, 0)
                         }
@@ -155,5 +155,26 @@ impl Runtime {
         }
         println!("closure {:?}", &clos_data[..48]);
         println!("location {:?}", &loc_data[..48]);
+
+        let location_dispatch = instance
+            .get_typed_func::<i32, i32>(&mut store, "location_dispatch")
+            .expect("Cannot location dispatch");
+
+        for (output_idx, location_ptr) in &store.data().output_to_location.clone() {
+            let sig = location_dispatch
+                .call(&mut store, *location_ptr)
+                .expect("Failed to location dispatch");
+
+            let clos_data = clos.data(&mut store).to_vec();
+            let loc_data = loc.data(&mut store).to_vec();
+            println!("sig is {:?}", sig);
+            println!("closure {:?}", &clos_data[..48]);
+            println!("location {:?}", &loc_data[..48]);
+            if self.output_channels[*output_idx as usize] == "print" {
+                let bytes = &clos_data.as_slice()[sig as usize..(sig as usize + 4)];
+                let value = i32::from_le_bytes(bytes.try_into().unwrap());
+                println!("Value is {}", value);
+            }
+        }
     }
 }
