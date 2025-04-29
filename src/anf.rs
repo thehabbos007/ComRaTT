@@ -85,7 +85,7 @@ impl AnfExpr {
 pub enum AnfToplevel {
     FunDef(Sym, Vec<(Sym, Type)>, AnfExpr, Type),
     Channel(String, Type),
-    Output(String, AExpr),
+    Output(String, AnfExpr),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

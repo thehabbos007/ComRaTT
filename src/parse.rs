@@ -81,6 +81,7 @@ impl Prog {
                     let mut pairs = pair.into_inner();
                     let name = pairs.next().unwrap().as_str().to_string();
                     let expr = parse_expression(pairs.next().unwrap().into_inner());
+                    dbg!(&expr);
                     toplevels.push(Toplevel::Output(name, expr));
                 }
                 Rule::EOI => break,

@@ -41,14 +41,18 @@ pub const LOCATION_HEAP_INDEX: u32 = 1;
 
 // const MALLOC_ARGS: [(&str, Type); 1] = [("size", Type::TInt)];
 pub const WAIT_FUN_IDX: u32 = 0;
-const MALLOC_FUN_IDX: u32 = 1;
-const LOCATION_MALLOC_FUN_IDX: u32 = 2;
-pub const CLOCK_OF_FUN_IDX: u32 = 3;
+pub const SET_OUTPUT_TO_LOCATION_IDX: u32 = 1;
+const MALLOC_FUN_IDX: u32 = 2;
+const LOCATION_MALLOC_FUN_IDX: u32 = 3;
+pub const CLOCK_OF_FUN_IDX: u32 = 4;
 
 const PREGEN_MODULE: &str = r#"
 (module
     (type $wait (func (param i32) (result i32)))
     (import "ffi" "wait" (func $wait (type $wait)))
+
+    (type $set_output_to_location (func (param i32 i32) (result i32)))
+    (import "ffi" "set_output_to_location" (func $set_output_to_location (type $set_output_to_location)))
 
     (global $next_ptr (mut i32) (i32.const 0))
     (global $next_location (mut i32) (i32.const 0))
@@ -202,6 +206,18 @@ impl WasmEmitter<'_> {
         self.func_map.insert("wait", WAIT_FUN_IDX);
         self.func_args.insert("wait", vec![("channel", Type::TInt)]);
         self.type_map.insert("wait", WAIT_FUN_IDX);
+
+        self.func_map
+            .insert("set_output_to_location", SET_OUTPUT_TO_LOCATION_IDX);
+        self.func_args.insert(
+            "set_output_to_location",
+            vec![
+                ("output_channel_index", Type::TInt),
+                ("location_ptr", Type::TInt),
+            ],
+        );
+        self.type_map
+            .insert("set_output_to_location", SET_OUTPUT_TO_LOCATION_IDX);
 
         self.func_map.insert("malloc", MALLOC_FUN_IDX);
         self.func_args.insert("malloc", vec![("size", Type::TInt)]);

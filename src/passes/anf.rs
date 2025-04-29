@@ -130,8 +130,9 @@ impl Pass<TypedProg, AnfProg> for ANFConversion {
                 }
                 TypedToplevel::Channel(chan, typ) => AnfToplevel::Channel(chan, typ),
                 TypedToplevel::Output(name, body) => {
-                    let (aexpr, _) = self.normalize_atom(*body);
-                    AnfToplevel::Output(name, aexpr)
+                    // let (aexpr, bindings) = self.normalize_atom(*body);
+                    let anf_body = self.normalize(*body);
+                    AnfToplevel::Output(name, anf_body)
                 }
             })
             .collect();
