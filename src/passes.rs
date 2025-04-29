@@ -12,7 +12,7 @@ pub trait Pass<I = TypedProg, O = TypedProg> {
 
 pub fn run_program_passes(prog: TypedProg) -> TypedProg {
     eprintln!("Base:\n{prog}");
-    let mut eliminate_partial = eliminate_partial::PartialElimination::new();
+    let mut eliminate_partial = eliminate_partial::PartialElimination::new(false);
     let prog = eliminate_partial.run(prog);
     eprintln!("PartialElim:\n{prog}");
 
@@ -28,9 +28,10 @@ pub fn run_program_passes(prog: TypedProg) -> TypedProg {
     let prog = lambda_lift.run(prog);
 
     eprintln!("LamLift:\n{prog}");
-    let prog = eliminate_partial.run(prog);
+    // eliminate_partial.set_handle_delayed_closures(true);
+    // let prog = eliminate_partial.run(prog);
 
-    eprintln!("LamLiftElimPartial:\n{prog}");
+    // eprintln!("LamLiftElimPartial:\n{prog}");
 
     prog
 }

@@ -1,6 +1,9 @@
-use std::{collections::HashSet, ops::Deref};
+use std::{
+    collections::{HashMap, HashSet},
+    ops::Deref,
+};
 
-use crate::source::{Binop, Const, Type};
+use crate::source::{Binop, ClockExprs, Const, Type};
 
 pub type Sym = String;
 
@@ -10,8 +13,8 @@ pub enum TypedExpr {
     TConst(Const, Type),
     /// A variable name with (the name, its type)
     TName(Sym, Type),
-    /// A lambda with (args and their types, body expression, the lambda's type)
-    TLam(Vec<(Sym, Type)>, Box<TypedExpr>, Type),
+    /// A lambda with (args and their types, body expression, the lambda's type, an optional clock (when it's a delayed computation))
+    TLam(Vec<(Sym, Type)>, Box<TypedExpr>, Type, Option<ClockExprs>),
     /// A function application with (function expression, argument expressions, result type)
     TApp(Box<TypedExpr>, Vec<TypedExpr>, Type),
     /// A primitive operation with (the operator, left operand, right operand, result type)
@@ -37,7 +40,7 @@ impl TypedExpr {
         match self {
             TypedExpr::TConst(_, ty) => ty.clone(),
             TypedExpr::TName(_, ty) => ty.clone(),
-            TypedExpr::TLam(_, _, ty) => ty.clone(),
+            TypedExpr::TLam(_, _, ty, _) => ty.clone(),
             TypedExpr::TApp(_, _, ty) => ty.clone(),
             TypedExpr::TPrim(_, _, _, ty) => ty.clone(),
             TypedExpr::TLet(_, ty, _, _) => ty.clone(),
@@ -96,10 +99,10 @@ macro_rules! assert_typed_expr {
 
 pub fn final_type(ty: &Type) -> Type {
     match ty {
-        Type::TInt | Type::TBool | Type::TUnit | Type::TVar(_) | Type::TLaterUnit(_) => ty.clone(),
+        Type::TInt | Type::TBool | Type::TUnit | Type::TVar(_) | Type::TLater(..) => ty.clone(),
         Type::TFun(_, t2) => final_type(t2),
         Type::TProduct(ts) => final_type_tproduct(ts),
-        Type::TSig(_) => todo!(),
+        Type::TSig(_) => ty.clone(),
         Type::TBox(_) => ty.clone(),
     }
 }
@@ -170,7 +173,7 @@ pub fn traverse_locals<'a>(expr: &'a TypedExpr, locals: &mut Vec<(&'a str, Type)
             traverse_locals(left, locals);
             traverse_locals(right, locals);
         }
-        TypedExpr::TLam(_, _, _) => {
+        TypedExpr::TLam(..) => {
             panic!("get_names_for_forward_declaration: Lambda should have been lifted");
         }
         TypedExpr::TTuple(exprs, _) => {
@@ -194,6 +197,7 @@ pub fn find_free_vars(
 ) -> HashSet<(String, Type)> {
     match expr {
         TypedExpr::TConst(_, _) => HashSet::new(),
+        TypedExpr::TWait(_, _) => HashSet::new(),
         TypedExpr::TName(name, ty) => {
             let name = name.clone();
             let ty = ty.clone();
@@ -211,7 +215,7 @@ pub fn find_free_vars(
             left_free.extend(right_free);
             left_free
         }
-        TypedExpr::TLam(args, body, _) => {
+        TypedExpr::TLam(args, body, ..) => {
             let mut new_bound = bound.clone();
             for (name, ty) in args {
                 let name = name.clone();
@@ -250,7 +254,6 @@ pub fn find_free_vars(
             free
         }
         TypedExpr::TAccess(expr, _, _) => find_free_vars(expr, bound),
-        TypedExpr::TWait(_, _) => HashSet::new(),
     }
 }
 
@@ -265,10 +268,11 @@ pub fn substitute_binding(bind_old: &str, bind_new: &str, expr: TypedExpr) -> Ty
             Box::new(substitute_binding(bind_old, bind_new, *right)),
             ty,
         ),
-        TypedExpr::TLam(args, body, ty) => TypedExpr::TLam(
+        TypedExpr::TLam(args, body, ty, clock) => TypedExpr::TLam(
             args,
             Box::new(substitute_binding(bind_old, bind_new, *body)),
             ty,
+            clock,
         ),
         TypedExpr::TApp(func, args, ty) => TypedExpr::TApp(
             Box::new(substitute_binding(bind_old, bind_new, *func)),
@@ -315,7 +319,7 @@ pub fn substitute_binding(bind_old: &str, bind_new: &str, expr: TypedExpr) -> Ty
 
 pub fn unpack_type(ty: &Type) -> Vec<Type> {
     match ty {
-        Type::TInt | Type::TBool | Type::TUnit | Type::TLaterUnit(_) => vec![],
+        Type::TInt | Type::TBool | Type::TUnit => vec![],
         Type::TFun(t1, t2) => {
             let mut types = vec![*t1.clone()];
             types.extend(unpack_type(t2));
@@ -323,7 +327,16 @@ pub fn unpack_type(ty: &Type) -> Vec<Type> {
         }
         Type::TProduct(ts) => ts.clone(),
         Type::TVar(_) => vec![],
+        Type::TLater(..) => vec![],
         Type::TSig(_) => vec![],
         Type::TBox(_) => vec![],
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum BindingKind {
+    Local,
+    Toplevel,
+}
+
+pub type BindingContext = HashMap<(String, Type), BindingKind>;

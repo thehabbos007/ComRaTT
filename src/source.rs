@@ -1,5 +1,5 @@
 use ena::unify::{EqUnifyValue, UnifyKey};
-use std::ops::Deref;
+use std::{collections::BTreeSet, ops::Deref};
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub enum Binop {
@@ -15,17 +15,26 @@ pub enum Binop {
     Gte,
 }
 
+pub type ClockExprs = BTreeSet<ClockExpr>;
+pub fn empty_clock_expr() -> ClockExprs {
+    BTreeSet::new()
+}
+
+impl From<ClockExpr> for ClockExprs {
+    fn from(v: ClockExpr) -> Self {
+        let mut set = BTreeSet::new();
+        set.insert(v);
+        set
+    }
+}
+
 /// Clock Expr. 𝜃 ::= cl (𝑣) | 𝜃 ⊔ 𝜃 ′
 #[derive(PartialEq, Eq, Debug, Clone, PartialOrd, Ord, Hash)]
 pub enum ClockExpr {
-    /// Dummy variant used where clocks dont matter but we need a TLaterUnit
+    /// Symbolic clock that is evaluated at runtime
     Symbolic,
-    /// Empty clock
-    Never,
     /// Cl(v) where v is a binding
     Cl(String),
-    /// The union case 𝜃 ⊔ 𝜃 ′
-    Union(Box<ClockExpr>, Box<ClockExpr>),
     /// Cl(v) special case, where v is the name of a channel
     Wait(String),
 }
@@ -47,7 +56,7 @@ pub enum Expr {
     Prim(Binop, Box<Expr>, Box<Expr>),
     Let(String, Box<Expr>, Box<Expr>),
     IfThenElse(Box<Expr>, Box<Expr>, Box<Expr>),
-    Delay(Box<Expr>, ClockExpr),
+    Delay(Box<Expr>, ClockExprs),
     Advance(String),
     Wait(String),
     Tuple(Vec<Expr>),
@@ -86,10 +95,10 @@ pub enum Type {
     TInt,
     TBool,
     TUnit,
-    TLaterUnit(ClockExpr),
     TFun(Box<Type>, Box<Type>),
     TProduct(Vec<Type>),
     TSig(Box<Type>),
+    TLater(Box<Type>, ClockExprs),
     TVar(TypeVar),
     TBox(Box<Type>),
 }
@@ -101,14 +110,15 @@ impl Type {
         Box::new(self)
     }
 
+    pub fn contains_later_unit(&self) -> bool {
+        matches!(self, Type::TLater(..))
+    }
+
     pub fn occurs_check(&self, var: TypeVar) -> Result<(), Type> {
         match self {
             Type::TInt => Ok(()),
             Type::TBool => Ok(()),
-            Type::TLaterUnit(_) => Ok(()),
             Type::TUnit => Ok(()),
-            Type::TSig(_) => Ok(()),
-            Type::TBox(_) => Ok(()),
             Type::TVar(v) => {
                 if *v == var {
                     Err(Type::TVar(*v))
@@ -125,6 +135,9 @@ impl Type {
                     t.occurs_check(var).map_err(|_| self.clone())?
                 }
                 Ok(())
+            }
+            Type::TSig(t) | Type::TLater(t, _) | Type::TBox(t) => {
+                t.occurs_check(var).map_err(|_| self.clone())
             }
         }
     }

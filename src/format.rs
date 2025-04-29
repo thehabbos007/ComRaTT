@@ -13,7 +13,7 @@ impl TypedExpr {
         match self {
             TypedExpr::TConst(c, _) => Expr::Const(c.clone()),
             TypedExpr::TName(x, _) => Expr::Var(x.clone()),
-            TypedExpr::TLam(args, body, _) => Expr::Lam(
+            TypedExpr::TLam(args, body, _, _) => Expr::Lam(
                 args.clone().into_iter().map(|(name, _)| name).collect_vec(),
                 body.untyped().b(),
             ),
@@ -94,11 +94,9 @@ impl Display for Const {
 impl Display for ClockExpr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            ClockExpr::Symbolic => write!(f, "SYMBOLIC"),
             ClockExpr::Cl(v) => write!(f, "cl({v})"),
-            ClockExpr::Union(cl1, cl2) => write!(f, "{cl1} ⊔ {cl2}"),
             ClockExpr::Wait(v) => write!(f, "cl(wait_{v})"),
-            ClockExpr::Never => write!(f, "never"),
-            ClockExpr::Symbolic => write!(f, ""),
         }
     }
 }
@@ -109,7 +107,7 @@ impl Display for Type {
             Type::TInt => write!(f, "int"),
             Type::TBool => write!(f, "bool"),
             Type::TUnit => write!(f, "()"),
-            Type::TLaterUnit(clock) => write!(f, "{{{clock}}}"),
+            Type::TLater(ty, clock) => write!(f, "⨀{{{:?}}} {}", clock, ty),
             Type::TVar(type_var) => write!(f, "TVar {}", type_var.0),
             Type::TFun(t1, t2) => write!(f, "{} -> {}", t1, t2),
             Type::TSig(t) => write!(f, "Sig {}", t),
@@ -167,7 +165,7 @@ impl Expr {
             Expr::IfThenElse(cond, then_branch, else_branch) => {
                 format!("if {} then {} else {}", cond, then_branch, else_branch)
             }
-            Expr::Delay(e, c) => format!("delay {{{}}} {}", c, e),
+            Expr::Delay(e, c) => format!("delay {{{:?}}} {}", c, e),
             Expr::Advance(x) => format!("advance {}", x),
             Expr::Sig(e1, e2) => {
                 format!("{} :: {}", e1, e2)
@@ -236,13 +234,18 @@ impl Display for TypedExpr {
         match self {
             TypedExpr::TConst(c, _) => write!(f, "{}", c),
             TypedExpr::TName(x, _) => write!(f, "{}", x),
-            TypedExpr::TLam(args, body, ty) => {
+            TypedExpr::TLam(args, body, ty, clock) => {
                 let args_str = args
                     .iter()
                     .map(|(name, _)| name.clone())
                     .collect::<Vec<_>>()
                     .join(" ");
-                write!(f, "(fun {} -> {} : {})", args_str, body, ty)
+                // write!(
+                //     f,
+                //     "(fun{{{:?}}} [{}] -> {} : {})",
+                //     clock, args_str, body, ty
+                // )
+                write!(f, "(fun{{{:?}}} [{}] -> {})", clock, args_str, body)
             }
             TypedExpr::TApp(e, args, ty) => {
                 let args_str = args
@@ -250,7 +253,8 @@ impl Display for TypedExpr {
                     .map(|a| a.to_string())
                     .collect::<Vec<_>>()
                     .join(" ");
-                write!(f, "{} ({}) : {}", e, args_str, ty)
+                // write!(f, "{} ({}) : {}", e, args_str, ty)
+                write!(f, "{} ({})", e, args_str)
             }
             TypedExpr::TPrim(op, e1, e2, _) => write!(f, "{} {} {}", e1, op, e2),
             TypedExpr::TLet(x, _, e1, e2) => {
@@ -343,15 +347,18 @@ impl Display for AExpr {
         match self {
             AExpr::Const(c, _) => write!(f, "{}", c),
             AExpr::Var(s, _) => write!(f, "{}", s),
-            AExpr::Lam(args, body, _) => {
+            AExpr::LaterClosure(body, clock, _) => {
+                write!(f, "(⨂{{{:?}}} -> {})", clock, body)
+            }
+            AExpr::Closure(args, body, _) => {
                 let args_str = args
                     .iter()
-                    .map(|(name, _)| name.clone())
+                    .map(|ty| (&ty).to_string())
                     .collect::<Vec<_>>()
                     .join(" ");
-                write!(f, "(fun {} -> {})", args_str, body)
+                write!(f, "(Clos {} -> {})", args_str, body)
             }
-            AExpr::Wait(name, _) => write!(f, "wait {}", &name),
+            AExpr::Wait(name, _) => write!(f, "wait_ffi {}", &name),
         }
     }
 }
@@ -366,7 +373,7 @@ impl Display for CExpr {
                     .map(|a| a.to_string())
                     .collect::<Vec<_>>()
                     .join(" ");
-                write!(f, "{} {}", fun, args_str)
+                write!(f, "{} ({})", fun, args_str)
             }
             CExpr::Tuple(elems, _) => {
                 let elems_str = elems

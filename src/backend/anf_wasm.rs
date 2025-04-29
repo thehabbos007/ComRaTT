@@ -10,7 +10,7 @@ use std::ops::{Deref, DerefMut};
 
 use crate::anf::{AExpr, AnfExpr, AnfProg, AnfToplevel, CExpr};
 use crate::backend::wasm_emitter::{CLOCK_OF_FUN_IDX, CLOSURE_HEAP_INDEX, LOCATION_HEAP_INDEX};
-use crate::source::{Binop, ClockExpr, Const, Type};
+use crate::source::{Binop, ClockExpr, ClockExprs, Const, Type};
 use crate::types::count_tfun_args;
 
 use super::wasm_emitter::{WasmEmitter, SET_OUTPUT_TO_LOCATION_IDX, WAIT_FUN_IDX};
@@ -127,7 +127,7 @@ impl<'a> AnfWasmEmitter<'a> {
         // so the dispatch function will take a closure and that last argument.
         // In an ideal world, we would populate the closure fully (failing if we are "over applying")
         // before passing it on to dispatch.
-        let params = [ValType::I32, ValType::I32];
+        let params = [ValType::I32];
         self.locals_map.clear();
         // self.locals_map.insert("closure_ptr", 0);
 
@@ -201,19 +201,11 @@ impl<'a> AnfWasmEmitter<'a> {
         let func_idx = self.next_fun_index();
         let type_idx = self.register_function_type(
             name,
-            &[
-                (
-                    "closure_ptr".to_owned(),
-                    // This type is irrelevant. I just want to produce a "i32"
-                    Type::TFun(Type::TInt.b(), Type::TInt.b()),
-                ),
-                (
-                    "last_argument".to_owned(),
-                    // This type is potentially incorrect. Just be aware that chaning away from the "god i32" type
-                    // that we may run into problems.
-                    Type::TFun(Type::TInt.b(), Type::TInt.b()),
-                ),
-            ],
+            &[(
+                "closure_ptr".to_owned(),
+                // This type is irrelevant. I just want to produce a "i32"
+                Type::TFun(Type::TInt.b(), Type::TInt.b()),
+            )],
             &Type::TInt,
         );
 
@@ -255,7 +247,7 @@ impl<'a> AnfWasmEmitter<'a> {
 
         // Call dispatch with the closure pointer and unit argument
         let dispatch_type_index = self.type_map["dispatch"];
-        func.instruction(&Instruction::I32Const(-1));
+        //func.instruction(&Instruction::I32Const(-1));
         func.instruction(&Instruction::I32Const(self.dispatch_offset as i32));
         func.instruction(&Instruction::ReturnCallIndirect {
             type_index: dispatch_type_index,
@@ -432,9 +424,9 @@ impl<'a> AnfWasmEmitter<'a> {
             .1
             .iter()
             .position(|(name, _)| *name == channel_name)
-            .expect(&format!(
-                "Failed to lookup and generate index of channel {channel_name}"
-            ));
+            .unwrap_or_else(|| {
+                panic!("Failed to lookup and generate index of channel {channel_name}")
+            });
 
         2_u32.pow(index as u32) as i32
     }
@@ -453,25 +445,40 @@ impl<'a> AnfWasmEmitter<'a> {
         });
     }
 
-    fn gen_clock_of(&self, clock: &ClockExpr, func: &mut Function) {
-        match clock {
-            crate::source::ClockExpr::Never => {
-                func.instruction(&Instruction::I32Const(0));
-            }
-            crate::source::ClockExpr::Wait(channel_name) => {
+    fn gen_clock_expr(&self, expr: &ClockExpr, func: &mut Function) {
+        match expr {
+            ClockExpr::Wait(channel_name) => {
                 let channel_index = self.channel_to_index(channel_name);
                 func.instruction(&Instruction::I32Const(channel_index));
             }
-            crate::source::ClockExpr::Cl(binding) => {
+            ClockExpr::Cl(binding) => {
                 self.generate_clock_of_binding_call(binding, func);
             }
-            crate::source::ClockExpr::Union(c1, c2) => {
-                self.gen_clock_of(c1, func);
-                self.gen_clock_of(c2, func);
+            ClockExpr::Symbolic => {
+                panic!("Tried to generate clock of from symbolic clockexpr")
+            }
+        }
+    }
+
+    fn gen_clock_of(&self, clock: &ClockExprs, func: &mut Function) {
+        let mut first_gen = true;
+
+        for chunk in &clock.iter().chunks(2) {
+            let mut iter = chunk.into_iter();
+            let first = iter.next().unwrap();
+            let second = iter.next();
+
+            // dbg!(&first, &second);
+            self.gen_clock_expr(first, func);
+            if let Some(second) = second {
+                self.gen_clock_expr(second, func);
                 func.instruction(&Instruction::I32Or);
             }
-            crate::source::ClockExpr::Symbolic => {
-                panic!("Tried to generate clock of from symbolic clockexpr")
+
+            if first_gen {
+                first_gen = false;
+            } else {
+                func.instruction(&Instruction::I32Or);
             }
         }
     }
@@ -530,9 +537,10 @@ impl<'a> AnfWasmEmitter<'a> {
 
                 ty.clone()
             }
-            AExpr::Lam(
-                lam_args,
+
+            AExpr::LaterClosure(
                 box AnfExpr::CExp(CExpr::App(AExpr::Var(app_name, var_typ), app_args, _)),
+                clock,
                 lam_typ,
             ) => {
                 // Invariants:
@@ -558,10 +566,6 @@ impl<'a> AnfWasmEmitter<'a> {
                     count_tfun_args(var_typ),
                     app_args.len(),
                     "Lambda application should be fully applied"
-                );
-                assert!(
-                    app_args.len().checked_sub(lam_args.len()).is_some(),
-                    "Closure population candidates should be non-negative"
                 );
 
                 let fun_idx = self
@@ -605,12 +609,12 @@ impl<'a> AnfWasmEmitter<'a> {
                 };
                 func.instruction(&Instruction::LocalGet(dup_local_idx));
                 // All bound variables in the lambda are the variables yet to be populated.
-                func.instruction(&Instruction::I32Const(lam_args.len() as i32));
+                func.instruction(&Instruction::I32Const(0));
                 func.instruction(&Instruction::I32Store(arity_arg));
 
                 // populate all known arguments
                 // We traverse the app args in reverse, skipping over bound variables
-                for (idx, arg) in app_args.iter().rev().enumerate().skip(lam_args.len()) {
+                for (idx, arg) in app_args.iter().rev().enumerate() {
                     let arg_offset = WASM_WORD_SIZE * (2 + idx as i32);
                     let arg_arg = MemArg {
                         offset: arg_offset as u64,
@@ -630,67 +634,58 @@ impl<'a> AnfWasmEmitter<'a> {
                 // return ptr from malloc
                 func.instruction(&Instruction::LocalGet(dup_local_idx));
 
-                // If this is an async closure, call location_malloc instead.
-                // Populate that and return the pointer to location heap.
-                // Assuming that the lambda will always have either a () or {}
-                // argument.
-                assert_eq!(lam_args.len(), 1, "Length of closure args should be 1");
-                if let Some((_, arg_ty)) = lam_args.first()
-                    && let Type::TLaterUnit(clock) = arg_ty
-                {
-                    // At this point the stack top is a pointer to the closure heap.
-                    // The clock is a hardcoded bogus value atm. but will have to be
-                    // based on either a concrete "wait" expression or a clock-of expression later.
-                    // This will probably just be a recursive call to self.compile_atomic
-                    // that ends up in those two cases.
+                // At this point the stack top is a pointer to the closure heap.
+                // The clock is a hardcoded bogus value atm. but will have to be
+                // based on either a concrete "wait" expression or a clock-of expression later.
+                // This will probably just be a recursive call to self.compile_atomic
+                // that ends up in those two cases.
 
-                    // DROP CLOSURE HEAP POINTER
-                    func.instruction(&Instruction::Drop);
+                // DROP CLOSURE HEAP POINTER
+                func.instruction(&Instruction::Drop);
 
-                    // ALLOCATE SPACE IN LOCATION HEAP AND GET PTR
-                    self.location_malloc(func);
+                // ALLOCATE SPACE IN LOCATION HEAP AND GET PTR
+                self.location_malloc(func);
 
-                    // POPULATE CLOSURE PART OF LOCATION AT OFFSET 0
-                    let closure_arg = MemArg {
-                        offset: 0,
-                        align: WASM_ALIGNMENT_SIZE,
-                        memory_index: LOCATION_HEAP_INDEX,
-                    };
+                // POPULATE CLOSURE PART OF LOCATION AT OFFSET 0
+                let closure_arg = MemArg {
+                    offset: 0,
+                    align: WASM_ALIGNMENT_SIZE,
+                    memory_index: LOCATION_HEAP_INDEX,
+                };
 
-                    // GET THE PTR TO HEAP
-                    func.instruction(&Instruction::LocalGet(dup_local_idx));
+                // GET THE PTR TO HEAP
+                func.instruction(&Instruction::LocalGet(dup_local_idx));
 
-                    // STORE IT
-                    func.instruction(&Instruction::I32Store(closure_arg));
+                // STORE IT
+                func.instruction(&Instruction::I32Store(closure_arg));
 
-                    // NOW THE STACK IS EMPTY AND WE NEED NEED TO STORE THE CLOCK.
-                    // LOCATION HEAP ALLOCATION ARE FIXED SIZE, SO WE CAN ARITHMETIC OURSELVES OUT OF
-                    // NOT HAVING THE PTR.
+                // NOW THE STACK IS EMPTY AND WE NEED NEED TO STORE THE CLOCK.
+                // LOCATION HEAP ALLOCATION ARE FIXED SIZE, SO WE CAN ARITHMETIC OURSELVES OUT OF
+                // NOT HAVING THE PTR.
 
-                    // GET THE START OF NEXT ALLOCATION ($next_location)
-                    func.instruction(&Instruction::GlobalGet(1));
+                // GET THE START OF NEXT ALLOCATION ($next_location)
+                func.instruction(&Instruction::GlobalGet(1));
 
-                    // SUBTRACT 4 TO GET CLOCK OFFSET
-                    func.instruction(&Instruction::I32Const(4));
-                    func.instruction(&Instruction::I32Sub);
+                // SUBTRACT 4 TO GET CLOCK OFFSET
+                func.instruction(&Instruction::I32Const(4));
+                func.instruction(&Instruction::I32Sub);
 
-                    // INSPECT CLOCK EXPRESSION TO DETERMINE HOW TO POPULATE CLOCK PART OF LOCATION
-                    // - Wait on channel directly: insert a channel index
-                    // - Cl(v) and union case: generate code to look up the clock at runtime
-                    self.gen_clock_of(clock, func);
+                // INSPECT CLOCK EXPRESSION TO DETERMINE HOW TO POPULATE CLOCK PART OF LOCATION
+                // - Wait on channel directly: insert a channel index
+                // - Cl(v) and union case: generate code to look up the clock at runtime
+                self.gen_clock_of(clock, func);
 
-                    let clock_arg = MemArg {
-                        offset: 0,
-                        align: WASM_ALIGNMENT_SIZE,
-                        memory_index: LOCATION_HEAP_INDEX,
-                    };
-                    func.instruction(&Instruction::I32Store(clock_arg));
+                let clock_arg = MemArg {
+                    offset: 0,
+                    align: WASM_ALIGNMENT_SIZE,
+                    memory_index: LOCATION_HEAP_INDEX,
+                };
+                func.instruction(&Instruction::I32Store(clock_arg));
 
-                    // RETURN THE BASE POINTER FOR LOCATION
-                    func.instruction(&Instruction::GlobalGet(1));
-                    func.instruction(&Instruction::I32Const(8));
-                    func.instruction(&Instruction::I32Sub);
-                }
+                // RETURN THE BASE POINTER FOR LOCATION
+                func.instruction(&Instruction::GlobalGet(1));
+                func.instruction(&Instruction::I32Const(8));
+                func.instruction(&Instruction::I32Sub);
 
                 lam_typ.clone()
             }
@@ -722,6 +717,7 @@ impl<'a> AnfWasmEmitter<'a> {
             }
 
             CExpr::App(f, args, _) => {
+                #[derive(Debug, Clone, Copy)]
                 enum Scope {
                     TopLevel(u32),
                     Local(u32),
@@ -780,7 +776,7 @@ impl<'a> AnfWasmEmitter<'a> {
                             func.instruction(&Instruction::I32Store(populate_arg));
                         }
                     }
-                    (Scope::Local(local_idx), AExpr::Var(_, Type::TFun(..))) => {
+                    (Scope::Local(local_idx), AExpr::Var(_, Type::TFun(..) | Type::TLater(_, _))) => {
                         func.instruction(&Instruction::LocalGet(local_idx));
                         // In the cases where we call dispatch with a closure pointer,
                         // we want the stack to look like the following before return_call_indirect
@@ -788,14 +784,12 @@ impl<'a> AnfWasmEmitter<'a> {
                         // - Last argument for closure application
                         // - Table index for dispatch function
                         // Hence the different handling of arguments in this match case.
-                        // Invariant: when calling a closure, only 1 argument is missing and
-                        // thus only 1 argument exists.
-                        // Is this too strict?
-                        assert!(args.len() == 1);
-                        let arg = args
-                            .first()
-                            .expect("Attempted to dispatch a closure with multiple arguments");
-                        self.compile_atomic(func, arg);
+                        assert!(args.len() <=1);
+
+                        if let Some(arg) = args.first()  {
+                            self.compile_atomic(func, arg);
+                        }
+
                         func.instruction(&Instruction::I32Const(self.dispatch_offset as i32));
                         func.instruction(&Instruction::ReturnCallIndirect {
                             type_index: self.dispatch_offset,
@@ -808,8 +802,8 @@ impl<'a> AnfWasmEmitter<'a> {
                         }
                         func.instruction(&Instruction::Call(func_idx));
                     }
-                    _ => panic!(
-                        "Function call target must be a (closure) variable or a top-level function"
+                    (name, f) => panic!(
+                        "Function call target must be a (closure) variable or a top-level function. Tried calling {name:?} under {f}"
                     ),
                 }
             }
@@ -903,8 +897,8 @@ impl<'a> AnfWasmEmitter<'a> {
             // because TLaterUnit is only symbolic.
             // At the WASM level it is just an i32 unit argument
             // for a thunk.
-            Type::TLaterUnit(_) => ValType::I32,
-            Type::TFun(_, _) => ValType::I32,
+            Type::TLater(..) => ValType::I32,
+            Type::TFun(..) => ValType::I32,
             Type::TProduct(_) => ValType::I32,
             Type::TSig(_) => ValType::I32,
             Type::TVar(_) => panic!("Type variables not supported as value types"),

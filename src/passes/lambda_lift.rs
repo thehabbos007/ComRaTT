@@ -1,20 +1,14 @@
-use crate::source::Type;
-use crate::types::{
-    build_function_type, find_free_vars, substitute_binding, tfun_len_n, TypedExpr, TypedProg,
-    TypedToplevel,
+use crate::{
+    source::Type,
+    types::{
+        build_function_type, find_free_vars, tfun_len_n, BindingContext, BindingKind, TypedExpr,
+        TypedProg, TypedToplevel,
+    },
 };
 use itertools::Itertools;
 use std::collections::{HashMap, HashSet};
 
 use super::Pass;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum BindingKind {
-    Local,
-    Toplevel,
-}
-
-type BindingContext = HashMap<(String, Type), BindingKind>;
 
 #[derive(Debug)]
 pub struct LambdaLift {
@@ -122,7 +116,64 @@ impl LambdaLift {
                     left_defs,
                 )
             }
-            TypedExpr::TLam(args, body, typ) => {
+            TypedExpr::TLam(args, body, Type::TLater(box typ, clock), Some(_)) => {
+                let args: HashSet<_> = args.iter().cloned().collect();
+                let free_vars = find_free_vars(&body, &args)
+                    .iter()
+                    .filter(|binding| {
+                        let res = matches!(bound.get(binding), Some(BindingKind::Local));
+                        dbg!((&binding, res, &bound));
+                        res
+                    })
+                    .cloned()
+                    .collect::<HashSet<_>>();
+
+                let fun_name = self.unique_name("lambda");
+                let orig_arg_len = args.len();
+                let (return_typ, _) = tfun_len_n(typ.clone(), orig_arg_len);
+                let mut new_args = free_vars.iter().cloned().collect_vec();
+                new_args.extend(args);
+
+                let (lifted_body, mut lifted_defs) = self.lift_lambdas(*body, bound);
+
+                let lambda_def = TypedToplevel::TFunDef(
+                    fun_name.clone(),
+                    new_args.clone(),
+                    Box::new(lifted_body),
+                    return_typ.clone(),
+                );
+
+                let unbundled_type = Type::TLater(typ.clone().b(), clock.clone());
+
+                let substitute_typ = build_function_type(
+                    &new_args.clone().into_iter().map(|(_, ty)| ty).collect_vec(),
+                    unbundled_type,
+                );
+
+                lifted_defs.push(lambda_def);
+
+                if free_vars.is_empty() {
+                    (
+                        TypedExpr::TName(fun_name, substitute_typ.clone()),
+                        lifted_defs,
+                    )
+                } else {
+                    let app_args: Vec<_> = free_vars
+                        .iter()
+                        .map(|(name, typ)| TypedExpr::TName(name.clone(), typ.clone()))
+                        .collect();
+
+                    (
+                        TypedExpr::TApp(
+                            Box::new(TypedExpr::TName(fun_name, substitute_typ.clone())),
+                            app_args,
+                            Type::TLater(typ.b(), clock),
+                        ),
+                        lifted_defs,
+                    )
+                }
+            }
+            TypedExpr::TLam(args, body, typ, _) => {
                 let args: HashSet<_> = args.iter().cloned().collect();
                 let free_vars = find_free_vars(&body, &args)
                     .iter()
@@ -190,14 +241,16 @@ impl LambdaLift {
                     fn_defs,
                 )
             }
-            TypedExpr::TLet(name, typ, rhs, box mut body) => {
+            TypedExpr::TLet(name, typ, rhs, box body) => {
                 let (lifted_rhs, mut rhs_defs) = self.lift_lambdas(*rhs, bound.clone());
+                let lifted_typ = lifted_rhs.ty().clone();
                 let mut bound = bound;
-                bound.insert((name.clone(), lifted_rhs.ty().clone()), BindingKind::Local);
+                dbg!(&name, &typ, &lifted_typ);
+                bound.insert((name.clone(), lifted_typ), BindingKind::Local);
 
-                if let TypedExpr::TName(new_name, _) = &lifted_rhs {
-                    body = substitute_binding(&name, new_name, body);
-                }
+                // if let TypedExpr::TName(new_name, _) = &lifted_rhs {
+                //     body = substitute_binding(&name, new_name, body);
+                // }
 
                 let (lifted_body, body_defs) = self.lift_lambdas(body, bound);
 
@@ -249,7 +302,7 @@ impl LambdaLift {
 #[allow(unused)]
 mod tests {
     use super::*;
-    use crate::source::{Binop, Const};
+    use crate::source::{Binop, Const, Type};
 
     fn int(n: i32) -> TypedExpr {
         TypedExpr::TConst(Const::CInt(n), Type::TInt)
@@ -285,6 +338,7 @@ mod tests {
                 .collect_vec(),
             Box::new(body),
             ty,
+            None,
         )
     }
 
