@@ -313,10 +313,9 @@ impl<'a> AnfWasmEmitter<'a> {
             // applications.
 
             self.output_channel_names.push(output_name.clone());
-            func.instruction(&Instruction::I32Const(output_channel_index as i32));
 
             let AnfExpr::AExpr(AExpr::LaterClosure(
-                box AnfExpr::CExp(CExpr::App(f, _args, _app_ty)),
+                box AnfExpr::CExp(CExpr::App(f, args, _app_ty)),
                 _,
                 _,
             )) = anfexpr
@@ -334,14 +333,18 @@ impl<'a> AnfWasmEmitter<'a> {
             // generate a call to the function that output depends on,
             // to put the location ptr on the stack
             // we know that this function takes 0 arguments?
+            func.instruction(&Instruction::I32Const(output_channel_index as i32));
+            for arg in args {
+                self.compile_atomic(&mut func, arg);
+            }
+
             let toplevel_index = self
                 .func_map
                 .get(aexpr_name.as_str())
                 .expect("Failed to look up index of {aexpr_name}");
 
-            func.instruction(&Instruction::I32Const(output_channel_index as i32));
             // This could be compiling that results in a location pointer on the stack
-            // but we do a static lookup
+            // but we do a "static" lookup
             func.instruction(&Instruction::Call(*toplevel_index));
             func.instruction(&Instruction::Call(SET_OUTPUT_TO_LOCATION_IDX));
             func.instruction(&Instruction::Drop);
