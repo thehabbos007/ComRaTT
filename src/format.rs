@@ -18,7 +18,7 @@ impl TypedExpr {
                 body.untyped().b(),
             ),
             TypedExpr::TApp(e1, args, _) => args.iter().fold(e1.untyped(), |acc, arg| {
-                Expr::App(acc.b(), arg.untyped().b())
+                Expr::App(acc.b(), vec![arg.untyped()])
             }),
             TypedExpr::TPrim(op, e1, e2, _) => Expr::Prim(*op, e1.untyped().b(), e2.untyped().b()),
             TypedExpr::TLet(x, _, e1, e2) => {
@@ -135,18 +135,12 @@ impl Expr {
             Expr::Lam(args, body) => {
                 format!("fun {} -> {}", args.join(" "), body)
             }
-            Expr::App(e1, e2) => {
+            Expr::App(e1, es) => {
                 let e1_str = match **e1 {
                     Expr::Lam(_, _) => format!("({})", e1),
                     _ => e1.to_string(),
                 };
-                let e2_str = match **e2 {
-                    Expr::App(_, _) | Expr::Lam(_, _) | Expr::Prim(_, _, _) => {
-                        format!("({})", e2)
-                    }
-                    _ => e2.to_string(),
-                };
-                format!("{} {}", e1_str, e2_str)
+                format!("{}({})", e1_str, es.iter().join(", "))
             }
             Expr::Prim(op, e1, e2) => {
                 let e1_str = match **e1 {
@@ -346,6 +340,7 @@ impl Display for AExpr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             AExpr::Const(c, _) => write!(f, "{}", c),
+            // AExpr::Var(s, t) => write!(f, "{}: {}", s, t),
             AExpr::Var(s, _) => write!(f, "{}", s),
             AExpr::LaterClosure(body, clock, _) => {
                 write!(f, "(⨂{{{:?}}} -> {})", clock, body)

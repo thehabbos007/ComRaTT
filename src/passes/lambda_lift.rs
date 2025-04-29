@@ -122,7 +122,6 @@ impl LambdaLift {
                     .iter()
                     .filter(|binding| {
                         let res = matches!(bound.get(binding), Some(BindingKind::Local));
-                        dbg!((&binding, res, &bound));
                         res
                     })
                     .cloned()
@@ -168,6 +167,54 @@ impl LambdaLift {
                             Box::new(TypedExpr::TName(fun_name, substitute_typ.clone())),
                             app_args,
                             Type::TLater(typ.b(), clock),
+                        ),
+                        lifted_defs,
+                    )
+                }
+            }
+            TypedExpr::TLam(args, body, Type::TBox(box typ), _) => {
+                let args: HashSet<_> = args.iter().cloned().collect();
+                let free_vars = find_free_vars(&body, &args)
+                    .iter()
+                    .filter(|binding| matches!(bound.get(binding), Some(BindingKind::Local)))
+                    .cloned()
+                    .collect::<HashSet<_>>();
+
+                let fun_name = self.unique_name("lambda");
+                let orig_arg_len = args.len();
+                let (return_typ, _) = tfun_len_n(typ.clone(), orig_arg_len);
+                let mut new_args = free_vars.iter().cloned().collect_vec();
+                new_args.extend(args);
+
+                let (lifted_body, mut lifted_defs) = self.lift_lambdas(*body, bound);
+
+                let lambda_def = TypedToplevel::TFunDef(
+                    fun_name.clone(),
+                    new_args.clone(),
+                    Box::new(lifted_body),
+                    return_typ.clone(),
+                );
+
+                let unbundled_type = Type::TBox(typ.clone().b());
+
+                lifted_defs.push(lambda_def);
+
+                if free_vars.is_empty() {
+                    (
+                        TypedExpr::TName(fun_name, unbundled_type.clone()),
+                        lifted_defs,
+                    )
+                } else {
+                    let app_args: Vec<_> = free_vars
+                        .iter()
+                        .map(|(name, typ)| TypedExpr::TName(name.clone(), typ.clone()))
+                        .collect();
+
+                    (
+                        TypedExpr::TApp(
+                            Box::new(TypedExpr::TName(fun_name, unbundled_type.clone())),
+                            app_args,
+                            typ,
                         ),
                         lifted_defs,
                     )
@@ -245,7 +292,6 @@ impl LambdaLift {
                 let (lifted_rhs, mut rhs_defs) = self.lift_lambdas(*rhs, bound.clone());
                 let lifted_typ = lifted_rhs.ty().clone();
                 let mut bound = bound;
-                dbg!(&name, &typ, &lifted_typ);
                 bound.insert((name.clone(), lifted_typ), BindingKind::Local);
 
                 // if let TypedExpr::TName(new_name, _) = &lifted_rhs {

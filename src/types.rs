@@ -128,14 +128,12 @@ fn tfun_len_n_rec(ty: Type, n: usize, acc: &mut Vec<Type>) -> (Type, Vec<Type>) 
             acc.push(*ty);
             tfun_len_n_rec(*next_ty, n - 1, acc)
         }
-        t if n == 0 => {
-            acc.reverse();
-            (t, acc.to_owned())
-        }
+        t if n == 0 => (t, acc.to_owned()),
+        Type::TBox(ty) | Type::TLater(ty, _) => (*ty, acc.to_owned()),
         Type::TInt | Type::TBool | Type::TUnit => {
             panic!("Attempted to traverse a non-TFun type at n = {}", n)
         }
-        _ => panic!("Too many arguments for function"),
+        ty => panic!("Too many arguments for function, n: {n} got: {ty}"),
     }
 }
 
@@ -319,17 +317,14 @@ pub fn substitute_binding(bind_old: &str, bind_new: &str, expr: TypedExpr) -> Ty
 
 pub fn unpack_type(ty: &Type) -> Vec<Type> {
     match ty {
-        Type::TInt | Type::TBool | Type::TUnit => vec![],
+        Type::TLater(typ, ..) | Type::TBox(typ) => unpack_type(typ),
         Type::TFun(t1, t2) => {
             let mut types = vec![*t1.clone()];
             types.extend(unpack_type(t2));
             types
         }
         Type::TProduct(ts) => ts.clone(),
-        Type::TVar(_) => vec![],
-        Type::TLater(..) => vec![],
-        Type::TSig(_) => vec![],
-        Type::TBox(_) => vec![],
+        Type::TVar(_) | Type::TSig(_) | Type::TInt | Type::TBool | Type::TUnit => vec![],
     }
 }
 

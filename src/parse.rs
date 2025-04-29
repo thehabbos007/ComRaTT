@@ -82,7 +82,6 @@ impl Prog {
                     let mut pairs = pair.into_inner();
                     let name = pairs.next().unwrap().as_str().to_string();
                     let expr = parse_expression(pairs.next().unwrap().into_inner());
-                    dbg!(&expr);
                     toplevels.push(Toplevel::Output(name, expr));
                 }
                 Rule::EOI => break,
@@ -100,9 +99,7 @@ fn parse_type(pairs: Pairs<Rule>) -> Type {
         .map_prefix(|op, typ| match op.as_rule() {
             Rule::signal => Type::TSig(Box::new(typ)),
             Rule::later => Type::TLater(Box::new(typ), ClockExpr::Symbolic.into()),
-            Rule::box_type => {
-                Type::TFun(Box::new(Type::TUnit), Box::new(Type::TBox(Box::new(typ))))
-            }
+            Rule::box_type => Type::TBox(Box::new(typ)),
             _ => unreachable!(),
         })
         .map_infix(|lhs, op, rhs| match op.as_rule() {
@@ -258,13 +255,18 @@ fn parse_expression_atom(pair: Pair<Rule>) -> Expr {
         Rule::true_lit => Expr::Const(Const::CBool(true)),
         Rule::false_lit => Expr::Const(Const::CBool(false)),
         Rule::unit_lit => Expr::Const(Const::CUnit),
-        Rule::later_unit_lit => Expr::Const(Const::CLaterUnit),
         Rule::identifier => Expr::Var(pair.as_str().to_string()),
-        Rule::term => pair
-            .into_inner()
-            .map(|e| parse_term(e))
-            .reduce(|e1, e2| Expr::App(e1.b(), e2.b()))
-            .expect("At least one term"),
+        Rule::term => {
+            let parsed = pair.into_inner().map(|e| parse_term(e)).collect_vec();
+
+            let (term, terms) = parsed.split_first().expect("At least one term");
+
+            if !terms.is_empty() {
+                return Expr::App(term.clone().b(), terms.iter().cloned().collect());
+            }
+
+            term.clone()
+        }
         Rule::expr => parse_expression(pair.into_inner()),
         _ => unreachable!("Unknown expression type: {:?}", pair.as_rule()),
     }

@@ -144,14 +144,14 @@ impl PartialElimination {
                 )
             }
             // TODO: Should we just do this in anf conversion instead? It's so special cased.
-            TypedExpr::TApp(fun_expr, args, Type::TLater(ty, clock)) if self.handle_delayed_closures => {
-                TypedExpr::TLam(
-                    Vec::new(),
-                    fun_expr,
-                    Type::TLater(ty, clock.clone()),
-                    Some(clock)
-                )
-            }
+            // TypedExpr::TApp(fun_expr, args, Type::TLater(ty, clock)) if self.handle_delayed_closures => {
+            //     TypedExpr::TLam(
+            //         Vec::new(),
+            //         fun_expr,
+            //         Type::TLater(ty, clock.clone()),
+            //         Some(clock)
+            //     )
+            // }
             TypedExpr::TApp(fn_expr, args, typ) => TypedExpr::TApp(
                 fn_expr, args,
                 // Don't think we want to eliminate partials in the args of a TApp because

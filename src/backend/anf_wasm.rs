@@ -484,7 +484,6 @@ impl<'a> AnfWasmEmitter<'a> {
             let first = iter.next().unwrap();
             let second = iter.next();
 
-            // dbg!(&first, &second);
             self.gen_clock_expr(first, func);
             if let Some(second) = second {
                 self.gen_clock_expr(second, func);
@@ -562,7 +561,6 @@ impl<'a> AnfWasmEmitter<'a> {
                 // Invariants:
                 // - App fun should be a toplevel (given by func_map.get below)
                 // - Lambda has a App immediately inside body (given by match)
-                // - Args are _fully_ applied in the inner App (below assertion)
                 // - App args - lambda args = the arguments to populate the closure with (below assertion ensures non-negative)
                 //
                 // Random note: free variables allowed as arguments, should be populated in-place.
@@ -705,6 +703,88 @@ impl<'a> AnfWasmEmitter<'a> {
 
                 lam_typ.clone()
             }
+            AExpr::Closure(
+                args,
+                box AnfExpr::CExp(CExpr::App(inner @ AExpr::Var(app_name, _), app_args, _)),
+                lam_typ,
+            ) => {
+                // Invariants:
+                // - App fun should be a toplevel (given by func_map.get below)
+                // - Lambda has a App immediately inside body (given by match)
+                // - App args - lambda args = the arguments to populate the closure with (below assertion ensures non-negative)
+                //
+                // Invariant assertions
+
+                let Some(fun_idx) = self.func_map.get(app_name.as_str()) else {
+                    self.compile_atomic(func, inner);
+                    return lam_typ.clone();
+                };
+
+                let arity = app_args.len() as i32;
+
+                let closure_size_bytes = (1 + // Function pointer
+                    1) * WASM_WORD_SIZE + // arity argument
+                    (arity // Number of arguments in the top-level function
+                    * WASM_WORD_SIZE);
+
+                // malloc(closure_size) -> closure_ptr
+                // [i32]
+                self.wasm_emitter.malloc(func, closure_size_bytes);
+                // The first store will consume this value from the stack.
+                // We cannot write it to a local because we would need to forward declare it
+                // before reaching this.
+                // However, WASM has no dup so we need to add a single local to all top level functions
+                // to make sure that we have it available.
+
+                let dup_local_idx = self.locals_map[LOCAL_DUP_I32_NAME];
+                func.instruction(&Instruction::LocalTee(dup_local_idx));
+
+                // populate function pointer and arity -> closure_ptr
+                // [i32]
+                let fp_arg = MemArg {
+                    offset: FUNCTION_INDEX_OFFSET,
+                    align: WASM_ALIGNMENT_SIZE,
+                    memory_index: CLOSURE_HEAP_INDEX,
+                };
+                func.instruction(&Instruction::I32Const(*fun_idx as i32));
+                func.instruction(&Instruction::I32Store(fp_arg));
+
+                let arity_arg = MemArg {
+                    offset: ARITY_OFFSET,
+                    align: WASM_ALIGNMENT_SIZE,
+                    memory_index: CLOSURE_HEAP_INDEX,
+                };
+                func.instruction(&Instruction::LocalGet(dup_local_idx));
+                // All bound variables in the lambda are the variables yet to be populated.
+                func.instruction(&Instruction::I32Const(0));
+                func.instruction(&Instruction::I32Store(arity_arg));
+
+                // populate all known arguments
+                // We traverse the app args in reverse, skipping over bound variables
+                for (idx, arg) in app_args.iter().rev().enumerate() {
+                    let arg_offset = WASM_WORD_SIZE * (2 + idx as i32);
+                    let arg_arg = MemArg {
+                        offset: arg_offset as u64,
+                        align: WASM_ALIGNMENT_SIZE,
+                        memory_index: CLOSURE_HEAP_INDEX,
+                    };
+
+                    func.instruction(&Instruction::LocalGet(dup_local_idx));
+                    let _comp_ty = self.compile_atomic(func, arg);
+                    /*
+                    if !matches!(comp_ty, Type::TInt) {
+                        func.instruction(&Instruction::I64ExtendI32S);
+                    }
+                    */
+                    func.instruction(&Instruction::I32Store(arg_arg));
+                }
+                // return ptr from malloc
+                func.instruction(&Instruction::LocalGet(dup_local_idx));
+
+                // At this point the stack top is a pointer to the closure heap.
+                // we're done :)
+                lam_typ.clone()
+            }
             _ => panic!("Attempted to compile invalid atomic ANF expression {aexpr}"),
         }
     }
@@ -742,7 +822,7 @@ impl<'a> AnfWasmEmitter<'a> {
 
                 let name = match f {
                     AExpr::Var(name, _) => name.as_str(),
-                    _ => panic!("Function call target must be a variable or a top-level function"),
+                    expr => panic!("Function call target must be a variable or a top-level function, got {expr}"),
                 };
 
                 let scoped_name = self
@@ -792,7 +872,7 @@ impl<'a> AnfWasmEmitter<'a> {
                             func.instruction(&Instruction::I32Store(populate_arg));
                         }
                     }
-                    (Scope::Local(local_idx), AExpr::Var(_, Type::TFun(..) | Type::TLater(_, _))) => {
+                    (Scope::Local(local_idx), AExpr::Var(_, Type::TFun(..) | Type::TLater(..) | Type::TBox(box Type::TFun(..)))) => {
                         func.instruction(&Instruction::LocalGet(local_idx));
                         // In the cases where we call dispatch with a closure pointer,
                         // we want the stack to look like the following before call_indirect
@@ -800,7 +880,7 @@ impl<'a> AnfWasmEmitter<'a> {
                         // - Last argument for closure application
                         // - Table index for dispatch function
                         // Hence the different handling of arguments in this match case.
-                        assert!(args.len() <=1);
+                        // assert!(args.len() <=1);
 
                         if let Some(arg) = args.first()  {
                             self.compile_atomic(func, arg);

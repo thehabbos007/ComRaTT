@@ -107,14 +107,11 @@ impl EliminateConsecApp {
         mut local_scope: HashMap<String, Type>,
     ) -> (TypedExpr, TraverseOutcome) {
         match expr {
-            TypedExpr::TApp(box TypedExpr::TName(ref fun, ..), ref args, ..) => {
+            TypedExpr::TApp(box TypedExpr::TName(ref fun, ref typ), ref args, ..) => {
                 let expr = expr.clone();
 
-                if let Some(found_typ) = local_scope.get(fun)
-                    && let Type::TFun(_, _) = found_typ
-                {
-                    let unpacked = unpack_type(found_typ);
-
+                let unpacked = unpack_type(typ);
+                if !unpacked.is_empty() {
                     // Subtract the applied argument count
                     let take = unpacked.len() - args.len();
 

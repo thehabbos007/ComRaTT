@@ -260,7 +260,9 @@ impl Inference {
                     )
                 }
                 // Is panic the right thing to do? The alternative is to create an insatisfiable constraint maybe?
-                _ => panic!("Type checking access with out-of-bounds index or invalid expr"),
+                (ty, _) => {
+                    panic!("Type checking access with out-of-bounds index or invalid expr: {ty}")
+                }
             },
             Expr::Tuple(ts) => {
                 if ts.len() < 2 {
@@ -431,23 +433,36 @@ impl Inference {
                     ),
                 )
             }
-            Expr::App(fun, arg) => match self.infer(context.clone(), *fun) {
+            Expr::App(fun, args) => match self.infer(context.clone(), *fun) {
                 (fun_ty, mut fun_output) => {
-                    let (arg_ty, arg_output) = self.infer(context, *arg);
-
-                    let ret_ty = Type::TVar(self.fresh_ty_var());
+                    let mut current_fun_ty = fun_ty.clone();
                     let mut constraints = fun_output.constraints;
-                    constraints.extend(arg_output.constraints);
-                    constraints.push(Constraint::TypeEqual(
-                        fun_ty,
-                        Type::TFun(arg_ty.b(), ret_ty.clone().b()),
-                    ));
+                    let mut typed_args = Vec::new();
+
+                    for arg in args {
+                        let (arg_ty, arg_output) = self.infer(context.clone(), arg);
+                        typed_args.push(arg_output.texp);
+
+                        constraints.extend(arg_output.constraints);
+
+                        let result_ty = Type::TVar(self.fresh_ty_var());
+
+                        constraints.push(Constraint::TypeEqual(
+                            current_fun_ty,
+                            Type::TFun(arg_ty.b(), result_ty.clone().b()),
+                        ));
+
+                        current_fun_ty = result_ty;
+                    }
+
+                    // Final result type after applying all arguments
+                    let ret_ty = current_fun_ty;
 
                     (
                         ret_ty.clone(),
                         TypeOutput::new(
                             constraints,
-                            TypedExpr::TApp(fun_output.texp.b(), vec![arg_output.texp], ret_ty),
+                            TypedExpr::TApp(fun_output.texp.b(), typed_args, ret_ty),
                         ),
                     )
                 }
@@ -586,15 +601,10 @@ impl Inference {
                 let (ty, type_output) = self.infer(context, *e);
                 let box_ty = Type::TBox(ty.b());
                 (
-                    Type::TFun(Type::TUnit.b(), box_ty.clone().b()),
+                    box_ty.clone(),
                     TypeOutput::new(
                         type_output.constraints,
-                        TypedExpr::TLam(
-                            Vec::new(),
-                            type_output.texp.b(),
-                            Type::TFun(Type::TUnit.b(), box_ty.b()),
-                            None,
-                        ),
+                        TypedExpr::TLam(Vec::new(), type_output.texp.b(), box_ty, None),
                     ),
                 )
             }
@@ -604,11 +614,11 @@ impl Inference {
                 // Do we need further or other constraints on what can be unboxed?
                 let (ty, type_output) = self.infer(context, *e);
                 match ty {
-                    Type::TFun(box Type::TUnit, box Type::TBox(box dest_ty)) => (
-                        dest_ty.clone(),
+                    Type::TBox(box ty) => (
+                        ty.clone(),
                         TypeOutput::new(
                             type_output.constraints,
-                            TypedExpr::TApp(type_output.texp.b(), Vec::new(), dest_ty),
+                            TypedExpr::TApp(type_output.texp.b(), Vec::new(), ty),
                         ),
                     ),
                     _ => panic!("Tried to unbox something not boxed {ty}"),
@@ -1048,7 +1058,7 @@ mod tests {
             )
             .b(),
         );
-        let fun_body = Expr::App(lambda.b(), Expr::Var("x".to_owned()).b());
+        let fun_body = Expr::App(lambda.b(), Expr::Var("x".to_owned()).v());
         let fundef = Toplevel::FunDef("test".to_owned(), fun_type, vec!["x".to_owned()], fun_body);
 
         let prog = Prog(vec![fundef]);
@@ -1739,6 +1749,7 @@ mod tests {
             )
             .b(),
             Type::TInt,
+            None,
         );
         let mut inference = Inference {
             unification_table: InPlaceUnificationTable::default(),
@@ -1756,10 +1767,10 @@ mod tests {
         let expr = Expr::App(
             Expr::App(
                 Expr::Var("f".to_owned()).b(),
-                Expr::Const(Const::CInt(2)).b(),
+                Expr::Const(Const::CInt(2)).v(),
             )
             .b(),
-            Expr::Const(Const::CInt(2)).b(),
+            Expr::Const(Const::CInt(2)).v(),
         );
         let inner_fun_type = Type::TFun(
             Type::TInt.b(),
@@ -1794,7 +1805,7 @@ mod tests {
     fn infer_invalid_application_should_panic() {
         let expr = Expr::App(
             Expr::Var("f".to_owned()).b(),
-            Expr::Const(Const::CInt(42)).b(),
+            Expr::Const(Const::CInt(42)).v(),
         );
         let mut context = HashMap::new();
         context.insert(
@@ -1814,7 +1825,7 @@ mod tests {
     fn infer_valid_application() {
         let expr = Expr::App(
             Expr::Var("f".to_owned()).b(),
-            Expr::Const(Const::CInt(42)).b(),
+            Expr::Const(Const::CInt(42)).v(),
         );
         let mut context = BindingContext::Bindings(HashMap::new());
         context.insert("f".to_owned(), (Type::TFun(Type::TInt.b(), Type::TInt.b())));

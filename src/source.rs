@@ -52,7 +52,7 @@ pub enum Expr {
     Const(Const),
     Var(String),
     Lam(Vec<String>, Box<Expr>),
-    App(Box<Expr>, Box<Expr>),
+    App(Box<Expr>, Vec<Expr>),
     Prim(Binop, Box<Expr>, Box<Expr>),
     Let(String, Box<Expr>, Box<Expr>),
     IfThenElse(Box<Expr>, Box<Expr>, Box<Expr>),
@@ -69,6 +69,10 @@ pub enum Expr {
 impl Expr {
     pub fn b(self) -> Box<Self> {
         Box::new(self)
+    }
+
+    pub fn v(self) -> Vec<Self> {
+        vec![self]
     }
 }
 

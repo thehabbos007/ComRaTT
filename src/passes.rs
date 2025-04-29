@@ -70,6 +70,7 @@ mod tests {
                     )
                     .b(),
                     Type::TFun(Type::TInt.b(), Type::TInt.b()),
+                    None,
                 )
                 .b(),
                 Type::TFun(

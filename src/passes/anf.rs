@@ -50,6 +50,14 @@ impl ANFConversion {
                     Type::TLater(ty.clone().b(), clock),
                 ))
             }
+            TypedExpr::TName(x, Type::TBox(box ty)) => {
+                let app = CExpr::App(AExpr::Var(x, ty.clone()), Vec::new(), ty.clone());
+                AnfExpr::AExpr(AExpr::Closure(
+                    Vec::new(),
+                    Box::new(AnfExpr::CExp(app)),
+                    Type::TBox(ty.clone().b()),
+                ))
+            }
             TypedExpr::TName(x, ty) => AnfExpr::AExpr(AExpr::Var(x, ty)),
             TypedExpr::TApp(
                 // We assume that these TApps are always lambda lifted names
@@ -74,11 +82,44 @@ impl ANFConversion {
                     Type::TLater(ty.clone().b(), clock),
                 ))
             }
+            TypedExpr::TApp(box TypedExpr::TName(x, name_ty), args, Type::TBox(box ty)) => {
+                let args = args
+                    .into_iter()
+                    .map(|arg| match arg {
+                        TypedExpr::TName(x, ty) => AExpr::Var(x, ty),
+                        TypedExpr::TConst(c, ty) => AExpr::Const(c, ty),
+                        expr => panic!("Expected variable in TApp, got: {expr}"),
+                    })
+                    .collect_vec();
+
+                let app = CExpr::App(AExpr::Var(x, name_ty.clone()), args, ty.clone());
+                AnfExpr::AExpr(AExpr::Closure(
+                    vec![],
+                    Box::new(AnfExpr::CExp(app)),
+                    Type::TBox(ty.clone().b()),
+                ))
+            }
             TypedExpr::TPrim(op, e1, e2, ty) => {
                 let (e1_anf, bindings1) = self.normalize_atom(*e1);
                 let (e2_anf, bindings2) = self.normalize_atom(*e2);
                 let comp = CExpr::Prim(op, e1_anf, e2_anf, ty);
                 self.wrap_bindings(bindings1, bindings2, AnfExpr::CExp(comp))
+            }
+            // Heuristic to eliminate unnecessary closures. We only do this for
+            // function applications that result in partial applications.
+            TypedExpr::TApp(f, args, ty @ Type::TFun(..)) => {
+                let (f_anf, bindings_f) = self.normalize_atom_closure(*f);
+                let mut all_bindings = bindings_f;
+                let mut anf_args = Vec::new();
+
+                for arg in args {
+                    let (arg_anf, bindings) = self.normalize_atom_closure(arg);
+                    all_bindings.extend(bindings);
+                    anf_args.push(arg_anf);
+                }
+
+                let comp = CExpr::App(f_anf, anf_args, ty);
+                self.wrap_bindings(all_bindings, vec![], AnfExpr::CExp(comp))
             }
             TypedExpr::TApp(f, args, ty) => {
                 let (f_anf, bindings_f) = self.normalize_atom(*f);
@@ -86,7 +127,7 @@ impl ANFConversion {
                 let mut anf_args = Vec::new();
 
                 for arg in args {
-                    let (arg_anf, bindings) = self.normalize_atom(arg);
+                    let (arg_anf, bindings) = self.normalize_atom_closure(arg);
                     all_bindings.extend(bindings);
                     anf_args.push(arg_anf);
                 }
@@ -140,10 +181,44 @@ impl ANFConversion {
             TypedExpr::TWait(name, typ) => AnfExpr::AExpr(AExpr::Wait(name, typ)),
         }
     }
-
     fn normalize_atom(&mut self, expr: TypedExpr) -> (AExpr, Vec<(String, AnfExpr)>) {
         match expr {
             TypedExpr::TConst(c, ty) => (AExpr::Const(c, ty), vec![]),
+            TypedExpr::TName(x, ty) => (AExpr::Var(x, ty), vec![]),
+            expr => {
+                let name = self.fresh_name();
+                let ty = expr.ty();
+                let normalized = self.normalize(expr);
+                (AExpr::Var(name.clone(), ty), vec![(name, normalized)])
+            }
+        }
+    }
+
+    fn normalize_atom_closure(&mut self, expr: TypedExpr) -> (AExpr, Vec<(String, AnfExpr)>) {
+        match expr {
+            TypedExpr::TConst(c, ty) => (AExpr::Const(c, ty), vec![]),
+            TypedExpr::TName(x, Type::TLater(box ty, clock)) => {
+                let app = CExpr::App(AExpr::Var(x, ty.clone()), Vec::new(), ty.clone());
+                (
+                    AExpr::LaterClosure(
+                        Box::new(AnfExpr::CExp(app)),
+                        clock.clone(),
+                        Type::TLater(ty.clone().b(), clock),
+                    ),
+                    vec![],
+                )
+            }
+            TypedExpr::TName(x, Type::TBox(box ty)) => {
+                let app = CExpr::App(AExpr::Var(x, ty.clone()), Vec::new(), ty.clone());
+                (
+                    AExpr::Closure(
+                        Vec::new(),
+                        Box::new(AnfExpr::CExp(app)),
+                        Type::TBox(ty.clone().b()),
+                    ),
+                    vec![],
+                )
+            }
             TypedExpr::TName(x, ty) => (AExpr::Var(x, ty), vec![]),
             expr => {
                 let name = self.fresh_name();

@@ -9,9 +9,11 @@ def scan f acc siga =
     let a = siga.0 in
     let as = siga.1 in
     let acc_prim = (unbox f) a acc in
-    acc_prim :: delay (scan f acc_prim (adv as))
+    acc_prim :: (delay {cl(as)} (scan f acc_prim (advance as)))
+;
 
 // sum : Sig Nat → Sig Nat
 // sum = scan (box (𝜆m n → m + n)) 0
 sum : Sig int -> Sig int
-def sum = scan (box (fun m n -> m+n)) 0
+def sum sig = scan (box (fun m n -> m+n)) 0 sig
+;

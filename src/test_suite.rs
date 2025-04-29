@@ -76,6 +76,6 @@ fn test_eliminate_partial_application() {
         ;
         "#,
     )
-    .with_pass(PartialElimination::new())
+    .with_pass(PartialElimination::new(false))
     .run();
 }
