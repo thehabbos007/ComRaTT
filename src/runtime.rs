@@ -7,16 +7,42 @@ use wasmtime::*;
 
 use crate::source::Type;
 
+#[derive(Debug)]
+struct RuntimeState {
+    output_to_location: HashMap<i32, i32>,
+}
+
+impl RuntimeState {
+    fn new() -> Self {
+        Self {
+            output_to_location: HashMap::new(),
+        }
+    }
+
+    fn ffi_set_output_to_location(&mut self, output_channel_index: i32, location_ptr: i32) -> i32 {
+        self.output_to_location
+            .insert(output_channel_index, location_ptr);
+        // return the ptr again to conform to the return type of dispatch
+        // and avoiding to work around that. a bit hacky.
+        location_ptr
+    }
+}
+
 pub struct Runtime {
     engine: Engine,
     program: Vec<u8>, // boxed slice pls
     channels: Vec<(String, Type)>,
+    output_channels: Vec<String>,
 }
 
 // An initial, naive version that does not consider non-main functions, input channels, transitions
 // or anything advanced.
 impl Runtime {
-    pub fn init(program: &[u8], channels: Vec<(String, Type)>) -> Self {
+    pub fn init(
+        program: &[u8],
+        channels: Vec<(String, Type)>,
+        output_channels: Vec<String>,
+    ) -> Self {
         let mut config = Config::new();
         config.wasm_gc(true);
         config.wasm_multi_memory(true);
@@ -31,6 +57,7 @@ impl Runtime {
             engine,
             program,
             channels,
+            output_channels,
         }
     }
 
@@ -66,7 +93,13 @@ impl Runtime {
         let module =
             Module::new(&self.engine, &self.program).expect("Failed to init ComRaTT module");
 
-        let mut store: Store<u32> = Store::new(&self.engine, 4);
+        eprintln!(
+            "Runtime started with output channels: {:?}",
+            &self.output_channels
+        );
+
+        let state = RuntimeState::new();
+        let mut store: Store<RuntimeState> = Store::new(&self.engine, state);
 
         let wait_ffi = move |channel: i32| -> i32 {
             let channels = chan.lock().unwrap();
@@ -81,46 +114,46 @@ impl Runtime {
         };
         let wait = Func::wrap(&mut store, wait_ffi);
 
+        let set_output_to_location = Func::wrap(
+            &mut store,
+            |mut caller: Caller<'_, RuntimeState>, output_channel_index: i32, location_ptr: i32| {
+                let state = caller.data_mut();
+                state.ffi_set_output_to_location(output_channel_index, location_ptr);
+                location_ptr
+            },
+        );
+
+        let ffi_functions = [wait.into(), set_output_to_location.into()];
+
         let instance =
-            Instance::new(&mut store, &module, &[wait.into()]).expect("Failed to init instance");
-        let location_dispatch = instance
-            .get_typed_func::<i32, i32>(&mut store, "location_dispatch")
-            .expect("Failed to retrieve dispatch function");
+            Instance::new(&mut store, &module, &ffi_functions).expect("Failed to init instance");
 
-        // We need to receive some information about what functions to
-        // call initially. This should be part of the init transition
-        // of the reactive machine.
-        // For now we just assume a main that needs a single integer argument.
+        let init = instance
+            .get_typed_func::<(), ()>(&mut store, "init")
+            .expect("Failed to retrieve init function");
 
-        let main = instance
-            .get_typed_func::<i32, i32>(&mut store, "main")
-            .expect("Failed to retrieve main function");
-
-        let res = main
-            .call(&mut store, 42)
-            .expect("Failed to call main function");
-        println!("Reactive machine received ptr {res:?} from calling main");
+        init.call(&mut store, ()).expect("Failed to call init");
 
         let clos = instance.get_memory(&mut store, "heap").unwrap();
         let loc = instance.get_memory(&mut store, "location").unwrap();
-        println!("closure {:?}", &clos.data(&mut store)[..48]);
-        println!("location {:?}", &loc.data(&mut store)[..48]);
+        //println!("closure {:?}", &clos.data(&mut store)[..48]);
+        // println!("location {:?}", &loc.data(&mut store)[..48]);
 
-        // Clock of testing
-        let clock_of = instance
-            .get_typed_func::<i32, i32>(&mut store, "clock_of")
-            .expect("Failed to retrieve clock of function");
+        let clos_data = clos.data(&mut store).to_vec();
+        let loc_data = loc.data(&mut store).to_vec();
 
-        let clock = clock_of
-            .call(&mut store, res)
-            .expect("failed to call clock of");
-        println!("clock for {res} is {clock}");
+        println!("State is {:?} after init", store.data().output_to_location);
+        for (k, v) in &store.data().output_to_location {
+            println!("Output channel with index {k} points to location at {v}");
+            let fp = loc_data[*v as usize];
+            println!("Function pointer at location is {fp}");
 
-        // call dispatch with the closure pointer returned from main
-        // and supply the unit argument
-        let result = location_dispatch
-            .call(&mut store, res)
-            .expect("Failed to call dispatch");
-        println!("Dispatching ptr resulted in {result:?}");
+            println!(
+                "Location at {v} points to function {:?}",
+                clos_data[fp as usize]
+            );
+        }
+        println!("closure {:?}", &clos_data[..48]);
+        println!("location {:?}", &loc_data[..48]);
     }
 }

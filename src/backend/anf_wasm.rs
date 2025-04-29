@@ -13,7 +13,7 @@ use crate::backend::wasm_emitter::{CLOCK_OF_FUN_IDX, CLOSURE_HEAP_INDEX, LOCATIO
 use crate::source::{Binop, ClockExpr, Const, Type};
 use crate::types::count_tfun_args;
 
-use super::wasm_emitter::{WasmEmitter, WAIT_FUN_IDX};
+use super::wasm_emitter::{WasmEmitter, SET_OUTPUT_TO_LOCATION_IDX, WAIT_FUN_IDX};
 
 const WASM_WORD_SIZE: i32 = 4;
 // const WASM_DWORD_SIZE: i32 = 8;
@@ -31,6 +31,7 @@ pub struct AnfWasmEmitter<'a> {
     dispatch_offset: u32,
     location_dispatch_offset: u32,
     prog: &'a AnfProg,
+    output_channel_names: Vec<String>,
 }
 
 impl<'a> Deref for AnfWasmEmitter<'a> {
@@ -53,10 +54,11 @@ impl<'a> AnfWasmEmitter<'a> {
             dispatch_offset: 0,
             location_dispatch_offset: 0,
             prog,
+            output_channel_names: Vec::new(),
         }
     }
 
-    pub fn emit(mut self) -> Vec<u8> {
+    pub fn emit(mut self) -> (Vec<u8>, Vec<String>) {
         self.prepare_emit();
 
         for def in &self.prog.0 {
@@ -72,6 +74,7 @@ impl<'a> AnfWasmEmitter<'a> {
 
         self.gen_dispatch();
         self.gen_location_dispatch();
+        self.gen_init();
 
         self.declare_table_entries();
 
@@ -85,7 +88,7 @@ impl<'a> AnfWasmEmitter<'a> {
             .name_section
             .types(&self.wasm_emitter.type_name_map);
 
-        self.wasm_emitter.finalize_emit()
+        (self.wasm_emitter.finalize_emit(), self.output_channel_names)
     }
 
     fn forward_declare_functions(&mut self, def: &'a AnfToplevel) {
@@ -271,6 +274,83 @@ impl<'a> AnfWasmEmitter<'a> {
             )],
             &Type::TInt,
         );
+
+        self.function_section.function(type_idx);
+        self.code_section.function(&func);
+        self.func_map.insert(name, func_idx);
+
+        self.export_section.export(name, ExportKind::Func, func_idx);
+
+        self.function_name_map.append(func_idx, name);
+        self.type_name_map.append(type_idx, name);
+
+        let mut locals_name_map = NameMap::new();
+        self.locals_map
+            .iter()
+            .sorted_by_key(|l| l.1)
+            .for_each(|(name, idx)| {
+                locals_name_map.append(*idx, name);
+            });
+        self.locals_name_map.append(func_idx, &locals_name_map);
+    }
+
+    fn gen_init(&mut self) {
+        let name = "init";
+        let params = [];
+        self.locals_map.clear();
+
+        let output_channels_sorted_by_name = &self
+            .prog
+            .0
+            .clone()
+            .into_iter()
+            .filter_map(|anf_toplevel| match anf_toplevel {
+                AnfToplevel::Output(name, aexpr) => Some((name.clone(), aexpr.clone())),
+                _ => None,
+            })
+            .sorted_by(|(a_name, _), (b_name, _)| a_name.cmp(b_name))
+            .collect_vec();
+
+        let mut func = Function::new_with_locals_types(params.iter().cloned());
+        for (output_channel_index, (output_name, anfexpr)) in
+            output_channels_sorted_by_name.iter().enumerate()
+        {
+            // TODO this is very restricted at the moment
+            // and only allows outputs to depend on
+            // applications.
+
+            self.output_channel_names.push(output_name.clone());
+            func.instruction(&Instruction::I32Const(output_channel_index as i32));
+
+            let AnfExpr::CExp(CExpr::App(f, _args, _app_ty)) = anfexpr else {
+                panic!("Output channel expression was not an application")
+            };
+
+            let AExpr::Var(aexpr_name, _aexpr_ty) = f else {
+                panic!("Output channel expression was not a AExpr::Var")
+            };
+
+            // generate a call to the function that output depends on,
+            // to put the location ptr on the stack
+            // we know that this function takes 0 arguments?
+            let toplevel_index = self
+                .func_map
+                .get(aexpr_name.as_str())
+                .expect("Failed to look up index of {aexpr_name}");
+
+            func.instruction(&Instruction::I32Const(output_channel_index as i32));
+            func.instruction(&Instruction::Call(*toplevel_index));
+            func.instruction(&Instruction::Call(SET_OUTPUT_TO_LOCATION_IDX));
+            func.instruction(&Instruction::Drop);
+        }
+        func.instruction(&Instruction::End);
+
+        let func_idx = self.next_fun_index();
+
+        let results = [];
+        let type_idx = self.type_section.len();
+        self.type_section.ty().function(params, results);
+        self.type_map.insert(name, type_idx);
 
         self.function_section.function(type_idx);
         self.code_section.function(&func);
@@ -880,7 +960,7 @@ mod tests {
         );
 
         let emitter = AnfWasmEmitter::new(&prog);
-        let wasm = emitter.emit();
+        let (wasm, _) = emitter.emit();
         validate_wasm(&wasm);
     }
 
@@ -897,7 +977,7 @@ mod tests {
         );
 
         let emitter = AnfWasmEmitter::new(&prog);
-        let wasm = emitter.emit();
+        let (wasm, _) = emitter.emit();
         validate_wasm(&wasm);
     }
 
@@ -919,7 +999,7 @@ mod tests {
         );
 
         let emitter = AnfWasmEmitter::new(&prog);
-        let wasm = emitter.emit();
+        let (wasm, _) = emitter.emit();
         validate_wasm(&wasm);
     }
 
@@ -946,7 +1026,7 @@ mod tests {
         );
 
         let emitter = AnfWasmEmitter::new(&prog);
-        let wasm = emitter.emit();
+        let (wasm, _) = emitter.emit();
         validate_wasm(&wasm);
     }
 
@@ -983,7 +1063,7 @@ mod tests {
         );
 
         let emitter = AnfWasmEmitter::new(&prog);
-        let wasm = emitter.emit();
+        let (wasm, _) = emitter.emit();
         validate_wasm(&wasm);
     }
 
@@ -1015,7 +1095,7 @@ mod tests {
         );
 
         let emitter = AnfWasmEmitter::new(&prog);
-        let wasm = emitter.emit();
+        let (wasm, _) = emitter.emit();
         validate_wasm(&wasm);
     }
 
@@ -1037,7 +1117,7 @@ mod tests {
         );
 
         let emitter = AnfWasmEmitter::new(&prog);
-        let wasm = emitter.emit();
+        let (wasm, _) = emitter.emit();
         validate_wasm(&wasm);
     }
 
@@ -1092,7 +1172,7 @@ mod tests {
         );
 
         let emitter = AnfWasmEmitter::new(&prog);
-        let wasm = emitter.emit();
+        let (wasm, _) = emitter.emit();
         let mut file = std::fs::File::create("test.wasm").unwrap();
         file.write_all(&wasm).unwrap();
     }
@@ -1150,7 +1230,7 @@ mod tests {
         let prog = ANFConversion::new().run(prog);
 
         let emitter = AnfWasmEmitter::new(&prog);
-        let wasm = emitter.emit();
+        let (wasm, _) = emitter.emit();
 
         validate_wasm(&wasm);
     }
@@ -1194,7 +1274,7 @@ mod tests {
         );
 
         let emitter = AnfWasmEmitter::new(&prog);
-        let wasm = emitter.emit();
+        let (wasm, _) = emitter.emit();
         validate_wasm(&wasm);
     }
 }

@@ -65,28 +65,30 @@ fn main() -> Result<(), lexopt::Error> {
 
     let prog = infer_all(prog);
     let wasm_bytes;
+    let output_channels;
 
     let channels = prog.1.clone();
-    if let Ok(bytes) = compile_and_write_prog(prog) {
+    if let Ok((bytes, names)) = compile_and_write_prog(prog) {
         wasm_bytes = bytes;
+        output_channels = names;
     } else {
         panic!("Failed to compile and write oopsies");
     }
 
     if args.run {
-        let machine = Runtime::init(&wasm_bytes, channels);
+        let machine = Runtime::init(&wasm_bytes, channels, output_channels);
         machine.run();
     }
 
     Ok(())
 }
 
-fn compile_and_write_prog(prog: TypedProg) -> Result<Vec<u8>, lexopt::Error> {
+fn compile_and_write_prog(prog: TypedProg) -> Result<(Vec<u8>, Vec<String>), lexopt::Error> {
     let prog = run_program_passes_anf(prog);
-    let res = compile_anf_to_wasm(&prog);
+    let (res, names) = compile_anf_to_wasm(&prog);
     let mut stdout = std::io::stdout().lock();
     stdout.write_all(&res).unwrap();
     eprintln!();
 
-    Ok(res)
+    Ok((res, names))
 }
