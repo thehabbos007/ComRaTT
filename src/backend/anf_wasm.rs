@@ -290,14 +290,15 @@ impl<'a> AnfWasmEmitter<'a> {
         let name = "init";
         let params = [];
         self.locals_map.clear();
+        // needed if we want to compile anfexpr instead of looking up toplevel index
+        // self.locals_map.insert(LOCAL_DUP_I32_NAME, 0);
 
-        let output_channels_sorted_by_name = &self
+        let output_channels_sorted_by_name = self
             .prog
             .0
-            .clone()
-            .into_iter()
+            .iter()
             .filter_map(|anf_toplevel| match anf_toplevel {
-                AnfToplevel::Output(name, aexpr) => Some((name.clone(), aexpr.clone())),
+                AnfToplevel::Output(name, anfexpr) => Some((name.clone(), anfexpr)),
                 _ => None,
             })
             .sorted_by(|(a_name, _), (b_name, _)| a_name.cmp(b_name))
@@ -305,7 +306,7 @@ impl<'a> AnfWasmEmitter<'a> {
 
         let mut func = Function::new_with_locals_types(params.iter().cloned());
         for (output_channel_index, (output_name, anfexpr)) in
-            output_channels_sorted_by_name.iter().enumerate()
+            output_channels_sorted_by_name.into_iter().enumerate()
         {
             // TODO this is very restricted at the moment
             // and only allows outputs to depend on
@@ -314,8 +315,16 @@ impl<'a> AnfWasmEmitter<'a> {
             self.output_channel_names.push(output_name.clone());
             func.instruction(&Instruction::I32Const(output_channel_index as i32));
 
-            let AnfExpr::CExp(CExpr::App(f, _args, _app_ty)) = anfexpr else {
-                panic!("Output channel expression was not an application")
+            let AnfExpr::AExpr(AExpr::LaterClosure(
+                box AnfExpr::CExp(CExpr::App(f, _args, _app_ty)),
+                _,
+                _,
+            )) = anfexpr
+            else {
+                panic!(
+                    "Output channel expression was not an application {}",
+                    anfexpr
+                )
             };
 
             let AExpr::Var(aexpr_name, _aexpr_ty) = f else {
@@ -331,6 +340,8 @@ impl<'a> AnfWasmEmitter<'a> {
                 .expect("Failed to look up index of {aexpr_name}");
 
             func.instruction(&Instruction::I32Const(output_channel_index as i32));
+            // This could be compiling that results in a location pointer on the stack
+            // but we do a static lookup
             func.instruction(&Instruction::Call(*toplevel_index));
             func.instruction(&Instruction::Call(SET_OUTPUT_TO_LOCATION_IDX));
             func.instruction(&Instruction::Drop);
@@ -347,6 +358,8 @@ impl<'a> AnfWasmEmitter<'a> {
         self.function_section.function(type_idx);
         self.code_section.function(&func);
         self.func_map.insert(name, func_idx);
+        // needed if we want to compile anfexpr instead of looking up toplevel index
+        // self.func_args.insert(name, vec![(LOCAL_DUP_I32_NAME, Type::TInt)]);
 
         self.export_section.export(name, ExportKind::Func, func_idx);
 
