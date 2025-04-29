@@ -1,3 +1,5 @@
+use std::assert_matches::assert_matches;
+
 use itertools::Itertools;
 
 use crate::anf::{AExpr, AnfExpr, AnfProg, AnfToplevel, CExpr};
@@ -40,17 +42,38 @@ impl ANFConversion {
     fn normalize(&mut self, expr: TypedExpr) -> AnfExpr {
         match expr {
             TypedExpr::TConst(c, ty) => AnfExpr::AExpr(AExpr::Const(c, ty)),
-            // TypedExpr::TName(x, ty @ Type::TFun(..)) => {
-            //     let typs = unpack_type(&ty);
-            //     let args = self.generate_closure_type(&typs);
-
-            //     AnfExpr::AExpr(AExpr::Closure(
-            //         args,
-            //         Box::new(AnfExpr::AExpr(AExpr::Var(x, ty.clone()))),
-            //         final_type(&ty),
-            //     ))
-            // }
+            TypedExpr::TName(x, Type::TLater(box ty, clock)) => {
+                let app = CExpr::App(AExpr::Var(x, ty.clone()), Vec::new(), ty.clone());
+                AnfExpr::AExpr(AExpr::LaterClosure(
+                    Box::new(AnfExpr::CExp(app)),
+                    clock.clone(),
+                    Type::TLater(ty.clone().b(), clock),
+                ))
+            }
             TypedExpr::TName(x, ty) => AnfExpr::AExpr(AExpr::Var(x, ty)),
+            TypedExpr::TApp(
+                // We assume that these TApps are always lambda lifted names
+                box TypedExpr::TName(x, name_ty),
+                // And that all args are variables
+                args,
+                Type::TLater(box ty, clock),
+            ) => {
+                let args = args
+                    .into_iter()
+                    .map(|arg| match arg {
+                        TypedExpr::TName(x, ty) => AExpr::Var(x, ty),
+                        TypedExpr::TConst(c, ty) => AExpr::Const(c, ty),
+                        expr => panic!("Expected variable in TApp, got: {expr}"),
+                    })
+                    .collect_vec();
+
+                let app = CExpr::App(AExpr::Var(x, name_ty.clone()), args, ty.clone());
+                AnfExpr::AExpr(AExpr::LaterClosure(
+                    Box::new(AnfExpr::CExp(app)),
+                    clock.clone(),
+                    Type::TLater(ty.clone().b(), clock),
+                ))
+            }
             TypedExpr::TPrim(op, e1, e2, ty) => {
                 let (e1_anf, bindings1) = self.normalize_atom(*e1);
                 let (e2_anf, bindings2) = self.normalize_atom(*e2);
@@ -101,13 +124,18 @@ impl ANFConversion {
                 let comp = CExpr::Access(e_anf, idx, ty);
                 self.wrap_bindings(bindings, vec![], AnfExpr::CExp(comp))
             }
-            TypedExpr::TLam(params, body, ty) => {
+            TypedExpr::TLam(params, body, ty, None) => {
                 let body_anf = self.normalize(*body);
                 AnfExpr::AExpr(AExpr::Closure(
                     params.iter().cloned().map(|(_, typ)| typ).collect_vec(),
                     Box::new(body_anf),
                     ty,
                 ))
+            }
+            // We assume no params here, probably wrong?
+            TypedExpr::TLam(_, body, ty, Some(clock)) => {
+                let body_anf = self.normalize(*body);
+                AnfExpr::AExpr(AExpr::LaterClosure(Box::new(body_anf), clock, ty))
             }
             TypedExpr::TWait(name, typ) => AnfExpr::AExpr(AExpr::Wait(name, typ)),
         }

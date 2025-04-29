@@ -117,6 +117,7 @@ impl PartialElimination {
                         final_type(&ty),
                     )),
                     ty.clone(),
+                    None
                 )
             }
             TypedExpr::TConst(_, _) | TypedExpr::TName(_, _) | TypedExpr::TWait(_, _) => texpr,
@@ -126,11 +127,10 @@ impl PartialElimination {
                 Box::new(self.eliminate_partial(*right)),
                 typ,
             ),
-            TypedExpr::TLam(args, body, typ) => {
-                TypedExpr::TLam(args, Box::new(self.eliminate_partial(*body)), typ)
+            TypedExpr::TLam(args, body, typ, clock) => {
+                TypedExpr::TLam(args, Box::new(self.eliminate_partial(*body)), typ, clock)
             }
-            TypedExpr::TApp(fun_expr, args, app_ty @ Type::TFun(_, _))
-                if self.handle_type_is_later_closure(&app_ty) =>
+            TypedExpr::TApp(fun_expr, args, app_ty @ Type::TFun(_, _)) =>
             {
                 let eta_args = unpack_type(&app_ty);
                 let (lambda_args, app_args) = self.generate_lambda_vars_and_app_vars(&eta_args);
@@ -140,6 +140,16 @@ impl PartialElimination {
                     lambda_args,
                     Box::new(TypedExpr::TApp(fun_expr, all_args, final_type(&app_ty))),
                     app_ty.clone(),
+                    None
+                )
+            }
+            // TODO: Should we just do this in anf conversion instead? It's so special cased.
+            TypedExpr::TApp(fun_expr, args, Type::TLater(ty, clock)) if self.handle_delayed_closures => {
+                TypedExpr::TLam(
+                    Vec::new(),
+                    fun_expr,
+                    Type::TLater(ty, clock.clone()),
+                    Some(clock)
                 )
             }
             TypedExpr::TApp(fn_expr, args, typ) => TypedExpr::TApp(
@@ -222,7 +232,7 @@ mod tests {
     fn test_eliminate_partial_simple_let() {
         // Before: let x = y in x
         // After:  y
-        let mut eliminator = PartialElimination::new();
+        let mut eliminator = PartialElimination::new(false);
         let expr = TypedExpr::TLet(
             "x".to_string(),
             Type::TInt,
@@ -237,7 +247,7 @@ mod tests {
     fn test_eliminate_partial_nested_let_with_partial() {
         // Before: let f = (fun x y -> x + y) in let g = f in g 42
         // After:  let f = (fun x y -> x + y) in (fun y -> f 42 y)
-        let mut eliminator = PartialElimination::new();
+        let mut eliminator = PartialElimination::new(false);
         let expr = TypedExpr::TLet(
             "f".to_string(),
             Type::TFun(Type::TInt.b(), Type::TInt.b()),
@@ -253,6 +263,7 @@ mod tests {
                     Type::TInt.b(),
                     Type::TFun(Type::TInt.b(), Type::TInt.b()).b(),
                 ),
+                None,
             )),
             Box::new(TypedExpr::TLet(
                 "g".to_string(),
@@ -294,6 +305,7 @@ mod tests {
                 Type::TInt.b(),
                 Type::TFun(Type::TInt.b(), Type::TInt.b()).b(),
             ),
+            None,
         );
 
         let expected_body = TypedExpr::TLam(
@@ -314,6 +326,7 @@ mod tests {
             )
             .b(),
             Type::TFun(Type::TInt.b(), Type::TInt.b()),
+            None,
         );
 
         let result = eliminator.eliminate_partial(expr);
@@ -329,7 +342,7 @@ mod tests {
     fn test_eliminate_partial_nested_let() {
         // Before: let x = y in let z = x in z
         // After:  y
-        let mut eliminator = PartialElimination::new();
+        let mut eliminator = PartialElimination::new(false);
         let expr = TypedExpr::TLet(
             "x".to_string(),
             Type::TInt,
@@ -347,7 +360,7 @@ mod tests {
 
     #[test]
     fn test_eliminate_partial_nested_application() {
-        let mut eliminator = PartialElimination::new();
+        let mut eliminator = PartialElimination::new(false);
         // Before: let f = g 1 in f 2
         // After:  let f = (fun x -> g 1 x) in f 2
         let expr = TypedExpr::TLet(
@@ -383,7 +396,7 @@ mod tests {
 
                 // Check that rhs is now a lambda
                 match rhs {
-                    TypedExpr::TLam(args, _, _) => {
+                    TypedExpr::TLam(args, ..) => {
                         assert_eq!(args.len(), 1);
                         assert_eq!(args[0].1, Type::TInt);
                     }
@@ -396,7 +409,7 @@ mod tests {
 
     #[test]
     fn test_eliminate_partial_multiple_args() {
-        let mut eliminator = PartialElimination::new();
+        let mut eliminator = PartialElimination::new(false);
         // Before: let f = g 1 2 in f 3
         // After:  let f = (fun x -> g 1 2 x) in f 3
         let expr = TypedExpr::TLet(
@@ -439,7 +452,7 @@ mod tests {
 
         match result {
             TypedExpr::TLet(_, _, box rhs, _) => match rhs {
-                TypedExpr::TLam(args, _, _) => {
+                TypedExpr::TLam(args, ..) => {
                     assert_eq!(args.len(), 1);
                 }
                 _ => panic!("Expected lambda in let binding rhs"),
@@ -450,7 +463,7 @@ mod tests {
 
     #[test]
     fn test_eliminate_partial_in_conditional() {
-        let mut eliminator = PartialElimination::new();
+        let mut eliminator = PartialElimination::new(false);
         // Before: if true then (f 1) else (g 2)
         // After:  if true then (f 1) else (g 2) [no change - applications preserved]
         let expr = TypedExpr::TIfThenElse(
@@ -489,7 +502,7 @@ mod tests {
 
     #[test]
     fn test_eliminate_partial_nested_let_bindings() {
-        let mut eliminator = PartialElimination::new();
+        let mut eliminator = PartialElimination::new(false);
         // Before: let f = g 1 in let h = f in h 2
         // After:  let f = (fun x -> g 1 x) in f 2
         let expr = TypedExpr::TLet(
@@ -530,7 +543,7 @@ mod tests {
             TypedExpr::TLet(name, _, box rhs, box body) => {
                 assert_eq!(name, "f");
                 match rhs {
-                    TypedExpr::TLam(_, _, _) => (),
+                    TypedExpr::TLam(..) => (),
                     _ => panic!("Expected lambda in outer let binding"),
                 }
                 match body {
@@ -544,7 +557,7 @@ mod tests {
 
     #[test]
     fn test_eliminate_partial_in_lambda_body() {
-        let mut eliminator = PartialElimination::new();
+        let mut eliminator = PartialElimination::new(false);
         // Before: fun x -> (f 1) x
         // After:  fun x -> (f 1) x [no change - application preserved]
         let expr = TypedExpr::TLam(
@@ -568,12 +581,13 @@ mod tests {
             )
             .b(),
             Type::TFun(Type::TInt.b(), Type::TInt.b()),
+            None,
         );
 
         let result = eliminator.eliminate_partial(expr);
 
         match result {
-            TypedExpr::TLam(args, body, _) => {
+            TypedExpr::TLam(args, body, ..) => {
                 assert_eq!(args.len(), 1);
                 match *body {
                     TypedExpr::TApp(_, args, _) => {
@@ -588,7 +602,7 @@ mod tests {
 
     #[test]
     fn test_eliminate_partial_preserves_primitives() {
-        let mut eliminator = PartialElimination::new();
+        let mut eliminator = PartialElimination::new(false);
         // Before: let f = g 1 in f 2 + 3
         // After:  let f = (fun x -> g 1 x) in f 2 + 3
         let expr = TypedExpr::TLet(

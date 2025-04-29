@@ -34,13 +34,22 @@ impl EliminateConsecLam {
 
     fn fuse_lams(&self, expr: TypedExpr) -> TypedExpr {
         match expr {
-            TypedExpr::TLam(mut args, box TypedExpr::TLam(inner_args, inner_body, _), ty) => {
+            TypedExpr::TLam(
+                mut args,
+                box TypedExpr::TLam(inner_args, inner_body, _, clock2),
+                ty,
+                clock1,
+            ) => {
                 args.extend(inner_args);
+                let clock = clock1.map(|mut cl| {
+                    cl.extend(clock2.unwrap_or_default());
+                    cl
+                });
 
-                self.fuse_lams(TypedExpr::TLam(args, inner_body, ty))
+                self.fuse_lams(TypedExpr::TLam(args, inner_body, ty, clock))
             }
-            TypedExpr::TLam(args, body, ty) => {
-                TypedExpr::TLam(args, body.map_box(|v| self.fuse_lams(v)), ty)
+            TypedExpr::TLam(args, body, ty, clock) => {
+                TypedExpr::TLam(args, body.map_box(|v| self.fuse_lams(v)), ty, clock)
             }
             TypedExpr::TApp(typed_expr, arg, ty) => TypedExpr::TApp(
                 typed_expr.map_box(|v| self.fuse_lams(v)),
@@ -106,7 +115,7 @@ mod tests {
 
     // Helper to create a lambda expression
     fn make_lam(args: Vec<(String, Type)>, body: TypedExpr, typ: Type) -> TypedExpr {
-        TypedExpr::TLam(args, Box::new(body), typ)
+        TypedExpr::TLam(args, Box::new(body), typ, None)
     }
 
     // Helper to create a name expression
@@ -171,6 +180,7 @@ mod tests {
                     box TypedExpr::TPrim(Binop::Add, box TypedExpr::TPrim(Binop::Add, _, _, Type::TInt), _, Type::TInt),
                     _,
                     Type::TInt),
+                _,
                 _
             ) if args.as_slice() == [
                 ("x".into(), Type::TInt),
@@ -204,7 +214,7 @@ mod tests {
 
         // Expected: fun x y -> x
         match result {
-            TypedExpr::TLam(args, body, _) => {
+            TypedExpr::TLam(args, body, ..) => {
                 assert_eq!(args.len(), 2);
                 assert_eq!(args[0].0, "x");
                 assert_eq!(args[1].0, "y");
@@ -251,7 +261,7 @@ mod tests {
 
         // Expected: fun x y z -> x
         match result {
-            TypedExpr::TLam(args, body, _) => {
+            TypedExpr::TLam(args, body, ..) => {
                 assert_eq!(args.len(), 3);
                 assert_eq!(args[0].0, "x");
                 assert_eq!(args[1].0, "y");
@@ -304,7 +314,7 @@ mod tests {
 
                 // Check that the body is a fused lambda
                 match &**body {
-                    TypedExpr::TLam(args, _, _) => {
+                    TypedExpr::TLam(args, ..) => {
                         assert_eq!(args.len(), 2);
                         assert_eq!(args[0].0, "x");
                         assert_eq!(args[1].0, "y");

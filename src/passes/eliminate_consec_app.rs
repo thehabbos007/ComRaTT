@@ -198,13 +198,14 @@ impl EliminateConsecApp {
                 )
                 .none_traversal()
             }
-            TypedExpr::TLam(args, body, typ) => TypedExpr::TLam(
+            TypedExpr::TLam(args, body, typ, clock) => TypedExpr::TLam(
                 args,
                 Box::new(
                     self.eliminate_consec(*body, local_scope)
                         .ignore_traversal_outcome(),
                 ),
                 typ,
+                clock,
             )
             .none_traversal(),
             TypedExpr::TIfThenElse(condition, then_branch, else_branch, typ) => {
@@ -288,6 +289,7 @@ mod tests {
                 Type::TInt,
             )),
             Type::TFun(Box::new(Type::TInt), Box::new(Type::TInt)),
+            None,
         );
 
         let bloo_name = TypedExpr::TName(

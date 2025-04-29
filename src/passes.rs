@@ -28,10 +28,10 @@ pub fn run_program_passes(prog: TypedProg) -> TypedProg {
     let prog = lambda_lift.run(prog);
 
     eprintln!("LamLift:\n{prog}");
-    eliminate_partial.set_handle_delayed_closures(true);
-    let prog = eliminate_partial.run(prog);
+    // eliminate_partial.set_handle_delayed_closures(true);
+    // let prog = eliminate_partial.run(prog);
 
-    eprintln!("LamLiftElimPartial:\n{prog}");
+    // eprintln!("LamLiftElimPartial:\n{prog}");
 
     prog
 }

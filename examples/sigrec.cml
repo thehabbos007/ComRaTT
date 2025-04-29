@@ -1,6 +1,6 @@
 chan keyboard : int;
 
-kb : {} -> Sig int
+kb : O Sig int
 def kb =
     let kb_v = wait keyboard in
     delay {cl(kb_v)} (advance kb_v :: kb)

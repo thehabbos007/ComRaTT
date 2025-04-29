@@ -93,11 +93,11 @@ impl Runtime {
         // For now we just assume a main that needs a single integer argument.
 
         let main = instance
-            .get_typed_func::<i32, i32>(&mut store, "main")
+            .get_typed_func::<(), i32>(&mut store, "kb")
             .expect("Failed to retrieve main function");
 
         let res = main
-            .call(&mut store, 42)
+            .call(&mut store, ())
             .expect("Failed to call main function");
         println!("Reactive machine received ptr {res:?} from calling main");
 

@@ -8,7 +8,7 @@ use pest::{
 };
 use pest_derive::Parser;
 
-use crate::source::{empty_clock_expr, Binop, ClockExpr, Const, Expr, Prog, Toplevel, Type};
+use crate::source::{Binop, ClockExpr, Const, Expr, Prog, Toplevel, Type};
 
 #[derive(Parser)]
 #[grammar = "lang.pest"]
@@ -29,6 +29,7 @@ static CLOCK_PARSER: LazyLock<PrattParser<Rule>> =
 static TYPE_PARSER: LazyLock<PrattParser<Rule>> = LazyLock::new(|| {
     PrattParser::new()
         .op(Op::infix(Rule::arrow, Assoc::Right))
+        .op(Op::prefix(Rule::later))
         .op(Op::prefix(Rule::signal))
         .op(Op::prefix(Rule::box_type))
 });
@@ -97,6 +98,7 @@ fn parse_type(pairs: Pairs<Rule>) -> Type {
         .map_primary(|primary| parse_type_atom(primary))
         .map_prefix(|op, typ| match op.as_rule() {
             Rule::signal => Type::TSig(Box::new(typ)),
+            Rule::later => Type::TLater(Box::new(typ), ClockExpr::Symbolic.into()),
             Rule::box_type => {
                 Type::TFun(Box::new(Type::TUnit), Box::new(Type::TBox(Box::new(typ))))
             }
@@ -114,7 +116,6 @@ fn parse_type_atom(pair: Pair<Rule>) -> Type {
         Rule::int_type => Type::TInt,
         Rule::bool_type => Type::TBool,
         Rule::unit_type => Type::TUnit,
-        Rule::later_unit_type => Type::TLaterUnit(empty_clock_expr()),
         Rule::type_expr => parse_type(pair.into_inner()),
         Rule::parenthesis_or_tuple_type => {
             let mut typs = pair

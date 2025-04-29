@@ -249,11 +249,7 @@ impl Inference {
                     let typ = if idx == 0 {
                         *t
                     } else {
-                        // Index '1' will be the later Sig co-inductive type
-                        Type::TFun(
-                            Type::TLaterUnit(ClockExpr::Symbolic.into()).b(),
-                            Type::TSig(t).b(),
-                        )
+                        Type::TLater(Type::TSig(t).b(), ClockExpr::Symbolic.into())
                     };
                     (
                         typ.clone(),
@@ -297,9 +293,9 @@ impl Inference {
                 constraints.append(&mut later_output.constraints);
                 constraints.push(Constraint::TypeEqual(
                     later_ty.clone(),
-                    Type::TFun(
-                        Type::TLaterUnit(ClockExpr::Symbolic.into()).b(),
+                    Type::TLater(
                         Type::TSig(val_ty.clone().b()).b(),
+                        ClockExpr::Symbolic.into(),
                     ),
                 ));
 
@@ -347,16 +343,14 @@ impl Inference {
                 // Call recursively, propagate constraints and generate a new '{} -> ty'
                 let (ty, type_output) = self.infer(context, *e);
                 (
-                    Type::TFun(Type::TLaterUnit(clock.clone()).b(), ty.clone().b()),
+                    Type::TLater(ty.clone().b(), clock.clone()),
                     TypeOutput::new(
                         type_output.constraints,
                         TypedExpr::TLam(
-                            vec![(
-                                "#advance_later_unit".to_owned(),
-                                Type::TLaterUnit(clock.clone()),
-                            )],
+                            Vec::new(),
                             type_output.texp.b(),
-                            Type::TFun(Type::TLaterUnit(clock).b(), ty.clone().b()),
+                            Type::TLater(ty.clone().b(), clock.clone()),
+                            Some(clock),
                         ),
                     ),
                 )
@@ -365,23 +359,16 @@ impl Inference {
                 let Some(ty) = context.get_channel(name.clone()) else {
                     panic!("Type checking wait on unbound channel {}", name)
                 };
+                let clock: ClockExprs = ClockExpr::Wait(name.clone()).into();
                 (
-                    Type::TFun(
-                        Type::TLaterUnit(ClockExpr::Wait(name.clone()).into()).b(),
-                        ty.clone().b(),
-                    ),
+                    Type::TLater(ty.clone().b(), clock.clone()),
                     TypeOutput::new(
                         Vec::new(),
                         TypedExpr::TLam(
-                            vec![(
-                                "#advance_later_unit".to_owned(),
-                                Type::TLaterUnit(ClockExpr::Wait(name.clone()).into()),
-                            )],
+                            Vec::new(),
                             TypedExpr::TWait(name.clone(), ty.clone()).b(),
-                            Type::TFun(
-                                Type::TLaterUnit(ClockExpr::Wait(name.clone()).into()).b(),
-                                ty.clone().b(),
-                            ),
+                            Type::TLater(ty.clone().b(), clock.clone()),
+                            Some(clock),
                         ),
                     ),
                 )
@@ -393,24 +380,21 @@ impl Inference {
             // The input channels of this clock can change at runtime, but at comptime we need
             // to do some checking.
             Expr::Advance(name) => match context.attempt_advance(&name) {
-                Type::TFun(box Type::TLaterUnit(clock), box ty) => {
-                    let fun_type = Type::TFun(Type::TLaterUnit(clock.clone()).b(), ty.clone().b());
+                Type::TLater(box ty, clock) => {
+                    let later_type = Type::TLater(ty.clone().b(), clock.clone());
                     (
                         ty.clone(),
                         TypeOutput::new(
-                            vec![],
+                            Vec::new(),
                             TypedExpr::TApp(
-                                TypedExpr::TName(name, fun_type).b(),
-                                vec![TypedExpr::TConst(
-                                    Const::CLaterUnit,
-                                    Type::TLaterUnit(clock),
-                                )],
+                                TypedExpr::TName(name, later_type).b(),
+                                Vec::new(),
                                 ty.clone(),
                             ),
                         ),
                     )
                 }
-                _ => panic!("Cannot advance arbitrary exprs"),
+                expr => panic!("Cannot advance arbitrary expr {expr}"),
             },
             // TODO we must not allow functions under a tick
             // also, if there is a tick we need to insert to the right of the tick
@@ -588,6 +572,7 @@ impl Inference {
                     args_with_types.collect(),
                     body_output.texp.b(),
                     lambda_type.clone(),
+                    None,
                 );
                 (
                     lambda_type,
@@ -605,9 +590,10 @@ impl Inference {
                     TypeOutput::new(
                         type_output.constraints,
                         TypedExpr::TLam(
-                            vec![("#box_unit".to_owned(), Type::TUnit)],
+                            Vec::new(),
                             type_output.texp.b(),
                             Type::TFun(Type::TUnit.b(), box_ty.b()),
+                            None,
                         ),
                     ),
                 )
@@ -622,11 +608,7 @@ impl Inference {
                         dest_ty.clone(),
                         TypeOutput::new(
                             type_output.constraints,
-                            TypedExpr::TApp(
-                                type_output.texp.b(),
-                                vec![TypedExpr::TConst(Const::CUnit, Type::TUnit)],
-                                dest_ty,
-                            ),
+                            TypedExpr::TApp(type_output.texp.b(), Vec::new(), dest_ty),
                         ),
                     ),
                     _ => panic!("Tried to unbox something not boxed {ty}"),
@@ -644,7 +626,7 @@ impl Inference {
                 let body_output = self.check(context, body, to.clone());
                 TypeOutput::new(
                     body_output.constraints,
-                    TypedExpr::TLam(vec![(arg, from)], body_output.texp.b(), to),
+                    TypedExpr::TLam(vec![(arg, from)], body_output.texp.b(), to, None),
                 )
             }
 
@@ -663,10 +645,13 @@ impl Inference {
             Type::TInt => Type::TInt,
             Type::TBool => Type::TBool,
             Type::TUnit => Type::TUnit,
-            Type::TLaterUnit(clock) => Type::TLaterUnit(clock.clone()),
-            Type::TSig(t) => {
-                let t = self.normalize_ty(t);
-                Type::TSig(t.b())
+            Type::TLater(ty, clock) => {
+                let ty = self.normalize_ty(ty);
+                Type::TLater(ty.b(), clock.clone())
+            }
+            Type::TSig(ty) => {
+                let ty = self.normalize_ty(ty);
+                Type::TSig(ty.b())
             }
             Type::TFun(from, to) => {
                 let from = self.normalize_ty(from);
@@ -698,7 +683,7 @@ impl Inference {
             // We most certainly don't want to compare clocks here
             // as e.g. two Sig Int should be equal at the type level
             // even though they're not delayed on the same clock.
-            (Type::TLaterUnit(_), Type::TLaterUnit(_)) => Ok(()),
+            (Type::TLater(t1, _), Type::TLater(t2, _)) => self.unify_ty_ty(&t1, &t2),
             (Type::TSig(t1), Type::TSig(t2)) => self.unify_ty_ty(&t1, &t2),
             (Type::TFun(fst_from, fst_to), Type::TFun(snd_from, snd_to)) => {
                 self.unify_ty_ty(fst_from.as_ref(), snd_from.as_ref())?;
@@ -741,7 +726,10 @@ impl Inference {
             Type::TInt => (BTreeSet::new(), Type::TInt),
             Type::TBool => (BTreeSet::new(), Type::TBool),
             Type::TUnit => (BTreeSet::new(), Type::TUnit),
-            Type::TLaterUnit(clock) => (BTreeSet::new(), Type::TLaterUnit(clock)),
+            Type::TLater(t, clock) => {
+                let (mut t_unbound, t) = self.substitute(*t);
+                (t_unbound, Type::TLater(t.b(), clock))
+            }
             Type::TBox(t) => {
                 let (mut t_unbound, t) = self.substitute(*t);
                 (t_unbound, Type::TBox(t.b()))
@@ -789,7 +777,7 @@ impl Inference {
                 let (unbound, ty) = self.substitute(ty);
                 (unbound, TypedExpr::TName(name, ty))
             }
-            TypedExpr::TLam(args, body, ty) => {
+            TypedExpr::TLam(args, body, ty, clock) => {
                 let mut unbounds = BTreeSet::new();
                 let mut new_args = Vec::new();
                 for arg in args.clone() {
@@ -801,7 +789,7 @@ impl Inference {
                 unbounds.extend(unbound);
                 let (unbound, ty) = self.substitute(ty);
                 unbounds.extend(unbound);
-                (unbounds, TypedExpr::TLam(new_args, body.b(), ty))
+                (unbounds, TypedExpr::TLam(new_args, body.b(), ty, clock))
             }
             TypedExpr::TApp(fun, args, ty) => {
                 let mut unbounds = BTreeSet::new();
@@ -936,12 +924,9 @@ impl Inference {
                     // type expr
                     let mut context = context.clone();
                     let (expr_type, mut output) = self.infer(context, expr);
-                    // push tfun {} -> int constraint, because we want a closure
-                    // from laterunit to ptr
-                    let expected_type = Type::TFun(
-                        Type::TLaterUnit(ClockExpr::Symbolic.into()).b(),
-                        Type::TInt.b(),
-                    );
+                    let output_ty = Type::TVar(self.fresh_ty_var());
+                    // push Later int constraint, because we want a delayed closure
+                    let expected_type = Type::TLater(output_ty.b(), ClockExpr::Symbolic.into());
                     output
                         .constraints
                         .push(Constraint::TypeEqual(expr_type.clone(), expected_type));
@@ -1294,10 +1279,7 @@ mod tests {
     fn infer_advance_name_bound_and_tick_in_context() {
         let clock_expr = ClockExpr::Cl("keyboard".to_owned());
         let expr = Expr::Advance("x".to_owned());
-        let fun_type = Type::TFun(
-            Type::TLaterUnit(clock_expr.clone().into()).b(),
-            Type::TInt.b(),
-        );
+        let fun_type = Type::TLater(Type::TInt.b(), clock_expr.clone().into());
         let binding = (fun_type, Some(clock_expr.clone().into()));
         let mut context = BindingContext::Tick(
             HashMap::from([("x".to_owned(), binding)]),
@@ -1355,23 +1337,12 @@ mod tests {
         };
         let (ty, output) = inference.infer(Default::default(), expr);
         let expected_texp = TypedExpr::TLam(
-            vec![(
-                "#advance_later_unit".to_owned(),
-                Type::TLaterUnit(clock_expr.clone().into()),
-            )],
+            Vec::new(),
             TypedExpr::TConst(Const::CInt(42), Type::TInt).b(),
-            Type::TFun(
-                Type::TLaterUnit(clock_expr.clone().into()).b(),
-                Type::TInt.b(),
-            ),
+            Type::TLater(Type::TInt.b(), clock_expr.clone().into()),
+            Some(clock_expr.clone().into()),
         );
-        assert_eq!(
-            ty,
-            Type::TFun(
-                Type::TLaterUnit(clock_expr.clone().into()).b(),
-                Type::TInt.b()
-            )
-        );
+        assert_eq!(ty, Type::TLater(Type::TInt.b(), clock_expr.clone().into()),);
         assert_eq!(output.texp, expected_texp);
     }
 

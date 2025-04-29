@@ -95,10 +95,10 @@ pub enum Type {
     TInt,
     TBool,
     TUnit,
-    TLaterUnit(ClockExprs),
     TFun(Box<Type>, Box<Type>),
     TProduct(Vec<Type>),
     TSig(Box<Type>),
+    TLater(Box<Type>, ClockExprs),
     TVar(TypeVar),
     TBox(Box<Type>),
 }
@@ -111,17 +111,14 @@ impl Type {
     }
 
     pub fn contains_later_unit(&self) -> bool {
-        matches!(self, Type::TFun(box Type::TLaterUnit(_), _) | Type::TLaterUnit(_))
+        matches!(self, Type::TLater(..))
     }
 
     pub fn occurs_check(&self, var: TypeVar) -> Result<(), Type> {
         match self {
             Type::TInt => Ok(()),
             Type::TBool => Ok(()),
-            Type::TLaterUnit(_) => Ok(()),
             Type::TUnit => Ok(()),
-            Type::TSig(_) => Ok(()),
-            Type::TBox(_) => Ok(()),
             Type::TVar(v) => {
                 if *v == var {
                     Err(Type::TVar(*v))
@@ -138,6 +135,9 @@ impl Type {
                     t.occurs_check(var).map_err(|_| self.clone())?
                 }
                 Ok(())
+            }
+            Type::TSig(t) | Type::TLater(t, _) | Type::TBox(t) => {
+                t.occurs_check(var).map_err(|_| self.clone())
             }
         }
     }

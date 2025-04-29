@@ -1,4 +1,4 @@
-use crate::source::{Binop, Const, Type};
+use crate::source::{Binop, ClockExprs, Const, Type};
 use crate::types::Sym;
 use std::collections::BTreeSet;
 use std::ops::Deref;
@@ -8,6 +8,7 @@ pub enum AExpr {
     Const(Const, Type),
     Var(Sym, Type),
     Closure(Vec<Type>, Box<AnfExpr>, Type),
+    LaterClosure(Box<AnfExpr>, ClockExprs, Type),
     Wait(Sym, Type),
 }
 
@@ -18,6 +19,7 @@ impl AExpr {
             AExpr::Var(_, ty) => ty.clone(),
             AExpr::Closure(.., ty) => ty.clone(),
             AExpr::Wait(_, ty) => ty.clone(),
+            AExpr::LaterClosure(.., ty) => ty.clone(),
         }
     }
 }

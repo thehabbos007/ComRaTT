@@ -27,14 +27,14 @@ fn main() -> wasmtime::Result<()> {
 
     let instance = linker.instantiate(&mut store, &module)?;
     let main = instance.get_typed_func::<i32, i32>(&mut store, "main")?;
-    let dispatch = instance.get_typed_func::<(i32, i32), i32>(&mut store, "dispatch")?;
+    let dispatch = instance.get_typed_func::<i32, i32>(&mut store, "dispatch")?;
 
     let res = main.call(&mut store, 42)?;
     println!("{res:?}");
 
     // call dispatch with the closure pointer returned from main
     // and supply the unit argument
-    let result = dispatch.call(&mut store, (res, -1))?;
+    let result = dispatch.call(&mut store, res)?;
     println!("{result:?}");
 
     Ok(())
