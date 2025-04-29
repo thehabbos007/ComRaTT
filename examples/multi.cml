@@ -18,5 +18,5 @@ def alloc_two y =
     let del_two = delay {cl(wait keyboard)} y in
     delay {cl(del_two)} (advance del_two);
 
-out_one <- alloc_one 2;
-out_two <- alloc_two 69;
+print <- alloc_one 2;
+print <- alloc_one 69;
