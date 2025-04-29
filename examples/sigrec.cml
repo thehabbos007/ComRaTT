@@ -17,3 +17,6 @@ def kb =
 //
 //
 // let main a = let adder = add a in hof adderV
+
+
+print <- kb;
