@@ -9,7 +9,7 @@ pub struct EliminateConsecLam;
 
 impl Pass for EliminateConsecLam {
     fn run(&mut self, prog: TypedProg) -> TypedProg {
-        let defs = prog.0;
+        let defs = prog.defs;
         let defs = defs
             .into_iter()
             .map(|def| match def {
@@ -23,7 +23,10 @@ impl Pass for EliminateConsecLam {
             })
             .collect_vec();
 
-        TypedProg(defs, prog.1)
+        TypedProg {
+            defs,
+            sorted_inputs: prog.sorted_inputs,
+        }
     }
 }
 
@@ -308,7 +311,7 @@ mod tests {
         let result = pass.run(prog);
 
         // Check the result
-        match &result.0[0] {
+        match &result.defs[0] {
             TypedToplevel::TFunDef(name, _, body, _) => {
                 assert_eq!(name, "test_fun");
 

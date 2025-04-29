@@ -57,7 +57,7 @@ impl TypedToplevel {
 
 impl TypedProg {
     pub fn untyped(&self) -> Prog {
-        Prog(self.0.iter().map(TypedToplevel::untyped).collect())
+        Prog(self.defs.iter().map(TypedToplevel::untyped).collect())
     }
 }
 
@@ -290,7 +290,7 @@ impl Display for TypedToplevel {
 
 impl Display for TypedProg {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for p in self.0.iter() {
+        for p in self.defs.iter() {
             writeln!(f, "{}", p)?;
         }
 

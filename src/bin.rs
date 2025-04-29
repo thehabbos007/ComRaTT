@@ -8,6 +8,8 @@ use lexopt::Arg;
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{self, Read as _, Write};
+use std::process::exit;
+use std::time::Duration;
 
 struct Args {
     input: Option<OsString>,
@@ -67,7 +69,7 @@ fn main() -> Result<(), lexopt::Error> {
     let wasm_bytes;
     let output_channels;
 
-    let channels = prog.1.clone();
+    let channels = prog.sorted_inputs.clone();
     if let Ok((bytes, names)) = compile_and_write_prog(prog) {
         wasm_bytes = bytes;
         output_channels = names;
@@ -76,8 +78,19 @@ fn main() -> Result<(), lexopt::Error> {
     }
 
     if args.run {
-        let machine = Runtime::init(&wasm_bytes, channels, output_channels);
-        machine.run();
+        tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(async {
+                tokio::spawn(async move {
+                    tokio::signal::ctrl_c().await.unwrap();
+                    eprintln!("Exiting...");
+                    exit(0);
+                });
+                let machine = Runtime::init(&wasm_bytes, channels, output_channels).await;
+                machine.run().await;
+            })
     }
 
     Ok(())

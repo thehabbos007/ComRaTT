@@ -22,6 +22,8 @@ wasmtime = "30"
 pest = { version = "2.6", features = ["miette-error"] }
 miette = "7.5"
 pest_derive = "2.6"
+tokio = { version = "1.44.2", features = ["full"] }
+getch = "0.3.1"
 
 [dev-dependencies]
 wasmtime-wast = "30"

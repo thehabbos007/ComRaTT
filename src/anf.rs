@@ -91,13 +91,16 @@ pub enum AnfToplevel {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AnfProg(pub Vec<AnfToplevel>, pub Vec<(Sym, Type)>);
+pub struct AnfProg {
+    pub toplevels: Vec<AnfToplevel>,
+    pub inputs: Vec<(Sym, Type)>,
+}
 
 impl Deref for AnfProg {
     type Target = Vec<AnfToplevel>;
 
     fn deref(&self) -> &Self::Target {
-        &self.0
+        &self.toplevels
     }
 }
 

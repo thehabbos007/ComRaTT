@@ -10,6 +10,7 @@ use std::ops::{Deref, DerefMut};
 
 use crate::anf::{AExpr, AnfExpr, AnfProg, AnfToplevel, CExpr};
 use crate::backend::wasm_emitter::{CLOCK_OF_FUN_IDX, CLOSURE_HEAP_INDEX, LOCATION_HEAP_INDEX};
+use crate::constants::OUTPUT_MAP;
 use crate::source::{Binop, ClockExpr, ClockExprs, Const, Type};
 use crate::types::count_tfun_args;
 
@@ -61,14 +62,14 @@ impl<'a> AnfWasmEmitter<'a> {
     pub fn emit(mut self) -> (Vec<u8>, Vec<String>) {
         self.prepare_emit();
 
-        for def in &self.prog.0 {
+        for def in &self.prog.toplevels {
             self.forward_declare_functions(def);
         }
 
         self.dispatch_offset = self.next_fun_index();
         self.location_dispatch_offset = self.next_fun_index() + 1;
 
-        for def in &self.prog.0 {
+        for def in &self.prog.toplevels {
             self.process_function(def);
         }
 
@@ -295,7 +296,7 @@ impl<'a> AnfWasmEmitter<'a> {
 
         let output_channels_sorted_by_name = self
             .prog
-            .0
+            .toplevels
             .iter()
             .filter_map(|anf_toplevel| match anf_toplevel {
                 AnfToplevel::Output(name, anfexpr) => Some((name.clone(), anfexpr)),
@@ -305,9 +306,7 @@ impl<'a> AnfWasmEmitter<'a> {
             .collect_vec();
 
         let mut func = Function::new_with_locals_types(params.iter().cloned());
-        for (output_channel_index, (output_name, anfexpr)) in
-            output_channels_sorted_by_name.into_iter().enumerate()
-        {
+        for (output_name, anfexpr) in output_channels_sorted_by_name.into_iter() {
             // TODO this is very restricted at the moment
             // and only allows outputs to depend on
             // applications.
@@ -330,10 +329,12 @@ impl<'a> AnfWasmEmitter<'a> {
                 panic!("Output channel expression was not a AExpr::Var")
             };
 
+            // We place metadata about the output channel and its index first
+            let output_channel_index = self.output_channel_to_index(&output_name);
+            func.instruction(&Instruction::I32Const(output_channel_index));
+
             // generate a call to the function that output depends on,
             // to put the location ptr on the stack
-            // we know that this function takes 0 arguments?
-            func.instruction(&Instruction::I32Const(output_channel_index as i32));
             for arg in args {
                 self.compile_atomic(&mut func, arg);
             }
@@ -437,7 +438,7 @@ impl<'a> AnfWasmEmitter<'a> {
     fn channel_to_index(&self, channel_name: &str) -> i32 {
         let index = self
             .prog
-            .1
+            .inputs
             .iter()
             .position(|(name, _)| *name == channel_name)
             .unwrap_or_else(|| {
@@ -445,6 +446,15 @@ impl<'a> AnfWasmEmitter<'a> {
             });
 
         2_u32.pow(index as u32) as i32
+    }
+
+    fn output_channel_to_index(&self, channel_name: &str) -> i32 {
+        *OUTPUT_MAP.get(&channel_name).unwrap_or_else(|| {
+            panic!(
+                "Unsupported channel received {channel_name}, should be one of: {}",
+                OUTPUT_MAP.keys().join(", ")
+            )
+        })
     }
 
     fn generate_clock_of_binding_call(&self, binding: &str, func: &mut Function) {
@@ -1039,15 +1049,15 @@ mod tests {
 
     #[test]
     fn test_atomic_const() {
-        let prog = AnfProg(
-            vec![AnfToplevel::FunDef(
+        let prog = AnfProg {
+            toplevels: vec![AnfToplevel::FunDef(
                 "main".to_string(),
                 vec![],
                 AnfExpr::AExpr(AExpr::Const(Const::CInt(42), Type::TInt)),
                 Type::TInt,
             )],
-            Default::default(),
-        );
+            inputs: Default::default(),
+        };
 
         let emitter = AnfWasmEmitter::new(&prog);
         let (wasm, _) = emitter.emit();
@@ -1056,15 +1066,15 @@ mod tests {
 
     #[test]
     fn test_atomic_variable() {
-        let prog = AnfProg(
-            vec![AnfToplevel::FunDef(
+        let prog = AnfProg {
+            toplevels: vec![AnfToplevel::FunDef(
                 "main".to_string(),
                 vec![("x".to_string(), Type::TInt)],
                 AnfExpr::AExpr(AExpr::Var("x".to_string(), Type::TInt)),
                 Type::TInt,
             )],
-            Default::default(),
-        );
+            inputs: Default::default(),
+        };
 
         let emitter = AnfWasmEmitter::new(&prog);
         let (wasm, _) = emitter.emit();
@@ -1073,8 +1083,8 @@ mod tests {
 
     #[test]
     fn test_simple_arithmetic() {
-        let prog = AnfProg(
-            vec![AnfToplevel::FunDef(
+        let prog = AnfProg {
+            toplevels: vec![AnfToplevel::FunDef(
                 "main".to_string(),
                 vec![],
                 AnfExpr::CExp(CExpr::Prim(
@@ -1085,8 +1095,8 @@ mod tests {
                 )),
                 Type::TInt,
             )],
-            Default::default(),
-        );
+            inputs: Default::default(),
+        };
 
         let emitter = AnfWasmEmitter::new(&prog);
         let (wasm, _) = emitter.emit();
@@ -1095,8 +1105,8 @@ mod tests {
 
     #[test]
     fn test_let_binding() {
-        let prog = AnfProg(
-            vec![AnfToplevel::FunDef(
+        let prog = AnfProg {
+            toplevels: vec![AnfToplevel::FunDef(
                 "main".to_string(),
                 vec![],
                 AnfExpr::Let(
@@ -1112,8 +1122,8 @@ mod tests {
                 ),
                 Type::TInt,
             )],
-            Default::default(),
-        );
+            inputs: Default::default(),
+        };
 
         let emitter = AnfWasmEmitter::new(&prog);
         let (wasm, _) = emitter.emit();
@@ -1122,8 +1132,8 @@ mod tests {
 
     #[test]
     fn test_nested_let_bindings() {
-        let prog = AnfProg(
-            vec![AnfToplevel::FunDef(
+        let prog = AnfProg {
+            toplevels: vec![AnfToplevel::FunDef(
                 "main".to_string(),
                 vec![],
                 AnfExpr::Let(
@@ -1149,8 +1159,8 @@ mod tests {
                 ),
                 Type::TInt,
             )],
-            Default::default(),
-        );
+            inputs: Default::default(),
+        };
 
         let emitter = AnfWasmEmitter::new(&prog);
         let (wasm, _) = emitter.emit();
@@ -1159,8 +1169,8 @@ mod tests {
 
     #[test]
     fn test_function_call() {
-        let prog = AnfProg(
-            vec![
+        let prog = AnfProg {
+            toplevels: vec![
                 AnfToplevel::FunDef(
                     "id".to_string(),
                     vec![("x".to_string(), Type::TInt)],
@@ -1181,8 +1191,8 @@ mod tests {
                     Type::TInt,
                 ),
             ],
-            Default::default(),
-        );
+            inputs: Default::default(),
+        };
 
         let emitter = AnfWasmEmitter::new(&prog);
         let (wasm, _) = emitter.emit();
@@ -1191,8 +1201,8 @@ mod tests {
 
     #[test]
     fn test_conditional() {
-        let prog = AnfProg(
-            vec![AnfToplevel::FunDef(
+        let prog = AnfProg {
+            toplevels: vec![AnfToplevel::FunDef(
                 "main".to_string(),
                 vec![],
                 AnfExpr::CExp(CExpr::IfThenElse(
@@ -1203,8 +1213,8 @@ mod tests {
                 )),
                 Type::TInt,
             )],
-            Default::default(),
-        );
+            inputs: Default::default(),
+        };
 
         let emitter = AnfWasmEmitter::new(&prog);
         let (wasm, _) = emitter.emit();
@@ -1216,8 +1226,8 @@ mod tests {
         // Computes: let x = 1 + 2 in
         //          let y = x + 3 in
         //          if y > 5 then y else 0
-        let prog = AnfProg(
-            vec![AnfToplevel::FunDef(
+        let prog = AnfProg {
+            toplevels: vec![AnfToplevel::FunDef(
                 "main".to_string(),
                 vec![],
                 AnfExpr::Let(
@@ -1258,8 +1268,8 @@ mod tests {
                 ),
                 Type::TInt,
             )],
-            Default::default(),
-        );
+            inputs: Default::default(),
+        };
 
         let emitter = AnfWasmEmitter::new(&prog);
         let (wasm, _) = emitter.emit();
@@ -1270,8 +1280,8 @@ mod tests {
     #[test]
     #[should_panic(expected = "Function types not supported as value types")]
     fn test_unsupported_function_type() {
-        let prog = AnfProg(
-            vec![AnfToplevel::FunDef(
+        let prog = AnfProg {
+            toplevels: vec![AnfToplevel::FunDef(
                 "main".to_string(),
                 vec![],
                 AnfExpr::AExpr(AExpr::Const(
@@ -1280,8 +1290,8 @@ mod tests {
                 )),
                 Type::TFun(Box::new(Type::TUnit), Box::new(Type::TUnit)),
             )],
-            Default::default(),
-        );
+            inputs: Default::default(),
+        };
 
         let emitter = AnfWasmEmitter::new(&prog);
         emitter.emit();
@@ -1289,8 +1299,8 @@ mod tests {
 
     #[test]
     fn test_complex_if_then_else() {
-        let prog = TypedProg(
-            vec![TypedToplevel::TFunDef(
+        let prog = TypedProg {
+            defs: vec![TypedToplevel::TFunDef(
                 "test".into(),
                 vec![("n".into(), Type::TInt)],
                 TypedExpr::TIfThenElse(
@@ -1314,8 +1324,8 @@ mod tests {
                 .b(),
                 Type::TBool,
             )],
-            Default::default(),
-        );
+            sorted_inputs: Default::default(),
+        };
 
         let prog = ANFConversion::new().run(prog);
 
@@ -1327,8 +1337,8 @@ mod tests {
 
     #[test]
     fn test_multiple_functions() {
-        let prog = AnfProg(
-            vec![
+        let prog = AnfProg {
+            toplevels: vec![
                 AnfToplevel::FunDef(
                     "add".to_string(),
                     vec![("x".to_string(), Type::TInt), ("y".to_string(), Type::TInt)],
@@ -1360,8 +1370,8 @@ mod tests {
                     Type::TInt,
                 ),
             ],
-            Default::default(),
-        );
+            inputs: Default::default(),
+        };
 
         let emitter = AnfWasmEmitter::new(&prog);
         let (wasm, _) = emitter.emit();

@@ -56,8 +56,8 @@ mod tests {
     #[test]
     fn test_run_program_passes_lambda_lifting() {
         // fun x -> (fun y -> x + y) -> lifted function + closure
-        let prog = TypedProg(
-            vec![TypedToplevel::TFunDef(
+        let prog = TypedProg {
+            defs: vec![TypedToplevel::TFunDef(
                 "main".to_owned(),
                 vec![("x".to_owned(), Type::TInt)],
                 TypedExpr::TLam(
@@ -78,13 +78,13 @@ mod tests {
                     Type::TFun(Type::TInt.b(), Type::TInt.b()).b(),
                 ),
             )],
-            vec![],
-        );
+            sorted_inputs: vec![],
+        };
 
         let result = run_program_passes(prog);
 
         assert!(
-            result.0.len() > 1,
+            result.defs.len() > 1,
             "Expected lifted function in addition to main"
         );
     }

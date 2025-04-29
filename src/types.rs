@@ -71,19 +71,25 @@ impl TypedToplevel {
 }
 
 #[derive(PartialEq, Eq, Debug, Clone)]
-pub struct TypedProg(pub Vec<TypedToplevel>, pub Vec<(Sym, Type)>);
+pub struct TypedProg {
+    pub defs: Vec<TypedToplevel>,
+    pub sorted_inputs: Vec<(Sym, Type)>,
+}
 
 impl Deref for TypedProg {
     type Target = Vec<TypedToplevel>;
 
     fn deref(&self) -> &Self::Target {
-        &self.0
+        &self.defs
     }
 }
 
 impl From<Vec<TypedToplevel>> for TypedProg {
     fn from(v: Vec<TypedToplevel>) -> Self {
-        TypedProg(v, vec![])
+        TypedProg {
+            defs: v,
+            sorted_inputs: vec![],
+        }
     }
 }
 

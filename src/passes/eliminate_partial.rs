@@ -20,7 +20,7 @@ pub struct PartialElimination {
 impl Pass for PartialElimination {
     fn run(&mut self, prog: TypedProg) -> TypedProg {
         self.toplevels = prog
-            .0
+            .defs
             .iter()
             .filter_map(|def| match def {
                 TypedToplevel::TFunDef(name, args, _, ret_ty) => {
@@ -39,7 +39,7 @@ impl Pass for PartialElimination {
             })
             .collect::<HashMap<_, _>>();
 
-        let defs = prog.0;
+        let defs = prog.defs;
         let defs = defs
             .into_iter()
             .map(|def| match def {
@@ -53,7 +53,10 @@ impl Pass for PartialElimination {
             })
             .collect_vec();
 
-        TypedProg(defs, prog.1)
+        TypedProg {
+            defs,
+            sorted_inputs: prog.sorted_inputs,
+        }
     }
 }
 

@@ -16,8 +16,8 @@ pub struct EliminateConsecApp {
 
 impl Pass for EliminateConsecApp {
     fn run(&mut self, prog: TypedProg) -> TypedProg {
-        self.toplevels = prog.0.clone();
-        let defs = prog.0;
+        self.toplevels = prog.defs.clone();
+        let defs = prog.defs;
         let defs = defs
             .into_iter()
             .map(|def| match def {
@@ -34,7 +34,10 @@ impl Pass for EliminateConsecApp {
             })
             .collect_vec();
 
-        TypedProg(defs, prog.1)
+        TypedProg {
+            defs,
+            sorted_inputs: prog.sorted_inputs,
+        }
     }
 }
 
@@ -360,7 +363,7 @@ mod tests {
 
         let result = eliminator.run(toplevel);
 
-        if let Some(TypedToplevel::TFunDef(name, _, body, _)) = result.0.iter().find(|tl| {
+        if let Some(TypedToplevel::TFunDef(name, _, body, _)) = result.defs.iter().find(|tl| {
             if let TypedToplevel::TFunDef(n, _, _, _) = tl {
                 n == "main"
             } else {

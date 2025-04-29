@@ -252,7 +252,7 @@ impl ANFConversion {
 impl Pass<TypedProg, AnfProg> for ANFConversion {
     fn run(&mut self, input: TypedProg) -> AnfProg {
         let toplevel = input
-            .0
+            .defs
             .into_iter()
             .map(|def| match def {
                 TypedToplevel::TFunDef(name, args, body, ty) => {
@@ -268,7 +268,10 @@ impl Pass<TypedProg, AnfProg> for ANFConversion {
             })
             .collect();
 
-        AnfProg(toplevel, input.1)
+        AnfProg {
+            toplevels: toplevel,
+            inputs: input.sorted_inputs,
+        }
     }
 }
 
@@ -450,8 +453,8 @@ mod tests {
         //           let tmp_0 = x + 1 in
         //           let tmp_1 = 2 + 3 in
         //           tmp_0 + tmp_1
-        let prog = TypedProg(
-            vec![TypedToplevel::TFunDef(
+        let prog = TypedProg {
+            defs: vec![TypedToplevel::TFunDef(
                 "f".to_string(),
                 vec![("x".to_string(), Type::TInt)],
                 Box::new(TypedExpr::TPrim(
@@ -472,12 +475,12 @@ mod tests {
                 )),
                 Type::TFun(Box::new(Type::TInt), Box::new(Type::TInt)),
             )],
-            Default::default(),
-        );
+            sorted_inputs: Default::default(),
+        };
 
         let mut converter = ANFConversion::new();
         let result = converter.run(prog);
 
-        assert_eq!(result.0.len(), 1);
+        assert_eq!(result.toplevels.len(), 1);
     }
 }

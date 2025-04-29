@@ -983,7 +983,10 @@ pub fn infer_all(prog: Prog) -> TypedProg {
     let (typed_toplevels, sorted_channels) =
         inference.infer_all_toplevels(toplevels, Default::default());
 
-    TypedProg(typed_toplevels, sorted_channels)
+    TypedProg {
+        defs: typed_toplevels,
+        sorted_inputs: sorted_channels,
+    }
 }
 
 #[cfg(test)]
@@ -1119,9 +1122,9 @@ mod tests {
             .b(),
         );
         let inferred = infer_all(Prog(vec![fun]));
-        assert_eq!(inferred.0.len(), 1);
+        assert_eq!(inferred.defs.len(), 1);
 
-        assert_matches!(inferred.0[0].clone(),
+        assert_matches!(inferred.defs[0].clone(),
             TypedToplevel::TFunDef(name, args, box body, ty)
             if name == "test" &&
                args == [("x".to_owned(), Type::TInt)] &&
@@ -1152,8 +1155,8 @@ mod tests {
             TypedExpr::TName("x".to_owned(), Type::TBool).b(),
         );
         let inferred = infer_all(Prog(vec![fun]));
-        assert_eq!(inferred.0.len(), 1);
-        assert_matches!(inferred.0[0].clone(),
+        assert_eq!(inferred.defs.len(), 1);
+        assert_matches!(inferred.defs[0].clone(),
             TypedToplevel::TFunDef(name, args, box body, ty)
             if name == "test" &&
                args == [("x".to_owned(), Type::TInt)] &&
@@ -1405,8 +1408,8 @@ mod tests {
             Type::TInt,
         );
         let inferred = infer_all(Prog(vec![fun]));
-        assert_eq!(inferred.0.len(), 1);
-        match inferred.0[0].clone() {
+        assert_eq!(inferred.defs.len(), 1);
+        match inferred.defs[0].clone() {
             TypedToplevel::TFunDef(name, args, box body, ty) => {
                 assert_eq!(name, "test");
                 assert_eq!(args.len(), 1);

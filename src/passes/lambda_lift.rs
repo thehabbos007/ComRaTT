@@ -19,7 +19,7 @@ pub struct LambdaLift {
 impl Pass for LambdaLift {
     fn run(&mut self, prog: TypedProg) -> TypedProg {
         self.toplevels = prog
-            .0
+            .defs
             .iter()
             .filter_map(|def| match def {
                 TypedToplevel::TFunDef(name, args, _, ret_ty) => {
@@ -38,7 +38,7 @@ impl Pass for LambdaLift {
             })
             .collect::<HashMap<_, _>>();
 
-        let defs = prog.0;
+        let defs = prog.defs;
         let (lifted_defs, lifted_lambdas): (Vec<_>, Vec<_>) = defs
             .into_iter()
             .map(|def| match def {
@@ -62,10 +62,10 @@ impl Pass for LambdaLift {
 
         let lifted_lambdas = lifted_lambdas.into_iter().flatten().collect_vec();
 
-        TypedProg(
-            lifted_defs.into_iter().chain(lifted_lambdas).collect_vec(),
-            prog.1,
-        )
+        TypedProg {
+            defs: lifted_defs.into_iter().chain(lifted_lambdas).collect_vec(),
+            sorted_inputs: prog.sorted_inputs,
+        }
     }
 }
 
