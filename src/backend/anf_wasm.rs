@@ -714,28 +714,30 @@ impl<'a> AnfWasmEmitter<'a> {
                 lam_typ.clone()
             }
             AExpr::Closure(
-                args,
+                lam_args,
                 box AnfExpr::CExp(CExpr::App(inner @ AExpr::Var(app_name, _), app_args, _)),
                 lam_typ,
             ) => {
                 // Invariants:
                 // - App fun should be a toplevel (given by func_map.get below)
                 // - Lambda has a App immediately inside body (given by match)
+                // - Args are _fully_ applied in the inner App (below assertion)
                 // - App args - lambda args = the arguments to populate the closure with (below assertion ensures non-negative)
                 //
+
                 // Invariant assertions
 
-                let Some(fun_idx) = self.func_map.get(app_name.as_str()) else {
-                    self.compile_atomic(func, inner);
-                    return lam_typ.clone();
-                };
+                let fun_idx = self
+                    .func_map
+                    .get(app_name.as_str())
+                    .expect("Closure function should be a toplevel function.");
 
                 let arity = app_args.len() as i32;
 
                 let closure_size_bytes = (1 + // Function pointer
-                    1) * WASM_WORD_SIZE + // arity argument
-                    (arity // Number of arguments in the top-level function
-                    * WASM_WORD_SIZE);
+                                    1) * WASM_WORD_SIZE + // arity argument
+                                    (arity // Number of arguments in the top-level function
+                                    * WASM_WORD_SIZE);
 
                 // malloc(closure_size) -> closure_ptr
                 // [i32]
@@ -766,12 +768,12 @@ impl<'a> AnfWasmEmitter<'a> {
                 };
                 func.instruction(&Instruction::LocalGet(dup_local_idx));
                 // All bound variables in the lambda are the variables yet to be populated.
-                func.instruction(&Instruction::I32Const(0));
+                func.instruction(&Instruction::I32Const(lam_args.len() as i32));
                 func.instruction(&Instruction::I32Store(arity_arg));
 
                 // populate all known arguments
                 // We traverse the app args in reverse, skipping over bound variables
-                for (idx, arg) in app_args.iter().rev().enumerate() {
+                for (idx, arg) in app_args.iter().rev().enumerate().skip(lam_args.len()) {
                     let arg_offset = WASM_WORD_SIZE * (2 + idx as i32);
                     let arg_arg = MemArg {
                         offset: arg_offset as u64,
@@ -791,8 +793,6 @@ impl<'a> AnfWasmEmitter<'a> {
                 // return ptr from malloc
                 func.instruction(&Instruction::LocalGet(dup_local_idx));
 
-                // At this point the stack top is a pointer to the closure heap.
-                // we're done :)
                 lam_typ.clone()
             }
             _ => panic!("Attempted to compile invalid atomic ANF expression {aexpr}"),

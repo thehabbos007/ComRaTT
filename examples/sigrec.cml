@@ -1,11 +1,42 @@
 chan keyboard : int;
 
+toggle_case : int -> int
+def toggle_case c =
+    if c >= 65
+    then if c <= 90
+         then c + 32
+         else if c >= 97
+              then if c <= 122
+                   then c - 32
+                   else c
+              else c
+    else if c >= 97
+         then if c <= 122
+              then c - 32
+              else c
+         else c
+;
+
 kb : O Sig int
 def kb =
     let kb_v = wait keyboard in
-    delay {cl(kb_v)} (advance kb_v :: kb)
+    delay {cl(kb_v)} (
+        let recv = advance kb_v in
+        toggle_case recv :: kb
+    )
 ;
 
+//map_later_sig : □ (int -> int) -> O Sig int -> O Sig int
+//def map_later_sig f s =
+//    delay {cl(s)} (
+//        let sig = advance s in
+//        let a = sig.0 in
+//        let later_a = sig.1 in
+//        let b = f a in
+//        b :: (map_later_sig f later_a)
+//    )
+//;
+
 
 print <- kb;
-print <- kb;
+print_ascii <- kb;

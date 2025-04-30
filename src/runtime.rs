@@ -6,7 +6,10 @@ use std::{
 use tokio::{sync::mpsc, task::JoinSet};
 use wasmtime::*;
 
-use crate::{constants::OUTPUT_MAP, source::Type};
+use crate::{
+    constants::{OutputKind, OUTPUT_MAP},
+    source::Type,
+};
 
 #[derive(Debug)]
 struct RuntimeState {
@@ -178,7 +181,7 @@ impl Runtime {
                 .output_to_location
                 .clone()
                 .iter()
-                .map(|(output_index, locations)| {
+                .map(|(&output_index, locations)| {
                     let filtered_locations = locations
                         .iter()
                         .map(|&location_ptr| {
@@ -186,9 +189,9 @@ impl Runtime {
                                 self.extract_clock(&mut store, &instance, location_ptr)
                                 && clock_value & channel != 0
                             {
-                                eprintln!(
-                                    "Requesting dispatch for {location_ptr} clock {clock_value}"
-                                );
+                                // eprintln!(
+                                //     "Requesting dispatch for {location_ptr} clock {clock_value}"
+                                // );
                                 let sig = location_dispatch
                                     .call(&mut store, location_ptr)
                                     .expect("Failed to location dispatch");
@@ -204,10 +207,20 @@ impl Runtime {
                                 let bytes = &clos_data[(sig as usize + 4)..(sig as usize + 8)];
                                 let new_ptr = i32::from_le_bytes(bytes.try_into().unwrap());
 
-                                eprintln!(
-                                    "Loc {} produced Sig {} :: PTR {}",
-                                    location_ptr, value, new_ptr
-                                );
+                                // eprintln!(
+                                //     "Loc {} produced Sig {} :: PTR {}",
+                                //     location_ptr, value, new_ptr
+                                // );
+                                let kind: OutputKind = output_index.into();
+                                match kind {
+                                    OutputKind::Print => {
+                                        eprintln!("{value}");
+                                    }
+                                    OutputKind::PrintAscii => {
+                                        eprintln!("{}", value as u8 as char);
+                                    }
+                                    OutputKind::Unknown(this) => panic!("what is {this}"),
+                                }
 
                                 // let clos = instance.get_memory(&mut store, "heap").unwrap();
                                 // let loc = instance.get_memory(&mut store, "location").unwrap();
@@ -221,7 +234,7 @@ impl Runtime {
                             }
                         })
                         .collect::<Vec<i32>>();
-                    (*output_index, filtered_locations)
+                    (output_index, filtered_locations)
                 })
                 .collect();
 
