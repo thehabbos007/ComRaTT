@@ -87,7 +87,6 @@ impl Runtime {
         #[derive(Debug)]
         enum ChanTyp {
             I32(i32),
-            TupI32(i32, i32),
         }
         let init_channel_map = self
             .channels
@@ -98,9 +97,6 @@ impl Runtime {
                     2i32.pow(chan_idx as u32),
                     match typ {
                         Type::TInt => ChanTyp::I32(0),
-                        Type::TProduct(typs) if typs == &[Type::TInt, Type::TInt] => {
-                            ChanTyp::TupI32(0, 0)
-                        }
                         typ => panic!("Unsupported type for channel mapping {}", typ),
                     },
                 )
@@ -125,12 +121,9 @@ impl Runtime {
         let wait_ffi = move |channel: i32| -> i32 {
             let channels = chan.lock().unwrap();
 
-            println!("Runtime requested channel {}", channel);
-            // match channels[&channel] {
-            //     ChanTyp::I32(val) => val,
-            //     ChanTyp::TupI32(_, _) => todo!("We need to malloc tuples"),
-            // }
-            3
+            match channels[&channel] {
+                ChanTyp::I32(val) => val,
+            }
         };
         let wait = Func::wrap(&mut store, wait_ffi);
 
@@ -156,7 +149,7 @@ impl Runtime {
 
         // let clos = instance.get_memory(&mut store, "heap").unwrap();
         // let loc = instance.get_memory(&mut store, "location").unwrap();
-        // println!("closure {:?}", &clos.data(&mut store)[..48]);
+        // println!("closure  {:?}", &clos.data(&mut store)[..48]);
         // println!("location {:?}", &loc.data(&mut store)[..48]);
 
         let location_dispatch = instance
@@ -212,9 +205,15 @@ impl Runtime {
                                 let new_ptr = i32::from_le_bytes(bytes.try_into().unwrap());
 
                                 eprintln!(
-                                    "Loc {} produced Sig[{}] {} :: PTR {}",
-                                    location_ptr, sig, value, new_ptr
+                                    "Loc {} produced Sig {} :: PTR {}",
+                                    location_ptr, value, new_ptr
                                 );
+
+                                // let clos = instance.get_memory(&mut store, "heap").unwrap();
+                                // let loc = instance.get_memory(&mut store, "location").unwrap();
+                                // println!("closure  {:0>2?}", &clos.data(&mut store)[..128]);
+                                // println!("---------------");
+                                // println!("location {:0>2?}", &loc.data(&mut store)[..128]);
 
                                 new_ptr
                             } else {

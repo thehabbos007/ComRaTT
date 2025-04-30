@@ -44,6 +44,7 @@
             # Wasm
             pkgs.wasmtime
             pkgs.wabt
+	    pkgs.lldb
           ];
           buildInputs = [
             toolchain

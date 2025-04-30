@@ -882,7 +882,7 @@ impl<'a> AnfWasmEmitter<'a> {
                             func.instruction(&Instruction::I32Store(populate_arg));
                         }
                     }
-                    (Scope::Local(local_idx), AExpr::Var(_, Type::TFun(..) | Type::TLater(..) | Type::TBox(box Type::TFun(..)))) => {
+                    (Scope::Local(local_idx), AExpr::Var(_, ty @ (Type::TFun(..) | Type::TLater(..) | Type::TBox(box Type::TFun(..))))) => {
                         func.instruction(&Instruction::LocalGet(local_idx));
                         // In the cases where we call dispatch with a closure pointer,
                         // we want the stack to look like the following before call_indirect
@@ -892,15 +892,24 @@ impl<'a> AnfWasmEmitter<'a> {
                         // Hence the different handling of arguments in this match case.
                         // assert!(args.len() <=1);
 
-                        if let Some(arg) = args.first()  {
+                        // if let Some(arg) = args.first()  {
+                        for arg in args {
                             self.compile_atomic(func, arg);
                         }
 
-                        func.instruction(&Instruction::I32Const(self.dispatch_offset as i32));
-                        func.instruction(&Instruction::CallIndirect {
-                            type_index: self.dispatch_offset,
-                            table_index: 0,
-                        });
+                        if let Type::TLater(..) = ty {
+                            func.instruction(&Instruction::I32Const(self.location_dispatch_offset as i32));
+                            func.instruction(&Instruction::CallIndirect {
+                                type_index: self.location_dispatch_offset,
+                                table_index: 0,
+                            });
+                        } else {
+                            func.instruction(&Instruction::I32Const(self.dispatch_offset as i32));
+                            func.instruction(&Instruction::CallIndirect {
+                                type_index: self.dispatch_offset,
+                                table_index: 0,
+                            });
+                        }
                     }
                     (Scope::TopLevel(func_idx), _) => {
                         for arg in args {
