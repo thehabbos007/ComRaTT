@@ -543,6 +543,42 @@ impl<'a> AnfWasmEmitter<'a> {
                 func.instruction(&Instruction::I32Const(-1));
                 ty.clone()
             }
+            AExpr::Const(Const::Never, ty) => {
+                // Allocate a new location
+                self.location_malloc(func);
+
+                let closure_arg = MemArg {
+                    offset: 0,
+                    align: WASM_ALIGNMENT_SIZE,
+                    memory_index: LOCATION_HEAP_INDEX,
+                };
+
+                // Store -42 as the closure pointer
+                func.instruction(&Instruction::I32Const(-42));
+                func.instruction(&Instruction::I32Store(closure_arg));
+
+                // Get ptr to next location
+                func.instruction(&Instruction::GlobalGet(1));
+                // Subtract 4 to get clock offset
+                func.instruction(&Instruction::I32Const(4));
+                func.instruction(&Instruction::I32Sub);
+
+                // Store 0 as the clock
+                func.instruction(&Instruction::I32Const(0));
+                let clock_arg = MemArg {
+                    offset: 0,
+                    align: WASM_ALIGNMENT_SIZE,
+                    memory_index: LOCATION_HEAP_INDEX,
+                };
+                func.instruction(&Instruction::I32Store(clock_arg));
+
+                // Return the base pointer for location
+                func.instruction(&Instruction::GlobalGet(1));
+                func.instruction(&Instruction::I32Const(8));
+                func.instruction(&Instruction::I32Sub);
+
+                ty.clone()
+            }
 
             AExpr::Wait(name, ty) => {
                 let channel_index = self.channel_to_index(name);

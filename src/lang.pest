@@ -48,6 +48,7 @@ advance_expr = { "advance" ~ identifier }
 wait_expr    = { "wait" ~ identifier }
 box_expr     = { "box" ~ expr }
 unbox_expr   = { "unbox" ~ expr }
+never_expr   = { "never"}
 
 primary = _{
     let_expr
@@ -64,6 +65,7 @@ primary = _{
   | identifier
   | box_expr
   | unbox_expr
+  | never_expr
 }
 
 parenthesis_or_tuple = {
@@ -110,6 +112,7 @@ keyword = _{
   | "Box"
   | "Sig"
   | "O"
+  | "never"
 }
 
 WHITESPACE = _{ " " | "\t" | "\r" | "\n" }

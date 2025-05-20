@@ -221,6 +221,19 @@ impl Inference {
                     TypeOutput::new(vec![], TypedExpr::TConst(c, Type::TLaterUnit)),
                     */
                 }
+                Const::Never => {
+                    let tvar = Type::TVar(self.fresh_ty_var());
+                    (
+                        Type::TLater(Type::TSig(tvar.clone().b()).b(), BTreeSet::new()),
+                        TypeOutput::new(
+                            vec![],
+                            TypedExpr::TConst(
+                                c,
+                                Type::TLater(Type::TSig(tvar.b()).b(), BTreeSet::new()),
+                            ),
+                        ),
+                    )
+                }
             },
             Expr::Var(name) => {
                 if let Some((ty, _)) = context.get_binding(&name) {

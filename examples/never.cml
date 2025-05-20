@@ -1,0 +1,11 @@
+chan keyboard : int;
+
+kb : O Sig int
+def kb =
+    let key = wait keyboard in
+    delay {cl(key)} (
+        advance key :: never
+    )
+;
+
+print <- kb;

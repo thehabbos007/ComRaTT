@@ -87,6 +87,7 @@ impl Display for Const {
             Const::CBool(false) => write!(f, "false"),
             Const::CUnit => write!(f, "()"),
             Const::CLaterUnit => write!(f, "{{}}"),
+            Const::Never => write!(f, "never"),
         }
     }
 }

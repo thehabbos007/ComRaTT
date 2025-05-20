@@ -267,6 +267,7 @@ fn parse_expression_atom(pair: Pair<Rule>) -> Expr {
 
             term.clone()
         }
+        Rule::never_expr => Expr::Const(Const::Never),
         Rule::expr => parse_expression(pair.into_inner()),
         _ => unreachable!("Unknown expression type: {:?}", pair.as_rule()),
     }

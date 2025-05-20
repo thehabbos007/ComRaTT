@@ -45,6 +45,7 @@ pub enum Const {
     CBool(bool),
     CUnit,
     CLaterUnit,
+    Never,
 }
 
 #[derive(PartialEq, Eq, Debug, Clone)]
