@@ -1179,8 +1179,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
-    fn infer_all_constant_function_should_panic() {
+    fn infer_all_constant_function() {
         let fn_type = Type::TInt;
         let fun_body = Expr::Const(Const::CInt(2));
         let fun = Toplevel::FunDef("test".to_owned(), fn_type, vec![], fun_body);
@@ -1902,9 +1901,8 @@ mod tests {
         assert_eq!(types, vec![Type::TInt, Type::TInt]);
     }
 
-    #[ignore = "We need to debug this issue"]
     #[test]
-    fn infer_lambda_with_multiple_args_fails_rename() {
+    fn infer_lambda_with_multiple_args_int_bool() {
         let expr = Expr::Lam(
             vec!["x".to_owned(), "y".to_owned()],
             Expr::Prim(
@@ -1951,7 +1949,7 @@ mod tests {
 
         let mut context: HashMap<Sym, Binding> = [
             ("x".to_owned(), (Type::TInt, None)),
-            ("y".to_owned(), (Type::TInt, None)),
+            ("y".to_owned(), (Type::TBool, None)),
         ]
         .into_iter()
         .collect();

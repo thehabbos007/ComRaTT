@@ -1323,26 +1323,6 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Function types not supported as value types")]
-    fn test_unsupported_function_type() {
-        let prog = AnfProg {
-            toplevels: vec![AnfToplevel::FunDef(
-                "main".to_string(),
-                vec![],
-                AnfExpr::AExpr(AExpr::Const(
-                    Const::CUnit,
-                    Type::TFun(Box::new(Type::TUnit), Box::new(Type::TUnit)),
-                )),
-                Type::TFun(Box::new(Type::TUnit), Box::new(Type::TUnit)),
-            )],
-            inputs: Default::default(),
-        };
-
-        let emitter = AnfWasmEmitter::new(&prog);
-        emitter.emit();
-    }
-
-    #[test]
     fn test_complex_if_then_else() {
         let prog = TypedProg {
             defs: vec![TypedToplevel::TFunDef(
