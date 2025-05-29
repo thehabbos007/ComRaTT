@@ -129,7 +129,7 @@ mod test {
         // Test nested let bindings
         let expr = AnfExpr::Let(
             "x".into(),
-            Type::TInt,
+            Type::TBool,
             Box::new(AnfExpr::Let(
                 "y".into(),
                 Type::TBool,
@@ -139,12 +139,12 @@ mod test {
                 ))),
                 Box::new(AnfExpr::AExpr(AExpr::Var("y".into(), Type::TBool))),
             )),
-            Box::new(AnfExpr::AExpr(AExpr::Var("x".into(), Type::TInt))),
+            Box::new(AnfExpr::AExpr(AExpr::Var("x".into(), Type::TBool))),
         );
 
         expr.traverse_locals(&mut locals);
         assert_eq!(locals.len(), 2);
-        assert!(locals.contains(&("x", Type::TInt)));
+        assert!(locals.contains(&("x", Type::TBool)));
         assert!(locals.contains(&("y", Type::TBool)));
 
         locals.clear();

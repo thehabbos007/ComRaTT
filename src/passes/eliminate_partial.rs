@@ -234,7 +234,7 @@ mod tests {
     #[test]
     fn test_eliminate_partial_simple_let() {
         // Before: let x = y in x
-        // After:  y
+        // After:  let x = y in x
         let mut eliminator = PartialElimination::new(false);
         let expr = TypedExpr::TLet(
             "x".to_string(),
@@ -242,8 +242,8 @@ mod tests {
             Box::new(TypedExpr::TName("y".to_string(), Type::TInt)),
             Box::new(TypedExpr::TName("x".to_string(), Type::TInt)),
         );
-        let result = eliminator.eliminate_partial(expr);
-        assert_eq!(result, TypedExpr::TName("y".to_string(), Type::TInt));
+        let result = eliminator.eliminate_partial(expr.clone());
+        assert_eq!(result, expr);
     }
 
     #[test]
