@@ -6,10 +6,7 @@ use std::{
 use tokio::{sync::mpsc, task::JoinSet};
 use wasmtime::*;
 
-use crate::{
-    constants::{OutputKind, OUTPUT_MAP},
-    source::Type,
-};
+use crate::{constants::OutputKind, source::Type};
 
 #[derive(Debug)]
 struct RuntimeState {

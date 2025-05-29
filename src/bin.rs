@@ -9,7 +9,6 @@ use std::ffi::OsString;
 use std::fs::File;
 use std::io::{self, Read as _, Write};
 use std::process::exit;
-use std::time::Duration;
 
 struct Args {
     input: Option<OsString>,

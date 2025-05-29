@@ -1,11 +1,9 @@
-use std::assert_matches::assert_matches;
-
 use itertools::Itertools;
 
 use crate::anf::{AExpr, AnfExpr, AnfProg, AnfToplevel, CExpr};
 use crate::passes::Pass;
 use crate::source::Type;
-use crate::types::{final_type, unpack_type, TypedExpr, TypedProg, TypedToplevel};
+use crate::types::{TypedExpr, TypedProg, TypedToplevel};
 
 pub struct ANFConversion {
     counter: usize,
@@ -26,17 +24,6 @@ impl ANFConversion {
         let name = format!("tmp_{}", self.counter);
         self.counter += 1;
         name
-    }
-
-    fn generate_closure_type(&mut self, eta_args: &[Type]) -> Vec<Type> {
-        match eta_args {
-            [] => vec![],
-            [typ, rest @ ..] => {
-                let mut lambda = self.generate_closure_type(rest);
-                lambda.insert(0, typ.clone());
-                lambda
-            }
-        }
     }
 
     fn normalize(&mut self, expr: TypedExpr) -> AnfExpr {

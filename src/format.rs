@@ -229,7 +229,7 @@ impl Display for TypedExpr {
         match self {
             TypedExpr::TConst(c, _) => write!(f, "{}", c),
             TypedExpr::TName(x, _) => write!(f, "{}", x),
-            TypedExpr::TLam(args, body, ty, clock) => {
+            TypedExpr::TLam(args, body, _ty, clock) => {
                 let args_str = args
                     .iter()
                     .map(|(name, _)| name.clone())
@@ -242,7 +242,7 @@ impl Display for TypedExpr {
                 // )
                 write!(f, "(fun{{{:?}}} [{}] -> {})", clock, args_str, body)
             }
-            TypedExpr::TApp(e, args, ty) => {
+            TypedExpr::TApp(e, args, _ty) => {
                 let args_str = args
                     .iter()
                     .map(|a| a.to_string())

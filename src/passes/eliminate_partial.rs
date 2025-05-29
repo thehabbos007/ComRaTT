@@ -95,15 +95,6 @@ impl PartialElimination {
         }
     }
 
-    fn handle_type_is_later_closure(&self, typ: &Type) -> bool {
-        self.handle_delayed_closures || !typ.contains_later_unit()
-    }
-
-    fn handle_later_closure(&self, name: &str, typ: &Type) -> bool {
-        self.handle_type_is_later_closure(typ)
-            && !self.toplevels.contains_key(&(name.to_owned(), typ.clone()))
-    }
-
     pub fn eliminate_partial(&mut self, texpr: TypedExpr) -> TypedExpr {
         match texpr {
             TypedExpr::TName(name, ty @ Type::TFun(..))

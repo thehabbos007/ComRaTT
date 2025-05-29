@@ -751,7 +751,7 @@ impl<'a> AnfWasmEmitter<'a> {
             }
             AExpr::Closure(
                 lam_args,
-                box AnfExpr::CExp(CExpr::App(inner @ AExpr::Var(app_name, _), app_args, _)),
+                box AnfExpr::CExp(CExpr::App(AExpr::Var(app_name, _), app_args, _)),
                 lam_typ,
             ) => {
                 // Invariants:
