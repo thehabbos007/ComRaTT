@@ -555,10 +555,9 @@ impl Inference {
                 Binop::Eq | Binop::Neq => {
                     match (self.infer(context.clone(), *left), self.infer(context, *right)) {
                         ((left_ty, mut left_output), (right_ty, mut right_output)) => {
-                            let Ok(_) = self.unify_ty_ty(&left_ty, &left_ty) else {
+                            let Ok(_) = self.unify_ty_ty(&left_ty, &right_ty) else {
                                 panic!("Failed to unify operands of primitive operations")
                             };
-                            // TODO: we might need to constrain this further.
 
                             let mut constraints = Vec::new();
                             constraints.append(&mut left_output.constraints);
