@@ -307,7 +307,10 @@ mod tests {
             construct_type(&["Int", "Int", "Int"]),
         );
 
-        let prog = TypedProg(vec![fun_def], vec![]);
+        let prog = TypedProg {
+            defs: vec![fun_def],
+            sorted_inputs: vec![],
+        };
         let result = pass.run(prog);
 
         // Check the result

@@ -339,8 +339,8 @@ mod tests {
         let expr = TypedExpr::TApp(Box::new(bloo_x_x_x), vec![five], Type::TInt);
 
         // Create the top-level program with the bloo function definition
-        let toplevel = TypedProg(
-            vec![
+        let toplevel = TypedProg {
+            defs: vec![
                 TypedToplevel::TFunDef(
                     "bloo".to_owned(),
                     vec![
@@ -358,8 +358,8 @@ mod tests {
                     Type::TInt,
                 ),
             ],
-            Default::default(),
-        );
+            sorted_inputs: Default::default(),
+        };
 
         let result = eliminator.run(toplevel);
 
