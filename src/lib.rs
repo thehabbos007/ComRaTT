@@ -5,6 +5,7 @@
 pub mod anf;
 pub mod backend;
 pub mod constants;
+pub mod execute;
 pub mod format;
 pub mod infer;
 pub mod parse;

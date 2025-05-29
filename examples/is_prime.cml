@@ -13,7 +13,7 @@ def check_prime_helper n divisor =
 
 is_prime : int -> bool
 def is_prime n =
-  if (n >= 2)
+  if (n <= 1)
   then false
   else (check_prime_helper n 2);
 

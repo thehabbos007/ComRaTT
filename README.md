@@ -1,48 +1,85 @@
-# Dependencies
-## With Nix
-If you use nix, `nix develop` or nix-direnv is enough to install all dependencies.
+# ComRaTT - Compiled Async RaTT
 
-## Docker
+ComRaTT is a functional reactive programming language that compiles to WebAssembly. This implementation is part of a thesis project demonstrating the feasibility of compiling Async RaTT to WASM with support for modal types and reactive semantics.
 
-The provided Dockerfile creates an image with everything in place.
+## Dependencies
 
-Build the image with
+### With Nix (easy)
+If you use nix, `nix develop` or nix-direnv (`direnv allow`) is enough to install all dependencies.
 
-`docker build -t comratt .`
+### Manual Installation
+All you need is rust through rustup (https://www.rust-lang.org/tools/install). The rust toolchain version is set through the `rust-toolchain.toml` file automatically.
 
-## Bare metal
-Otherwise you need
-- OCaml (tested with version 5.1.1~rc1)
-- opam
-- wasmtime (https://github.com/bytecodealliance/wasmtime) (tested with version 26.0.0)
+## Building the Compiler
 
-Install the projects dependencies via
-```opam install . --deps-only```
-
-# Running
-
-We have a directory of example programs. These can be run with the help of wasmtime and small bash script
-
-```terminal
-$ chmod +x run_ratt.sh
-$ ./run_ratt.sh examples/is_prime.cml 1 
-$ ./run_ratt.sh examples/collatz.cml 3 
-$ ./run_ratt.sh examples/factorial.cml 3 
-$ ./run_ratt.sh examples/fib.cml 7 
-# Returns number of steps to find x in 0..100
-$ ./run_ratt.sh examples/bin_search.cml 51
-$ ./run_ratt.sh examples/frp.cml
+Build the ComRaTT compiler with:
+```bash
+cargo build
 ```
 
-This should compile the ComRaTT snippets to WAT and pipe the WAT code into wasmtime.
-Any arguments passed into the shell script is passed directly as parameters to the exported `main` functions
-of the ComRaTT programs.
+## Running Example Programs
 
-## With Docker
-Use the following command to execute examples in the container directly from your host shell.
+We provide several example programs that demonstrate different features of ComRaTT.
 
-`docker run --rm comratt /bin/bash -c "./run_ratt.sh 1 < examples/is_prime.cml"` 
+```bash
+# Factorial calculation (argument: n)
+cargo run -- examples/factorial.cml 5
 
-Replace examples and arguments according to the instructions above.
+# Fibonacci sequence (argument: n)
+cargo run -- examples/fib.cml 10
 
-It is also possible to use `docker run -it comratt` to enter the containers shell and interact with it manually.
+# Prime number check (argument: n)
+cargo run -- examples/is_prime.cml 17
+
+# Collatz conjecture (argument: n)
+cargo run -- examples/collatz.cml 7
+
+# Binary search (argument: n, number to search for in range 0..100)
+cargo run -- examples/bin_search.cml 42
+```
+
+### Reactive Programming Examples
+
+To enable the runtime, use the `--run` CLI flag
+
+```bash
+# Signal recursion example (interactive keyboard input)
+cargo run -- --run examples/sigrec.cml
+
+# Keyboard input once, and then never activate again
+cargo run -- --run examples/42never.cml
+```
+
+## Example Program Structure
+
+A typical ComRaTT program looks like:
+```comratt
+// Function definition
+factorial : int -> int
+def factorial n =
+  if n <= 1
+  then 1
+  else n * (factorial (n - 1));
+
+// Main function (entry point)
+main : int -> int
+def main x = factorial x;
+```
+
+For reactive programs:
+```comratt
+// Channel declaration
+chan keyboard : int;
+
+// Signal definition
+signal : O Sig int
+def signal =
+  let x = wait keyboard in
+  delay {cl(x)} (
+    let val = advance x in
+    val :: signal
+  );
+
+// Output connection
+print <- signal;
+```

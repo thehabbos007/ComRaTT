@@ -1,6 +1,0 @@
-chan keyboard : int;
-
-main : int -> {} -> int
-def main x =
-    let del = wait keyboard in
-    delay {cl(wait keyboard)} (advance del);

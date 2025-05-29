@@ -1,4 +1,5 @@
 use comratt::backend::compile_anf_to_wasm;
+use comratt::execute;
 use comratt::infer::infer_all;
 use comratt::passes::run_program_passes_anf;
 use comratt::runtime::Runtime;
@@ -12,7 +13,8 @@ use std::process::exit;
 
 struct Args {
     input: Option<OsString>,
-    run: bool,
+    runtime: bool,
+    pipe: bool,
 }
 
 impl Args {
@@ -36,20 +38,24 @@ impl Args {
 fn main() -> Result<(), lexopt::Error> {
     let mut args = Args {
         input: None,
-        run: false,
+        runtime: false,
+        pipe: false,
     };
 
     let mut parser = lexopt::Parser::from_env();
-
+    let mut runtime_args = vec![];
     while let Some(arg) = parser.next()? {
         match arg {
-            Arg::Value(path) => args.input = Some(path),
-            Arg::Long("run") => args.run = true,
-            Arg::Long(what) => {
-                eprintln!("The argument '--{}' isn't used.", what);
+            Arg::Value(path) if args.input.is_none() => args.input = Some(path),
+            Arg::Long("run") => args.runtime = true,
+            Arg::Long("pipe") => args.pipe = true,
+            Arg::Value(str) => {
+                runtime_args.push(str.into_string().unwrap());
+            }
+            arg => {
+                eprintln!("Unknown argument {:?}", arg);
                 return Ok(());
             }
-            _ => return Ok(()),
         }
     }
 
@@ -69,14 +75,14 @@ fn main() -> Result<(), lexopt::Error> {
     let output_channels;
 
     let channels = prog.sorted_inputs.clone();
-    if let Ok((bytes, names)) = compile_and_write_prog(prog) {
+    if let Ok((bytes, names)) = compile_and_write_prog(prog, args.pipe) {
         wasm_bytes = bytes;
         output_channels = names;
     } else {
         panic!("Failed to compile and write oopsies");
     }
 
-    if args.run {
+    if args.runtime {
         tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()
@@ -90,17 +96,32 @@ fn main() -> Result<(), lexopt::Error> {
                 let machine = Runtime::init(&wasm_bytes, channels, output_channels).await;
                 machine.run().await;
             })
+    } else {
+        // If the runtime hasn't been requested, we will try to execute the WASM "main" function
+        // with the given positional args from the CLI
+
+        let runtime_args = runtime_args
+            .into_iter()
+            .map(|v| v.parse::<i32>())
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+
+        execute::execute_wasm_main(wasm_bytes.as_slice(), runtime_args).unwrap();
     }
 
     Ok(())
 }
 
-fn compile_and_write_prog(prog: TypedProg) -> Result<(Vec<u8>, Vec<String>), lexopt::Error> {
+fn compile_and_write_prog(
+    prog: TypedProg,
+    pipe: bool,
+) -> Result<(Vec<u8>, Vec<String>), lexopt::Error> {
     let prog = run_program_passes_anf(prog);
     let (res, names) = compile_anf_to_wasm(&prog);
-    let mut stdout = std::io::stdout().lock();
-    stdout.write_all(&res).unwrap();
-    eprintln!();
+    if pipe {
+        let mut stdout = std::io::stdout().lock();
+        stdout.write_all(&res).unwrap();
+    }
 
     Ok((res, names))
 }
