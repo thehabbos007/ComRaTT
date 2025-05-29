@@ -54,8 +54,8 @@ const PREGEN_MODULE: &str = r#"
     (type $set_output_to_location (func (param i32 i32) (result i32)))
     (import "ffi" "set_output_to_location" (func $set_output_to_location (type $set_output_to_location)))
 
-    (global $next_ptr (mut i32) (i32.const 0))
-    (global $next_location (mut i32) (i32.const 0))
+    (global $next_ptr (export "next_ptr") (mut i32) (i32.const 0))
+    (global $next_location (export "next_location") (mut i32) (i32.const 0))
 
     (type $malloc (func (param i32) (result i32)))
     (func $malloc (export "malloc") (param $size i32) (result i32)
