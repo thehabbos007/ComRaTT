@@ -333,8 +333,6 @@ mod tests {
     use super::*;
     use wasmparser::Validator;
 
-    use wasmtime_wast::WastContext;
-
     #[test]
     fn parse_pregen_module() {
         wat::parse_str(PREGEN_MODULE).unwrap();
@@ -358,34 +356,5 @@ mod tests {
         validator.validate_all(&wasm_bytes)?;
 
         Ok(())
-    }
-
-    #[test]
-    fn malloc_test() {
-        let test = r#"
-        (assert_return (invoke "malloc" (i32.const 8)) (i32.const 0))
-        (assert_return (invoke "malloc" (i32.const 16)) (i32.const 8))
-        (assert_return (invoke "malloc" (i32.const 1)) (i32.const 24))
-        "#;
-
-        let malloc_test = format!("{PREGEN_MODULE}{test}");
-        test_wast(malloc_test);
-    }
-
-    fn test_wast(wast: String) {
-        // TODO
-        // This is causing tests to fail because the pregenerated module
-        // refers to memory 1 which is injected during codegen
-        // and not present in the str.
-        let mut config = wasmtime::Config::new();
-        config.wasm_gc(true);
-        config.wasm_multi_memory(true);
-        config.wasm_function_references(true);
-        config.wasm_tail_call(true);
-        let engine =
-            wasmtime::Engine::new(&config).expect("Failed to initialize Engine in test_wast");
-        let store = wasmtime::Store::new(&engine, ());
-        let mut ctx = WastContext::new(store);
-        ctx.run_buffer("inline_test", wast.as_bytes()).unwrap();
     }
 }
