@@ -150,10 +150,66 @@ impl Runtime {
 
         init.call(&mut store, ()).expect("Failed to call init");
 
-        // let clos = instance.get_memory(&mut store, "heap").unwrap();
-        // let loc = instance.get_memory(&mut store, "location").unwrap();
-        // println!("closure  {:?}", &clos.data(&mut store)[..48]);
-        // println!("location {:?}", &loc.data(&mut store)[..48]);
+        let shared = instance.get_memory(&mut store, "heap").unwrap();
+        let loc = instance.get_memory(&mut store, "location").unwrap();
+        let shared_heap_end = instance
+            .get_global(&mut store, "next_ptr")
+            .expect("Failed to get shared heap end")
+            .get(&mut store)
+            .i32()
+            .unwrap() as usize;
+
+        let location_heap_end = instance
+            .get_global(&mut store, "next_location")
+            .expect("Failed to get location heap end")
+            .get(&mut store)
+            .i32()
+            .unwrap() as usize;
+        //println!("Shared heap  {:?}", &clos.data(&mut store)[..32]);
+        //println!("Location heap {:?}", &loc.data(&mut store)[..32]);
+
+        let shared_contents = &shared.data(&mut store)[..shared_heap_end];
+        println!(" ");
+        println!("Shared heap contents after init");
+        let length = shared_contents.len() / 4;
+        let mut indices = String::new();
+        let mut values = String::new();
+        for (idx, chunk) in shared_contents.chunks(4).enumerate() {
+            let byte = i32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+            if idx == length - 1 {
+                values.push_str(&format!(" {:02} ", byte));
+            } else {
+                values.push_str(&format!(" {:02} |", byte));
+            }
+            let idx = idx * 4;
+            let idx = format!(" {:02}  ", idx);
+            indices.push_str(&idx);
+        }
+        println!("    Index:          {}", indices);
+        println!("    Heap contents: [{}]", values);
+
+        let location_contents = &loc.data(&mut store)[..location_heap_end];
+        println!(" ");
+        println!("Location heap contents after init");
+        let mut indices = String::new();
+        let mut values = String::new();
+        for (idx, chunk) in location_contents.chunks(8).enumerate() {
+            let ptr = i32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+            let clock = i32::from_le_bytes([chunk[4], chunk[5], chunk[6], chunk[7]]);
+
+            let adjusted = idx * 8;
+            if idx == 0 {
+                let idx = format!("      {:02}", adjusted);
+                indices.push_str(&idx);
+            } else {
+                let idx = format!("           {:02}", adjusted);
+                indices.push_str(&idx);
+            }
+
+            values.push_str(&format!(" [ {:02} | {:02} ] ", ptr, clock));
+        }
+        println!("    Index:         {}", indices);
+        println!("    Heap contents: {}", values);
 
         let location_dispatch = instance
             .get_typed_func::<i32, i32>(&mut store, "location_dispatch")
@@ -196,6 +252,24 @@ impl Runtime {
                                     .call(&mut store, location_ptr)
                                     .expect("Failed to location dispatch");
 
+                                let shared_heap_end = instance
+                                    .get_global(&mut store, "next_ptr")
+                                    .expect("Failed to get shared heap end")
+                                    .get(&mut store)
+                                    .i32()
+                                    .unwrap()
+                                    as usize;
+
+                                let location_heap_end = instance
+                                    .get_global(&mut store, "next_location")
+                                    .expect("Failed to get location heap end")
+                                    .get(&mut store)
+                                    .i32()
+                                    .unwrap()
+                                    as usize;
+                                //println!("Shared heap end: {}", shared_heap_end);
+                                //println!("Location heap end: {}", location_heap_end);
+
                                 let clos_data = instance
                                     .get_memory(&mut store, "heap")
                                     .unwrap()
@@ -222,8 +296,55 @@ impl Runtime {
                                     OutputKind::Unknown(this) => panic!("what is {this}"),
                                 }
 
-                                // let clos = instance.get_memory(&mut store, "heap").unwrap();
-                                // let loc = instance.get_memory(&mut store, "location").unwrap();
+                                let shared = instance.get_memory(&mut store, "heap").unwrap();
+                                let shared_contents = &shared.data(&mut store)[..shared_heap_end];
+                                println!(" ");
+                                println!("Shared heap contents after tick");
+                                let length = shared_contents.len() / 4;
+                                let mut indices = String::new();
+                                let mut values = String::new();
+                                for (idx, chunk) in shared_contents.chunks(4).enumerate() {
+                                    let byte = i32::from_le_bytes([
+                                        chunk[0], chunk[1], chunk[2], chunk[3],
+                                    ]);
+                                    if idx == length - 1 {
+                                        values.push_str(&format!(" {:02} ", byte));
+                                    } else {
+                                        values.push_str(&format!(" {:02} |", byte));
+                                    }
+                                    let idx = idx * 4;
+                                    let idx = format!(" {:02}  ", idx);
+                                    indices.push_str(&idx);
+                                }
+                                println!("    Index:          {}", indices);
+                                println!("    Heap contents: [{}]", values);
+
+                                let loc = instance.get_memory(&mut store, "location").unwrap();
+                                let location_contents = &loc.data(&mut store)[..location_heap_end];
+                                println!(" ");
+                                println!("Location heap contents after tick");
+                                let mut indices = String::new();
+                                let mut values = String::new();
+                                for (idx, chunk) in location_contents.chunks(8).enumerate() {
+                                    let ptr = i32::from_le_bytes([
+                                        chunk[0], chunk[1], chunk[2], chunk[3],
+                                    ]);
+                                    let clock = i32::from_le_bytes([
+                                        chunk[4], chunk[5], chunk[6], chunk[7],
+                                    ]);
+
+                                    let adjusted = idx * 8;
+                                    if idx == 0 {
+                                        let idx = format!("      {:02}", adjusted);
+                                        indices.push_str(&idx);
+                                    } else {
+                                        let idx = format!("           {:02}", adjusted);
+                                        indices.push_str(&idx);
+                                    }
+                                    values.push_str(&format!(" [ {:02} | {:02} ] ", ptr, clock));
+                                }
+                                println!("    Index:         {}", indices);
+                                println!("    Heap contents: {}", values);
                                 // println!("closure  {:0>2?}", &clos.data(&mut store)[..128]);
                                 // println!("---------------");
                                 // println!("location {:0>2?}", &loc.data(&mut store)[..128]);
