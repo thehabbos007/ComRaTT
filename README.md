@@ -50,6 +50,14 @@ cargo run -- --run examples/sigrec.cml
 cargo run -- --run examples/42never.cml
 ```
 
+## Running tests
+
+We are using normal rust tests through cargo's test harness. All tests can be executed through.
+
+```bash
+cargo test
+```
+
 ## Example Program Structure
 
 A typical ComRaTT program looks like:
