@@ -1,0 +1,136 @@
+use crate::bytecode::{Function, Op};
+
+#[derive(Debug, Clone)]
+pub enum Value {
+    I32(i32),
+    Bool(bool),
+    Unit,
+}
+
+impl Value {
+    pub fn as_i32(&self) -> i32 {
+        match self {
+            Value::I32(n) => *n,
+            Value::Bool(b) => *b as i32,
+            Value::Unit => 0,
+            _ => panic!("expected i32, got {self:?}"),
+        }
+    }
+
+    pub fn clock(&self) -> u32 {
+        match self {
+            _ => 0x00000000,
+        }
+    }
+
+    fn as_bool(&self) -> bool {
+        match self {
+            Value::Bool(b) => *b,
+            Value::I32(n) => *n != 0,
+            _ => panic!("expected bool, got {self:?}"),
+        }
+    }
+}
+
+pub struct VM {
+    pub bytecode_fns: Vec<Function>,
+    stack: Vec<Value>,
+}
+
+fn bin_i32(stack: &mut Vec<Value>, f: impl FnOnce(i32, i32) -> Value) {
+    let r = stack.pop().unwrap().as_i32();
+    let l = stack.pop().unwrap().as_i32();
+    stack.push(f(l, r));
+}
+
+impl VM {
+    pub fn new(bytecode_fns: Vec<Function>) -> Self {
+        VM {
+            bytecode_fns,
+            stack: Vec::with_capacity(64),
+        }
+    }
+
+    pub fn execute(&mut self, fn_idx: u32, args: Vec<Value>) -> Value {
+        let local_count = self.bytecode_fns[fn_idx as usize].local_count as usize;
+        let mut locals = args;
+        locals.resize(local_count, Value::Unit);
+        let stack_base = self.stack.len();
+        let mut instruction_ptr: usize = 0;
+
+        loop {
+            let op = self.bytecode_fns[fn_idx as usize].ops[instruction_ptr];
+            instruction_ptr += 1;
+
+            match op {
+                Op::ConstI32(n) => self.stack.push(Value::I32(n)),
+                Op::ConstBool(b) => self.stack.push(Value::Bool(b)),
+                Op::ConstUnit => self.stack.push(Value::Unit),
+
+                Op::Add => bin_i32(&mut self.stack, |a, b| Value::I32(a.wrapping_add(b))),
+                Op::Sub => bin_i32(&mut self.stack, |a, b| Value::I32(a.wrapping_sub(b))),
+                Op::Mul => bin_i32(&mut self.stack, |a, b| Value::I32(a.wrapping_mul(b))),
+                Op::Div => bin_i32(&mut self.stack, |a, b| {
+                    if b == 0 {
+                        panic!("division by zero")
+                    }
+                    Value::I32(a.wrapping_div(b))
+                }),
+                Op::Eq => bin_i32(&mut self.stack, |a, b| Value::Bool(a == b)),
+                Op::Neq => bin_i32(&mut self.stack, |a, b| Value::Bool(a != b)),
+                Op::Lt => bin_i32(&mut self.stack, |a, b| Value::Bool(a < b)),
+                Op::Lte => bin_i32(&mut self.stack, |a, b| Value::Bool(a <= b)),
+                Op::Gt => bin_i32(&mut self.stack, |a, b| Value::Bool(a > b)),
+                Op::Gte => bin_i32(&mut self.stack, |a, b| Value::Bool(a >= b)),
+
+                Op::Load(idx) => self.stack.push(locals[idx as usize].clone()),
+
+                Op::Store(idx) => {
+                    let val = self.stack.pop().unwrap();
+                    let idx = idx as usize;
+                    if idx >= locals.len() {
+                        locals.resize(idx + 1, Value::Unit);
+                    }
+                    locals[idx] = val;
+                }
+
+                Op::JumpIfFalse(target) => {
+                    if !self.stack.pop().unwrap().as_bool() {
+                        instruction_ptr = target as usize;
+                    }
+                }
+                Op::Jump(target) => {
+                    instruction_ptr = target as usize;
+                }
+
+                Op::GetClock => {
+                    let val = self.stack.pop().unwrap();
+                    self.stack.push(Value::I32(val.clock() as i32));
+                }
+
+                Op::ConstClock(mask) => {
+                    self.stack.push(Value::I32(mask as i32));
+                }
+
+                Op::BitOr => {
+                    let r = self.stack.pop().unwrap().as_i32();
+                    let l = self.stack.pop().unwrap().as_i32();
+                    self.stack.push(Value::I32(l | r));
+                }
+
+                Op::CallBytecode(idx, argc) => {
+                    let start = self.stack.len() - argc as usize;
+                    let args: Vec<Value> = self.stack.drain(start..).collect();
+                    let result = self.execute(idx, args);
+                    self.stack.push(result);
+                }
+
+                Op::Return => {
+                    let ret = self.stack.pop().unwrap_or(Value::Unit);
+                    self.stack.truncate(stack_base);
+                    return ret;
+                }
+            }
+        }
+    }
+}

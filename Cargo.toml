@@ -7,7 +7,13 @@ edition = "2021"
 name = "comratt"
 path = "src/bin.rs"
 
+[[bin]]
+name = "vm_bin"
+path = "src/vm_bin.rs"
+
+
 [dependencies]
+comratt-vm = { path = "crates/comratt-vm" }
 anyhow = "1"
 annotate-snippets = "0.11"
 lexopt = "0.3"
