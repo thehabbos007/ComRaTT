@@ -262,7 +262,7 @@ fn parse_expression_atom(pair: Pair<Rule>) -> Expr {
             let (term, terms) = parsed.split_first().expect("At least one term");
 
             if !terms.is_empty() {
-                return Expr::App(term.clone().b(), terms.iter().cloned().collect());
+                return Expr::App(term.clone().b(), terms.to_vec());
             }
 
             term.clone()

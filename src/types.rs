@@ -195,6 +195,51 @@ pub fn traverse_locals<'a>(expr: &'a TypedExpr, locals: &mut Vec<(&'a str, Type)
     }
 }
 
+pub fn find_free_var_names(expr: &TypedExpr, bound: &HashSet<String>) -> HashSet<String> {
+    match expr {
+        TypedExpr::TConst(..) => HashSet::new(),
+        TypedExpr::TName(name, _) if bound.contains(name) => HashSet::new(),
+        TypedExpr::TName(name, _) => [name.clone()].into(),
+        TypedExpr::TPrim(_, l, r, _) => {
+            let mut s = find_free_var_names(l, bound);
+            s.extend(find_free_var_names(r, bound));
+            s
+        }
+        TypedExpr::TLet(name, _, rhs, body) => {
+            let mut s = find_free_var_names(rhs, bound);
+            let mut b2 = bound.clone();
+            b2.insert(name.clone());
+            s.extend(find_free_var_names(body, &b2));
+            s
+        }
+        TypedExpr::TLam(params, body, _, _) => {
+            let mut b2 = bound.clone();
+            for (p, _) in params {
+                b2.insert(p.clone());
+            }
+            find_free_var_names(body, &b2)
+        }
+        TypedExpr::TApp(f, args, _) => {
+            let mut s = find_free_var_names(f, bound);
+            for a in args {
+                s.extend(find_free_var_names(a, bound));
+            }
+            s
+        }
+        TypedExpr::TIfThenElse(c, t, e, _) => {
+            let mut s = find_free_var_names(c, bound);
+            s.extend(find_free_var_names(t, bound));
+            s.extend(find_free_var_names(e, bound));
+            s
+        }
+        TypedExpr::TTuple(es, _) => es
+            .iter()
+            .flat_map(|e| find_free_var_names(e, bound))
+            .collect(),
+        TypedExpr::TAccess(e, _, _) => find_free_var_names(e, bound),
+        TypedExpr::TWait(..) => HashSet::new(),
+    }
+}
 pub fn find_free_vars(
     expr: &TypedExpr,
     bound: &HashSet<(String, Type)>,
@@ -341,3 +386,66 @@ pub enum BindingKind {
 }
 
 pub type BindingContext = HashMap<(String, Type), BindingKind>;
+
+pub fn collect_local_names(expr: &TypedExpr) -> Vec<String> {
+    let mut seen = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    collect_local_names_inner(expr, &mut seen, &mut out);
+    out
+}
+
+fn collect_local_names_inner(
+    expr: &TypedExpr,
+    seen: &mut std::collections::HashSet<String>,
+    out: &mut Vec<String>,
+) {
+    match expr {
+        TypedExpr::TLet(name, _, rhs, body) => {
+            if seen.insert(name.clone()) {
+                out.push(name.clone());
+            }
+            collect_local_names_inner(rhs, seen, out);
+            collect_local_names_inner(body, seen, out);
+        }
+        TypedExpr::TIfThenElse(c, t, e, _) => {
+            collect_local_names_inner(c, seen, out);
+            collect_local_names_inner(t, seen, out);
+            collect_local_names_inner(e, seen, out);
+        }
+        TypedExpr::TPrim(_, l, r, _) => {
+            collect_local_names_inner(l, seen, out);
+            collect_local_names_inner(r, seen, out);
+        }
+        TypedExpr::TApp(f, args, _) => {
+            collect_local_names_inner(f, seen, out);
+            for a in args {
+                collect_local_names_inner(a, seen, out);
+            }
+        }
+        TypedExpr::TTuple(elems, _) => {
+            for e in elems {
+                collect_local_names_inner(e, seen, out);
+            }
+        }
+        TypedExpr::TAccess(e, _, _) => {
+            collect_local_names_inner(e, seen, out);
+        }
+        _ => {}
+    }
+}
+
+pub fn max_tuple_depth(expr: &TypedExpr) -> u32 {
+    match expr {
+        TypedExpr::TTuple(elems, _) => 1 + elems.iter().map(max_tuple_depth).max().unwrap_or(0),
+        TypedExpr::TLet(_, _, rhs, body) => max_tuple_depth(rhs).max(max_tuple_depth(body)),
+        TypedExpr::TPrim(_, l, r, _) => max_tuple_depth(l).max(max_tuple_depth(r)),
+        TypedExpr::TIfThenElse(c, t, e, _) => max_tuple_depth(c)
+            .max(max_tuple_depth(t))
+            .max(max_tuple_depth(e)),
+        TypedExpr::TApp(f, args, _) => args
+            .iter()
+            .fold(max_tuple_depth(f), |acc, a| acc.max(max_tuple_depth(a))),
+        TypedExpr::TAccess(e, _, _) => max_tuple_depth(e),
+        _ => 0,
+    }
+}

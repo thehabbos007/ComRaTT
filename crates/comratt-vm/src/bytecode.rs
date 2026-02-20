@@ -21,6 +21,8 @@ pub enum Op {
     // CallWasm too maybe? this will allow jumping down to 'native' code,
     GetClock,
     ConstClock(u32),
+    MakeTuple(u8),
+    AccessTuple(u8),
     BitOr,
     Return,
 }

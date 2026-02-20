@@ -7,6 +7,7 @@ pub mod backend;
 pub mod constants;
 pub mod execute;
 pub mod format;
+pub mod hybrid;
 pub mod infer;
 pub mod parse;
 pub mod passes;

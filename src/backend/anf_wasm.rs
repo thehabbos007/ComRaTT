@@ -763,13 +763,12 @@ impl<'a> AnfWasmEmitter<'a> {
 
                 // Invariant assertions
 
-                let fun_idx = self.func_map.get(app_name.as_str()).expect(
-                    format!(
+                let fun_idx = self.func_map.get(app_name.as_str()).unwrap_or_else(|| {
+                    panic!(
                         "Closure function should be a toplevel function. {}",
                         app_name
                     )
-                    .as_str(),
-                );
+                });
 
                 let arity = app_args.len() as i32;
 

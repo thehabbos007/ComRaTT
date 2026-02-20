@@ -7,18 +7,21 @@ use super::Pass;
 #[derive(Debug, Default)]
 pub struct EliminateConsecLam;
 
+impl EliminateConsecLam {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
 impl Pass for EliminateConsecLam {
     fn run(&mut self, prog: TypedProg) -> TypedProg {
         let defs = prog.defs;
         let defs = defs
             .into_iter()
             .map(|def| match def {
-                TypedToplevel::TFunDef(name, args, body, typ) => TypedToplevel::TFunDef(
-                    name,
-                    args,
-                    body.map_box(|expr| self.fuse_lams(expr)),
-                    typ,
-                ),
+                TypedToplevel::TFunDef(name, args, body, typ) => {
+                    TypedToplevel::TFunDef(name, args, body.map_box(fuse_lams), typ)
+                }
                 def => def,
             })
             .collect_vec();
@@ -29,62 +32,49 @@ impl Pass for EliminateConsecLam {
         }
     }
 }
+fn fuse_lams(expr: TypedExpr) -> TypedExpr {
+    match expr {
+        TypedExpr::TLam(
+            mut args,
+            box TypedExpr::TLam(inner_args, inner_body, _, clock2),
+            ty,
+            clock1,
+        ) => {
+            args.extend(inner_args);
+            let clock = clock1.map(|mut cl| {
+                cl.extend(clock2.unwrap_or_default());
+                cl
+            });
 
-impl EliminateConsecLam {
-    pub fn new() -> Self {
-        Self {}
-    }
-
-    fn fuse_lams(&self, expr: TypedExpr) -> TypedExpr {
-        match expr {
-            TypedExpr::TLam(
-                mut args,
-                box TypedExpr::TLam(inner_args, inner_body, _, clock2),
-                ty,
-                clock1,
-            ) => {
-                args.extend(inner_args);
-                let clock = clock1.map(|mut cl| {
-                    cl.extend(clock2.unwrap_or_default());
-                    cl
-                });
-
-                self.fuse_lams(TypedExpr::TLam(args, inner_body, ty, clock))
-            }
-            TypedExpr::TLam(args, body, ty, clock) => {
-                TypedExpr::TLam(args, body.map_box(|v| self.fuse_lams(v)), ty, clock)
-            }
-            TypedExpr::TApp(typed_expr, arg, ty) => TypedExpr::TApp(
-                typed_expr.map_box(|v| self.fuse_lams(v)),
-                arg.into_iter().map(|v| self.fuse_lams(v)).collect_vec(),
-                ty,
-            ),
-            TypedExpr::TPrim(binop, left, right, ty) => TypedExpr::TPrim(
-                binop,
-                left.map_box(|expr| self.fuse_lams(expr)),
-                right.map_box(|expr| self.fuse_lams(expr)),
-                ty,
-            ),
-            TypedExpr::TLet(name, ty, rhs, body) => TypedExpr::TLet(
-                name,
-                ty,
-                rhs.map_box(|expr| self.fuse_lams(expr)),
-                body.map_box(|expr| self.fuse_lams(expr)),
-            ),
-            TypedExpr::TIfThenElse(cond, then_branch, else_branch, ty) => TypedExpr::TIfThenElse(
-                cond.map_box(|v| self.fuse_lams(v)),
-                then_branch.map_box(|v| self.fuse_lams(v)),
-                else_branch.map_box(|v| self.fuse_lams(v)),
-                ty,
-            ),
-            TypedExpr::TTuple(vec, ty) => {
-                TypedExpr::TTuple(vec.into_iter().map(|v| self.fuse_lams(v)).collect_vec(), ty)
-            }
-            TypedExpr::TAccess(arg, access, ty) => {
-                TypedExpr::TAccess(arg.map_box(|v| self.fuse_lams(v)), access, ty)
-            }
-            TypedExpr::TName(_, _) | TypedExpr::TConst(_, _) | TypedExpr::TWait(_, _) => expr,
+            fuse_lams(TypedExpr::TLam(args, inner_body, ty, clock))
         }
+        TypedExpr::TLam(args, body, ty, clock) => {
+            TypedExpr::TLam(args, body.map_box(fuse_lams), ty, clock)
+        }
+        TypedExpr::TApp(typed_expr, arg, ty) => TypedExpr::TApp(
+            typed_expr.map_box(fuse_lams),
+            arg.into_iter().map(fuse_lams).collect_vec(),
+            ty,
+        ),
+        TypedExpr::TPrim(binop, left, right, ty) => {
+            TypedExpr::TPrim(binop, left.map_box(fuse_lams), right.map_box(fuse_lams), ty)
+        }
+        TypedExpr::TLet(name, ty, rhs, body) => {
+            TypedExpr::TLet(name, ty, rhs.map_box(fuse_lams), body.map_box(fuse_lams))
+        }
+        TypedExpr::TIfThenElse(cond, then_branch, else_branch, ty) => TypedExpr::TIfThenElse(
+            cond.map_box(fuse_lams),
+            then_branch.map_box(fuse_lams),
+            else_branch.map_box(fuse_lams),
+            ty,
+        ),
+        TypedExpr::TTuple(vec, ty) => {
+            TypedExpr::TTuple(vec.into_iter().map(fuse_lams).collect_vec(), ty)
+        }
+        TypedExpr::TAccess(arg, access, ty) => {
+            TypedExpr::TAccess(arg.map_box(fuse_lams), access, ty)
+        }
+        TypedExpr::TName(_, _) | TypedExpr::TConst(_, _) | TypedExpr::TWait(_, _) => expr,
     }
 }
 
@@ -172,8 +162,7 @@ mod tests {
             ),
         );
 
-        let pass = EliminateConsecLam::new();
-        let result = pass.fuse_lams(outer_lam);
+        let result = fuse_lams(outer_lam);
 
         assert_matches!(
             result,
@@ -196,8 +185,6 @@ mod tests {
 
     #[test]
     fn test_fuse_lams() {
-        let pass = EliminateConsecLam::new();
-
         // Create a nested lambda: fun x -> fun y -> x
         let x_name = make_name("x", Type::TInt);
         let inner_lam = make_lam(
@@ -213,7 +200,7 @@ mod tests {
         );
 
         // Apply the pass
-        let result = pass.fuse_lams(outer_lam);
+        let result = fuse_lams(outer_lam);
 
         // Expected: fun x y -> x
         match result {
@@ -236,8 +223,6 @@ mod tests {
 
     #[test]
     fn test_nested_lams() {
-        let pass = EliminateConsecLam::new();
-
         // Create a triply-nested lambda: fun x -> fun y -> fun z -> x
         let x_name = make_name("x", Type::TInt);
 
@@ -260,7 +245,7 @@ mod tests {
         );
 
         // Apply the pass
-        let result = pass.fuse_lams(outer_lam);
+        let result = fuse_lams(outer_lam);
 
         // Expected: fun x y z -> x
         match result {

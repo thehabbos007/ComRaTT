@@ -5,6 +5,8 @@ pub enum Value {
     I32(i32),
     Bool(bool),
     Unit,
+    // We don't intend on resizing, so boxed slice is sufficient
+    Tuple(Box<[Value]>),
 }
 
 impl Value {
@@ -55,7 +57,6 @@ impl VM {
         let local_count = self.bytecode_fns[fn_idx as usize].local_count as usize;
         let mut locals = args;
         locals.resize(local_count, Value::Unit);
-        let stack_base = self.stack.len();
         let mut instruction_ptr: usize = 0;
 
         loop {
@@ -118,6 +119,17 @@ impl VM {
                     self.stack.push(Value::I32(l | r));
                 }
 
+                Op::MakeTuple(count) => {
+                    let start = self.stack.len() - count as usize;
+                    let elems: Box<[Value]> = self.stack.drain(start..).collect();
+                    self.stack.push(Value::Tuple(elems));
+                }
+
+                Op::AccessTuple(idx) => match self.stack.pop().unwrap() {
+                    Value::Tuple(elems) => self.stack.push(elems[idx as usize].clone()),
+                    other => panic!("AccessTuple on non-tuple: {other:?}"),
+                },
+
                 Op::CallBytecode(idx, argc) => {
                     let start = self.stack.len() - argc as usize;
                     let args: Vec<Value> = self.stack.drain(start..).collect();
@@ -126,9 +138,7 @@ impl VM {
                 }
 
                 Op::Return => {
-                    let ret = self.stack.pop().unwrap_or(Value::Unit);
-                    self.stack.truncate(stack_base);
-                    return ret;
+                    return self.stack.pop().unwrap_or(Value::Unit);
                 }
             }
         }
