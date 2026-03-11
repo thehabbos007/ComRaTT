@@ -1,4 +1,9 @@
-use comratt::{hybrid, infer::infer_all, source::Prog};
+use comratt::{
+    hybrid::{self, FunRef},
+    infer::infer_all,
+    source::Prog,
+    wasm_backend::WasmtimeBackend,
+};
 use comratt_vm::{Value, VM};
 
 fn main() {
@@ -28,14 +33,20 @@ fn main() {
         .iter()
         .map(|s| s.parse().expect("args must be integers"))
         .collect();
+
     let fn_ref = *compiled.fn_map.get("main").expect("no 'main' function");
 
-    let mut vm = VM::new(compiled.bytecode_fns);
+    let backend = WasmtimeBackend::new(&compiled.wasm_bytes, &compiled.pure_fn_names)
+        .expect("WASM backend init failed");
+    let mut vm = VM::new(compiled.bytecode_fns, backend);
 
-    let args: Vec<Value> = runtime_args.iter().map(|&v| Value::I32(v)).collect();
-    let final_val = vm.execute(fn_ref, args);
+    let final_val = match fn_ref {
+        FunRef::Wasm(idx) => Value::I32(vm.call_wasm(idx, &runtime_args)),
+        FunRef::Bytecode(idx) => {
+            let args: Vec<Value> = runtime_args.iter().map(|&v| Value::I32(v)).collect();
+            vm.execute(idx, args)
+        }
+    };
 
-    eprintln!("\n=== Result ===");
-    eprintln!("{final_val:?}");
-    println!("{}", final_val.as_i32());
+    println!("Result: {final_val:?}");
 }

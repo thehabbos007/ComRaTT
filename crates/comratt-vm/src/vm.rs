@@ -1,5 +1,9 @@
 use crate::bytecode::{Function, Op};
 
+pub trait WasmBackend {
+    fn call(&mut self, fn_idx: u32, args: &[i32]) -> i32;
+}
+
 #[derive(Debug, Clone)]
 pub enum Value {
     I32(i32),
@@ -34,9 +38,10 @@ impl Value {
     }
 }
 
-pub struct VM {
+pub struct VM<W: WasmBackend> {
     pub bytecode_fns: Vec<Function>,
     stack: Vec<Value>,
+    wasm_backend: W,
 }
 
 fn bin_i32(stack: &mut Vec<Value>, f: impl FnOnce(i32, i32) -> Value) {
@@ -45,12 +50,17 @@ fn bin_i32(stack: &mut Vec<Value>, f: impl FnOnce(i32, i32) -> Value) {
     stack.push(f(l, r));
 }
 
-impl VM {
-    pub fn new(bytecode_fns: Vec<Function>) -> Self {
+impl<W: WasmBackend> VM<W> {
+    pub fn new(bytecode_fns: Vec<Function>, wasm_backend: W) -> Self {
         VM {
             bytecode_fns,
             stack: Vec::with_capacity(64),
+            wasm_backend,
         }
+    }
+
+    pub fn call_wasm(&mut self, idx: u32, args: &[i32]) -> i32 {
+        self.wasm_backend.call(idx, args)
     }
 
     pub fn execute(&mut self, fn_idx: u32, args: Vec<Value>) -> Value {
@@ -129,6 +139,13 @@ impl VM {
                     Value::Tuple(elems) => self.stack.push(elems[idx as usize].clone()),
                     other => panic!("AccessTuple on non-tuple: {other:?}"),
                 },
+
+                Op::CallWasm(idx, argc) => {
+                    let start = self.stack.len() - argc as usize;
+                    let args: Vec<i32> = self.stack.drain(start..).map(|v| v.as_i32()).collect();
+                    let result = self.call_wasm(idx, &args);
+                    self.stack.push(Value::I32(result));
+                }
 
                 Op::CallBytecode(idx, argc) => {
                     let start = self.stack.len() - argc as usize;

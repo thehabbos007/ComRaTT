@@ -4,11 +4,11 @@ use std::collections::HashMap;
 
 pub use comratt_vm::bytecode::{Function, Op};
 
-use super::FunctionPrototype;
+use super::{FunRef, FunctionPrototype};
 
 struct Compiler {
     functions: Vec<Option<Function>>,
-    fn_map: HashMap<String, u32>,
+    fn_map: HashMap<String, FunRef>,
     ops: Vec<Op>,
     locals: HashMap<String, u16>,
     next_local: u16,
@@ -56,8 +56,11 @@ impl Compiler {
                 if let Some(&idx) = self.locals.get(name) {
                     self.emit(Op::Load(idx));
                 } else if let Some(&fn_ref) = self.fn_map.get(name) {
-                    // 0-arg function call (e.g., recursive self-reference)
-                    self.emit(Op::CallBytecode(fn_ref, 0));
+                    // 0-arg function call, as it's just a TName without TApp
+                    match fn_ref {
+                        FunRef::Wasm(idx) => self.emit(Op::CallWasm(idx, 0)),
+                        FunRef::Bytecode(idx) => self.emit(Op::CallBytecode(idx, 0)),
+                    }
                 } else {
                     panic!("unbound variable in bytecode: {name}");
                 }
@@ -107,7 +110,10 @@ impl Compiler {
                         self.compile_expr(a);
                     }
                     match self.fn_map.get(name) {
-                        Some(idx) => self.emit(Op::CallBytecode(*idx, args.len() as u8)),
+                        Some(FunRef::Wasm(idx)) => self.emit(Op::CallWasm(*idx, args.len() as u8)),
+                        Some(FunRef::Bytecode(idx)) => {
+                            self.emit(Op::CallBytecode(*idx, args.len() as u8))
+                        }
                         None => panic!("unknown function: {name}"),
                     }
                 } else {
@@ -137,7 +143,7 @@ impl Compiler {
 
 pub fn compile_reactive(
     fns: &[FunctionPrototype],
-    fn_map: &mut HashMap<String, u32>,
+    fn_map: &mut HashMap<String, FunRef>,
 ) -> Vec<Function> {
     let mut compiler = Compiler {
         functions: vec![],
@@ -150,8 +156,8 @@ pub fn compile_reactive(
     // Reserve slots for named reactive functions so they can reference each other
     for (name, _, _) in fns {
         let idx = compiler.functions.len() as u32;
-        fn_map.insert(name.clone(), idx);
-        compiler.fn_map.insert(name.clone(), idx);
+        fn_map.insert(name.clone(), FunRef::Bytecode(idx));
+        compiler.fn_map.insert(name.clone(), FunRef::Bytecode(idx));
         compiler.functions.push(None);
     }
 

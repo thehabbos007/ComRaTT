@@ -17,3 +17,4 @@ pub mod source;
 #[cfg(test)]
 mod test_suite;
 pub mod types;
+pub mod wasm_backend;

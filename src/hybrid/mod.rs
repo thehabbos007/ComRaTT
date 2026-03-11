@@ -10,12 +10,18 @@ use crate::{
 pub mod bytecode_gen;
 pub mod wasm_gen;
 
+#[derive(Clone, Copy, Debug)]
+pub enum FunRef {
+    Wasm(u32),
+    Bytecode(u32),
+}
+
 pub type FunctionPrototype = (String, Vec<(Sym, Type)>, TypedExpr);
 
 pub struct HybridProgram {
     pub wasm_bytes: Vec<u8>,
     pub bytecode_fns: Vec<bytecode::Function>,
-    pub fn_map: HashMap<String, u32>,
+    pub fn_map: HashMap<String, FunRef>,
     pub pure_fn_names: Vec<String>,
     pub channels: Vec<(String, Type)>,
     pub channel_indices: HashMap<String, u16>,
@@ -25,7 +31,7 @@ pub struct HybridProgram {
 pub fn compile(prog: &TypedProg) -> HybridProgram {
     let mut pure_fns: Vec<FunctionPrototype> = vec![];
     let mut reactive_fns: Vec<FunctionPrototype> = vec![];
-    let mut fn_map: HashMap<String, u32> = HashMap::new();
+    let mut fn_map: HashMap<String, FunRef> = HashMap::new();
 
     let mut channels: Vec<(String, Type)> = vec![];
     let mut channel_indices: HashMap<String, u16> = HashMap::new();
@@ -68,7 +74,8 @@ pub fn compile(prog: &TypedProg) -> HybridProgram {
         if reactive_names.contains(&name) {
             reactive_fns.push((name, args, body));
         } else {
-            // TODO: Insert some wasm type thing into the fn_map?
+            let fun_ref = FunRef::Wasm(pure_fns.len() as u32);
+            fn_map.insert(name.clone(), fun_ref);
             pure_fns.push((name, args, body));
         }
     }
