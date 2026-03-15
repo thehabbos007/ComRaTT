@@ -34,6 +34,8 @@ impl TypedExpr {
             }
             TypedExpr::TAccess(e, i, _) => Expr::Access(e.untyped().b(), *i),
             TypedExpr::TWait(name, _) => Expr::Wait(name.clone()),
+            TypedExpr::TDelay(body, clock, _) => Expr::Delay(body.untyped().b(), clock.clone()),
+            TypedExpr::TAdvance(name, _) => Expr::Advance(name.clone()),
         }
     }
 }
@@ -268,6 +270,8 @@ impl Display for TypedExpr {
             }
             TypedExpr::TAccess(e, i, _) => write!(f, "{}.{}", e, i),
             TypedExpr::TWait(name, _) => write!(f, "wait {}", name),
+            TypedExpr::TDelay(body, clock, _) => write!(f, "delay {{{:?}}} {}", clock, body),
+            TypedExpr::TAdvance(name, _) => write!(f, "advance {}", name),
         }
     }
 }

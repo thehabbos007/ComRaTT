@@ -246,9 +246,19 @@ impl EliminateConsecApp {
                 typ,
             )
             .none_traversal(),
-            TypedExpr::TConst(_, _) | TypedExpr::TName(_, _) | TypedExpr::TWait(_, _) => {
-                expr.none_traversal()
-            }
+            TypedExpr::TDelay(body, clock, typ) => TypedExpr::TDelay(
+                Box::new(
+                    self.eliminate_consec(*body, local_scope)
+                        .ignore_traversal_outcome(),
+                ),
+                clock,
+                typ,
+            )
+            .none_traversal(),
+            TypedExpr::TConst(_, _)
+            | TypedExpr::TName(_, _)
+            | TypedExpr::TWait(_, _)
+            | TypedExpr::TAdvance(_, _) => expr.none_traversal(),
         }
     }
 }

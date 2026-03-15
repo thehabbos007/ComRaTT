@@ -117,7 +117,7 @@ impl Compiler {
                         None => panic!("unknown function: {name}"),
                     }
                 } else {
-                    panic!("unsupported application form in bytecode");
+                    panic!("non-name function in bytecode: {f:?}");
                 }
             }
 

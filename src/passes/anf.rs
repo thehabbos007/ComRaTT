@@ -166,6 +166,14 @@ impl ANFConversion {
                 AnfExpr::AExpr(AExpr::LaterClosure(Box::new(body_anf), clock, ty))
             }
             TypedExpr::TWait(name, typ) => AnfExpr::AExpr(AExpr::Wait(name, typ)),
+            TypedExpr::TDelay(body, clock, ty) => {
+                let body_anf = self.normalize(*body);
+                AnfExpr::AExpr(AExpr::LaterClosure(Box::new(body_anf), clock, ty))
+            }
+            TypedExpr::TAdvance(name, ty) => {
+                let app = CExpr::App(AExpr::Var(name, ty.clone()), Vec::new(), ty.clone());
+                AnfExpr::CExp(app)
+            }
         }
     }
     fn normalize_atom(&mut self, expr: TypedExpr) -> (AExpr, Vec<(String, AnfExpr)>) {

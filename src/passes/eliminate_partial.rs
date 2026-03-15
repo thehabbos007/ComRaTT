@@ -179,6 +179,10 @@ impl PartialElimination {
             TypedExpr::TAccess(texp, idx, typ) => {
                 TypedExpr::TAccess(Box::new(self.eliminate_partial(*texp)), idx, typ)
             }
+            TypedExpr::TDelay(body, clock, typ) => {
+                TypedExpr::TDelay(Box::new(self.eliminate_partial(*body)), clock, typ)
+            }
+            TypedExpr::TAdvance(name, typ) => TypedExpr::TAdvance(name, typ),
         }
     }
 }

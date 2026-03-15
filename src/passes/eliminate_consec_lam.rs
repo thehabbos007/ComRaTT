@@ -74,7 +74,11 @@ fn fuse_lams(expr: TypedExpr) -> TypedExpr {
         TypedExpr::TAccess(arg, access, ty) => {
             TypedExpr::TAccess(arg.map_box(fuse_lams), access, ty)
         }
-        TypedExpr::TName(_, _) | TypedExpr::TConst(_, _) | TypedExpr::TWait(_, _) => expr,
+        TypedExpr::TDelay(body, clock, ty) => TypedExpr::TDelay(body.map_box(fuse_lams), clock, ty),
+        TypedExpr::TName(_, _)
+        | TypedExpr::TConst(_, _)
+        | TypedExpr::TWait(_, _)
+        | TypedExpr::TAdvance(_, _) => expr,
     }
 }
 

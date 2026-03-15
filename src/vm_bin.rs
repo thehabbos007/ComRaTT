@@ -28,8 +28,7 @@ fn main() {
         }
     }
 
-    let rest = &args[2..];
-    let runtime_args: Vec<i32> = rest
+    let runtime_args: Vec<i32> = args[2..]
         .iter()
         .map(|s| s.parse().expect("args must be integers"))
         .collect();

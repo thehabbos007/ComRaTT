@@ -107,6 +107,7 @@ impl LambdaLift {
             TypedExpr::TConst(_, _) => (expr, vec![]),
             TypedExpr::TName(_, _) => (expr, vec![]),
             TypedExpr::TWait(_, _) => (expr, vec![]),
+            TypedExpr::TAdvance(_, _) => (expr, vec![]),
             TypedExpr::TPrim(op, left, right, typ) => {
                 let (left_expr, mut left_defs) = self.lift_lambdas(*left, bound.clone());
                 let (right_expr, right_defs) = self.lift_lambdas(*right, bound);
@@ -116,22 +117,16 @@ impl LambdaLift {
                     left_defs,
                 )
             }
-            TypedExpr::TLam(args, body, Type::TLater(box typ, clock), Some(_)) => {
-                let args: HashSet<_> = args.iter().cloned().collect();
+            TypedExpr::TDelay(body, clock, Type::TLater(box typ, _)) => {
+                let args: HashSet<(String, Type)> = HashSet::new();
                 let free_vars = find_free_vars(&body, &args)
                     .iter()
-                    .filter(|binding| {
-                        let res = matches!(bound.get(binding), Some(BindingKind::Local));
-                        res
-                    })
+                    .filter(|binding| matches!(bound.get(binding), Some(BindingKind::Local)))
                     .cloned()
                     .collect::<HashSet<_>>();
 
                 let fun_name = self.unique_name("lambda");
-                let orig_arg_len = args.len();
-                let (return_typ, _) = tfun_len_n(typ.clone(), orig_arg_len);
-                let mut new_args = free_vars.iter().cloned().collect_vec();
-                new_args.extend(args);
+                let new_args: Vec<_> = free_vars.iter().cloned().collect_vec();
 
                 let (lifted_body, mut lifted_defs) = self.lift_lambdas(*body, bound);
 
@@ -139,7 +134,7 @@ impl LambdaLift {
                     fun_name.clone(),
                     new_args.clone(),
                     Box::new(lifted_body),
-                    return_typ.clone(),
+                    typ.clone(),
                 );
 
                 let unbundled_type = Type::TLater(typ.clone().b(), clock.clone());
@@ -171,6 +166,11 @@ impl LambdaLift {
                         lifted_defs,
                     )
                 }
+            }
+            TypedExpr::TDelay(body, clock, ty) => {
+                // Non-TLater delay type (shouldn't happen in practice, but handle gracefully)
+                let (lifted_body, defs) = self.lift_lambdas(*body, bound);
+                (TypedExpr::TDelay(Box::new(lifted_body), clock, ty), defs)
             }
             TypedExpr::TLam(args, body, Type::TBox(box typ), _) => {
                 let args: HashSet<_> = args.iter().cloned().collect();

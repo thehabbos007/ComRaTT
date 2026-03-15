@@ -29,6 +29,10 @@ pub enum TypedExpr {
     TAccess(Box<TypedExpr>, i32, Type),
     /// Wait on a channel
     TWait(String, Type),
+    /// A delayed computation with (body, clock, result type => TLater(inner, clock))
+    TDelay(Box<TypedExpr>, ClockExprs, Type),
+    /// Advance a delayed value with (name, result type => inner type after unwrapping TLater)
+    TAdvance(Sym, Type),
 }
 
 impl TypedExpr {
@@ -48,6 +52,8 @@ impl TypedExpr {
             TypedExpr::TTuple(_, ty) => ty.clone(),
             TypedExpr::TAccess(_, _, ty) => ty.clone(),
             TypedExpr::TWait(_, ty) => ty.clone(),
+            TypedExpr::TDelay(_, _, ty) => ty.clone(),
+            TypedExpr::TAdvance(_, ty) => ty.clone(),
         }
     }
 }
@@ -188,18 +194,25 @@ pub fn traverse_locals<'a>(expr: &'a TypedExpr, locals: &mut Vec<(&'a str, Type)
         TypedExpr::TAccess(expr, _, _) => {
             traverse_locals(expr, locals);
         }
+        TypedExpr::TDelay(body, _, _) => {
+            traverse_locals(body, locals);
+        }
         TypedExpr::TConst(_, _)
         | TypedExpr::TName(_, _)
         | TypedExpr::TApp(_, _, _)
-        | TypedExpr::TWait(_, _) => {}
+        | TypedExpr::TWait(_, _)
+        | TypedExpr::TAdvance(_, _) => {}
     }
 }
 
 pub fn find_free_var_names(expr: &TypedExpr, bound: &HashSet<String>) -> HashSet<String> {
     match expr {
         TypedExpr::TConst(..) => HashSet::new(),
-        TypedExpr::TName(name, _) if bound.contains(name) => HashSet::new(),
-        TypedExpr::TName(name, _) => [name.clone()].into(),
+        TypedExpr::TWait(..) => HashSet::new(),
+        TypedExpr::TAdvance(name, _) | TypedExpr::TName(name, _) if bound.contains(name) => {
+            HashSet::new()
+        }
+        TypedExpr::TAdvance(name, _) | TypedExpr::TName(name, _) => [name.clone()].into(),
         TypedExpr::TPrim(_, l, r, _) => {
             let mut s = find_free_var_names(l, bound);
             s.extend(find_free_var_names(r, bound));
@@ -237,9 +250,10 @@ pub fn find_free_var_names(expr: &TypedExpr, bound: &HashSet<String>) -> HashSet
             .flat_map(|e| find_free_var_names(e, bound))
             .collect(),
         TypedExpr::TAccess(e, _, _) => find_free_var_names(e, bound),
-        TypedExpr::TWait(..) => HashSet::new(),
+        TypedExpr::TDelay(body, _, _) => find_free_var_names(body, bound),
     }
 }
+
 pub fn find_free_vars(
     expr: &TypedExpr,
     bound: &HashSet<(String, Type)>,
@@ -303,6 +317,18 @@ pub fn find_free_vars(
             free
         }
         TypedExpr::TAccess(expr, _, _) => find_free_vars(expr, bound),
+        TypedExpr::TDelay(body, _, _) => find_free_vars(body, bound),
+        TypedExpr::TAdvance(name, ty) => {
+            let name = name.clone();
+            let ty = ty.clone();
+            if bound.contains(&(name.clone(), ty.clone())) {
+                HashSet::new()
+            } else {
+                let mut set = HashSet::new();
+                set.insert((name, ty));
+                set
+            }
+        }
     }
 }
 
@@ -360,9 +386,18 @@ pub fn substitute_binding(bind_old: &str, bind_new: &str, expr: TypedExpr) -> Ty
             idx,
             ty,
         ),
+        TypedExpr::TDelay(body, clock, ty) => TypedExpr::TDelay(
+            Box::new(substitute_binding(bind_old, bind_new, *body)),
+            clock,
+            ty,
+        ),
+        TypedExpr::TAdvance(name, ty) if name == bind_old => {
+            TypedExpr::TAdvance(bind_new.to_string(), ty)
+        }
         TypedExpr::TName(_, _) => expr,
         TypedExpr::TConst(_, _) => expr,
         TypedExpr::TWait(_, _) => expr,
+        TypedExpr::TAdvance(_, _) => expr,
     }
 }
 

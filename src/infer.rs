@@ -355,18 +355,14 @@ impl Inference {
             Expr::Delay(e, clock) => {
                 // Introduce a tick given the clock
                 let context = context.promote_tick(&clock);
-                // Call recursively, propagate constraints and generate a new '{} -> ty'
+                // Call recursively, propagate constraints
                 let (ty, type_output) = self.infer(context, *e);
+                let later_ty = Type::TLater(ty.clone().b(), clock.clone());
                 (
-                    Type::TLater(ty.clone().b(), clock.clone()),
+                    later_ty.clone(),
                     TypeOutput::new(
                         type_output.constraints,
-                        TypedExpr::TLam(
-                            Vec::new(),
-                            type_output.texp.b(),
-                            Type::TLater(ty.clone().b(), clock.clone()),
-                            Some(clock),
-                        ),
+                        TypedExpr::TDelay(type_output.texp.b(), clock, later_ty),
                     ),
                 )
             }
@@ -375,15 +371,15 @@ impl Inference {
                     panic!("Type checking wait on unbound channel {}", name)
                 };
                 let clock: ClockExprs = ClockExpr::Wait(name.clone()).into();
+                let later_ty = Type::TLater(ty.clone().b(), clock.clone());
                 (
-                    Type::TLater(ty.clone().b(), clock.clone()),
+                    later_ty.clone(),
                     TypeOutput::new(
                         Vec::new(),
-                        TypedExpr::TLam(
-                            Vec::new(),
+                        TypedExpr::TDelay(
                             TypedExpr::TWait(name.clone(), ty.clone()).b(),
-                            Type::TLater(ty.clone().b(), clock.clone()),
-                            Some(clock),
+                            clock,
+                            later_ty,
                         ),
                     ),
                 )
@@ -395,20 +391,10 @@ impl Inference {
             // The input channels of this clock can change at runtime, but at comptime we need
             // to do some checking.
             Expr::Advance(name) => match context.attempt_advance(&name) {
-                Type::TLater(box ty, clock) => {
-                    let later_type = Type::TLater(ty.clone().b(), clock.clone());
-                    (
-                        ty.clone(),
-                        TypeOutput::new(
-                            Vec::new(),
-                            TypedExpr::TApp(
-                                TypedExpr::TName(name, later_type).b(),
-                                Vec::new(),
-                                ty.clone(),
-                            ),
-                        ),
-                    )
-                }
+                Type::TLater(box ty, _clock) => (
+                    ty.clone(),
+                    TypeOutput::new(Vec::new(), TypedExpr::TAdvance(name, ty)),
+                ),
                 expr => panic!("Cannot advance arbitrary expr {expr}"),
             },
             // TODO we must not allow functions under a tick
@@ -711,11 +697,10 @@ impl Inference {
                 self.unify_ty_ty(fst_from.as_ref(), snd_from.as_ref())?;
                 self.unify_ty_ty(fst_to.as_ref(), snd_to.as_ref())
             }
-            (Type::TProduct(fst_ts), Type::TProduct(snd_ts)) => {
-                let zipped = fst_ts.into_iter().zip(snd_ts);
-                zipped.for_each(|(fst, snd)| {
-                    self.unify_ty_ty(&fst, &snd);
-                });
+            (Type::TProduct(fst_ts), Type::TProduct(snd_ts)) if fst_ts.len() == snd_ts.len() => {
+                for (fst, snd) in fst_ts.iter().zip(snd_ts.iter()) {
+                    self.unify_ty_ty(fst, snd)?;
+                }
                 Ok(())
             }
             (Type::TVar(a), Type::TVar(b)) => self
@@ -768,11 +753,13 @@ impl Inference {
             }
             Type::TProduct(ts) => {
                 let mut unbounds = BTreeSet::new();
-                for t in ts.clone() {
+                let mut new_ts = Vec::new();
+                for t in ts {
                     let (unbound, t) = self.substitute(t);
                     unbounds.extend(unbound);
+                    new_ts.push(t);
                 }
-                (unbounds, Type::TProduct(ts))
+                (unbounds, Type::TProduct(new_ts))
             }
             Type::TVar(v) => {
                 let root = self.unification_table.find(v);
@@ -874,6 +861,16 @@ impl Inference {
                 let (unbounds, ty) = self.substitute(ty);
                 unbound.extend(unbounds);
                 (unbound, TypedExpr::TAccess(texp.b(), idx, ty))
+            }
+            TypedExpr::TDelay(body, clock, ty) => {
+                let (mut unbound, body) = self.substitute_texp(*body);
+                let (unbounds, ty) = self.substitute(ty);
+                unbound.extend(unbounds);
+                (unbound, TypedExpr::TDelay(body.b(), clock, ty))
+            }
+            TypedExpr::TAdvance(name, ty) => {
+                let (unbound, ty) = self.substitute(ty);
+                (unbound, TypedExpr::TAdvance(name, ty))
             }
         }
     }
@@ -1360,11 +1357,10 @@ mod tests {
             unification_table: InPlaceUnificationTable::default(),
         };
         let (ty, output) = inference.infer(Default::default(), expr);
-        let expected_texp = TypedExpr::TLam(
-            Vec::new(),
+        let expected_texp = TypedExpr::TDelay(
             TypedExpr::TConst(Const::CInt(42), Type::TInt).b(),
+            clock_expr.clone().into(),
             Type::TLater(Type::TInt.b(), clock_expr.clone().into()),
-            Some(clock_expr.clone().into()),
         );
         assert_eq!(ty, Type::TLater(Type::TInt.b(), clock_expr.clone().into()),);
         assert_eq!(output.texp, expected_texp);
