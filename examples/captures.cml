@@ -1,0 +1,12 @@
+square : int -> int
+def square x = x * x;
+
+add_const : int -> int -> int
+def add_const x c = x + c;
+
+main : int -> O int
+def main x =
+    let a = square x in
+    let b = add_const x 10 in
+    let d = delay {cl(a)} (a + b) in
+    delay {cl(d)} (advance d * 2);

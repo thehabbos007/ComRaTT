@@ -47,5 +47,7 @@ fn main() {
         }
     };
 
-    println!("Result: {final_val:?}");
+    let forced = vm.force_all(final_val);
+
+    println!("Result: {forced:?}");
 }

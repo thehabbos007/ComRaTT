@@ -25,6 +25,11 @@ pub enum Op {
     AccessTuple(u8),
     BitOr,
     Return,
+    /// (Function index, capture count)
+    Thunk(u32, u8),
+    /// (Channel index)
+    Wait(u16),
+    Force,
 }
 
 #[derive(Debug)]

@@ -9,6 +9,15 @@ pub enum Value {
     I32(i32),
     Bool(bool),
     Unit,
+    Thunk {
+        fun_idx: u32,
+        captures: Box<[Value]>,
+        clock: u32,
+    },
+    Wait {
+        channel_idx: u16,
+        clock: u32,
+    },
     // We don't intend on resizing, so boxed slice is sufficient
     Tuple(Box<[Value]>),
 }
@@ -25,6 +34,8 @@ impl Value {
 
     pub fn clock(&self) -> u32 {
         match self {
+            Value::Thunk { clock, .. } => *clock,
+            Value::Wait { clock, .. } => *clock,
             _ => 0x00000000,
         }
     }
@@ -42,6 +53,7 @@ pub struct VM<W: WasmBackend> {
     pub bytecode_fns: Vec<Function>,
     stack: Vec<Value>,
     wasm_backend: W,
+    pub channels: Vec<i32>,
 }
 
 fn bin_i32(stack: &mut Vec<Value>, f: impl FnOnce(i32, i32) -> Value) {
@@ -56,7 +68,12 @@ impl<W: WasmBackend> VM<W> {
             bytecode_fns,
             stack: Vec::with_capacity(64),
             wasm_backend,
+            channels: vec![],
         }
+    }
+
+    pub fn init_channels(&mut self, count: usize) {
+        self.channels = vec![0; count];
     }
 
     pub fn call_wasm(&mut self, idx: u32, args: &[i32]) -> i32 {
@@ -157,6 +174,56 @@ impl<W: WasmBackend> VM<W> {
                 Op::Return => {
                     return self.stack.pop().unwrap_or(Value::Unit);
                 }
+
+                Op::Thunk(thunk_fun, capture_count) => {
+                    let clock = self.stack.pop().unwrap().as_i32() as u32;
+                    let start = self.stack.len() - capture_count as usize;
+                    let captures: Box<[Value]> = self.stack.drain(start..).collect();
+                    self.stack.push(Value::Thunk {
+                        fun_idx: thunk_fun,
+                        captures,
+                        clock,
+                    });
+                }
+
+                Op::Wait(channel_idx) => {
+                    self.stack.push(Value::Wait {
+                        channel_idx,
+                        clock: 1u32 << channel_idx,
+                    });
+                }
+
+                Op::Force => match self.stack.pop().unwrap() {
+                    Value::Thunk {
+                        fun_idx: thunk_idx,
+                        captures,
+                        ..
+                    } => {
+                        let result = self.execute(thunk_idx, captures.into_vec());
+                        self.stack.push(result);
+                    }
+                    Value::Wait { channel_idx, .. } => {
+                        let val = self.channels[channel_idx as usize];
+                        self.stack.push(Value::I32(val));
+                    }
+                    other => panic!("Tried to force on non-thunk: {other:?}"),
+                },
+            }
+        }
+    }
+
+    pub fn force_all(&mut self, mut val: Value) -> Value {
+        loop {
+            match val {
+                Value::Thunk {
+                    fun_idx, captures, ..
+                } => {
+                    val = self.execute(fun_idx, captures.into_vec());
+                }
+                Value::Wait { channel_idx, .. } => {
+                    val = Value::I32(self.channels[channel_idx as usize]);
+                }
+                _ => return val,
             }
         }
     }

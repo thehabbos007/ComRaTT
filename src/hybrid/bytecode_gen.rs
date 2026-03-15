@@ -1,6 +1,6 @@
-use crate::source::{Binop, Const, Type};
-use crate::types::{Sym, TypedExpr};
-use std::collections::HashMap;
+use crate::source::{Binop, ClockExpr, Const, Type};
+use crate::types::{find_free_var_names, Sym, TypedExpr};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 pub use comratt_vm::bytecode::{Function, Op};
 
@@ -12,6 +12,7 @@ struct Compiler {
     ops: Vec<Op>,
     locals: HashMap<String, u16>,
     next_local: u16,
+    channel_indices: HashMap<String, u16>,
 }
 
 impl Compiler {
@@ -133,10 +134,110 @@ impl Compiler {
                 self.emit(Op::AccessTuple(*idx as u8));
             }
 
+            TypedExpr::TAdvance(name, _) => {
+                self.emit(Op::Load(self.locals[name]));
+                self.emit(Op::Force);
+            }
+
+            TypedExpr::TDelay(body, _, _) if matches!(body.as_ref(), TypedExpr::TWait(..)) => {
+                let TypedExpr::TWait(channel_name, _) = body.as_ref() else {
+                    unreachable!()
+                };
+                let idx = *self
+                    .channel_indices
+                    .get(channel_name)
+                    .unwrap_or_else(|| panic!("unknown channel: {channel_name}"));
+                self.emit(Op::Wait(idx));
+            }
+
+            TypedExpr::TDelay(body, clock, _) => {
+                let fv = find_free_var_names(body, &HashSet::new());
+                let mut captures: Vec<String> = fv
+                    .into_iter()
+                    .filter(|n| self.locals.contains_key(n))
+                    .collect();
+                captures.sort();
+                for c in &captures {
+                    self.emit(Op::Load(self.locals[c]));
+                }
+
+                if self.channel_indices.is_empty() {
+                    self.emit(Op::ConstClock(0x0));
+                } else {
+                    self.compile_clock_expr(clock);
+                }
+
+                let thunk_idx = self.compile_thunk(body, &captures);
+                self.emit(Op::Thunk(thunk_idx, captures.len() as u8));
+            }
+
             TypedExpr::TLam(..) => {
                 panic!("unsupported in hybrid bytecode: TLam (use top-level functions)")
             }
+
             other => panic!("unsupported in hybrid bytecode: {other:?}"),
+        }
+    }
+
+    fn compile_thunk(&mut self, body: &TypedExpr, captures: &[String]) -> u32 {
+        let saved = (
+            std::mem::take(&mut self.ops),
+            std::mem::take(&mut self.locals),
+            self.next_local,
+        );
+        self.next_local = 0;
+        for c in captures {
+            self.alloc_local(c);
+        }
+        self.compile_expr(body);
+        self.emit(Op::Return);
+
+        let idx = self.functions.len() as u32;
+        self.functions.push(Some(Function {
+            name: format!("thunk_{idx}"),
+            param_count: captures.len() as u16,
+            local_count: self.next_local,
+            ops: std::mem::take(&mut self.ops),
+        }));
+
+        self.ops = saved.0;
+        self.locals = saved.1;
+        self.next_local = saved.2;
+        idx
+    }
+
+    fn compile_clock_expr(&mut self, clock: &BTreeSet<ClockExpr>) {
+        if clock.is_empty() {
+            self.emit(Op::ConstClock(0x0));
+            return;
+        }
+
+        let mut first = true;
+        for ce in clock {
+            match ce {
+                ClockExpr::Wait(name) => {
+                    let idx = *self
+                        .channel_indices
+                        .get(name)
+                        .unwrap_or_else(|| panic!("unknown channel in clock expr: {name}"));
+                    self.emit(Op::ConstClock(1u32 << idx));
+                }
+                ClockExpr::Cl(var) => {
+                    if let Some(&local_idx) = self.locals.get(var) {
+                        self.emit(Op::Load(local_idx));
+                        self.emit(Op::GetClock);
+                    } else {
+                        self.emit(Op::ConstClock(0x0));
+                    }
+                }
+                ClockExpr::Symbolic => {
+                    panic!("Tried to generate clock from symbolic clockexpr")
+                }
+            }
+            if !first {
+                self.emit(Op::BitOr);
+            }
+            first = false;
         }
     }
 }
@@ -144,6 +245,7 @@ impl Compiler {
 pub fn compile_reactive(
     fns: &[FunctionPrototype],
     fn_map: &mut HashMap<String, FunRef>,
+    channel_indices: HashMap<String, u16>,
 ) -> Vec<Function> {
     let mut compiler = Compiler {
         functions: vec![],
@@ -151,6 +253,7 @@ pub fn compile_reactive(
         ops: vec![],
         locals: HashMap::new(),
         next_local: 0,
+        channel_indices,
     };
 
     // Reserve slots for named reactive functions so they can reference each other

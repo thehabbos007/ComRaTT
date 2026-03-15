@@ -1,3 +1,8 @@
+pub mod bytecode_gen;
+#[cfg(test)]
+mod tests;
+pub mod wasm_gen;
+
 use std::collections::{HashMap, HashSet};
 
 use comratt_vm::bytecode;
@@ -6,9 +11,6 @@ use crate::{
     source::Type,
     types::{Sym, TypedExpr, TypedProg, TypedToplevel},
 };
-
-pub mod bytecode_gen;
-pub mod wasm_gen;
 
 #[derive(Clone, Copy, Debug)]
 pub enum FunRef {
@@ -94,7 +96,8 @@ pub fn compile(prog: &TypedProg) -> HybridProgram {
         reactive_fns.push((init_name, vec![], expr.clone()));
     }
 
-    let bytecode_fns = bytecode_gen::compile_reactive(&reactive_fns, &mut fn_map);
+    let bytecode_fns =
+        bytecode_gen::compile_reactive(&reactive_fns, &mut fn_map, channel_indices.clone());
 
     HybridProgram {
         wasm_bytes,
@@ -109,23 +112,9 @@ pub fn compile(prog: &TypedProg) -> HybridProgram {
 
 fn is_reactive(expr: &TypedExpr) -> bool {
     match expr {
-        TypedExpr::TWait(..) => true,
-        TypedExpr::TLam(params, _, ty, Some(_))
-            if params.is_empty() && matches!(ty, Type::TLater(..)) =>
-        {
-            true
-        }
+        TypedExpr::TDelay(..) | TypedExpr::TAdvance(..) | TypedExpr::TWait(..) => true,
+        TypedExpr::TApp(f, args, _) => is_reactive(f) || args.iter().any(is_reactive),
         TypedExpr::TLam(_, body, _, _) => is_reactive(body),
-        TypedExpr::TApp(f, args, _) => {
-            if args.is_empty() {
-                if let TypedExpr::TName(_, ty) = f.as_ref() {
-                    if matches!(ty, Type::TLater(..)) {
-                        return true;
-                    }
-                }
-            }
-            is_reactive(f) || args.iter().any(is_reactive)
-        }
         TypedExpr::TPrim(_, l, r, _) => is_reactive(l) || is_reactive(r),
         TypedExpr::TLet(_, _, rhs, body) => is_reactive(rhs) || is_reactive(body),
         TypedExpr::TIfThenElse(c, t, e, _) => is_reactive(c) || is_reactive(t) || is_reactive(e),
