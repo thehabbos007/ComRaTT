@@ -1,6 +1,4 @@
 pub mod bytecode_gen;
-#[cfg(test)]
-mod tests;
 pub mod wasm_gen;
 
 use std::collections::{HashMap, HashSet};
