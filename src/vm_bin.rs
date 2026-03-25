@@ -104,8 +104,8 @@ fn reactive_loop(
                 Value::Tuple(elems) => {
                     let mut elems = elems.into_vec();
                     assert_eq!(elems.len(), 2, "signals should produce 2-tuple");
-                    let out_val = elems.remove(0);
                     let next = elems.remove(1);
+                    let out_val = elems.remove(0);
                     println!("[{}] {}: {}", i, output_labels[i], out_val.as_i32());
                     *thunk = next;
                 }
