@@ -81,6 +81,10 @@ impl Context {
         self.bindings_context
             .insert_clock(binding_name, value, clock)
     }
+
+    fn tick_clock(&self) -> Option<&ClockExprs> {
+        self.bindings_context.tick_clock()
+    }
 }
 
 impl From<BindingContext> for Context {
@@ -172,6 +176,13 @@ impl BindingContext {
         }
     }
 
+    fn tick_clock(&self) -> Option<&ClockExprs> {
+        match self {
+            BindingContext::Tick(_, clock, _) => Some(clock),
+            BindingContext::Bindings(_) => None,
+        }
+    }
+
     fn promote_tick(self, clock: &ClockExprs) -> Self {
         match self {
             BindingContext::Bindings(bindings) => {
@@ -188,6 +199,42 @@ impl From<HashMap<Sym, Binding>> for BindingContext {
     fn from(value: HashMap<Sym, Binding>) -> Self {
         BindingContext::Bindings(value)
     }
+}
+
+/// Returns true if inner ⊆ outer
+fn clock_subsumed_by(inner: &ClockExprs, outer: &ClockExprs, ctx: &Context) -> bool {
+    // never-clock always subsumes
+    if inner.is_empty() {
+        return true;
+    };
+
+    // can't determine statically
+    if inner.contains(&ClockExpr::Symbolic) || outer.contains(&ClockExpr::Symbolic) {
+        return true;
+    }
+
+    inner.iter().all(|ce| {
+        // cl(x) where x is non-delay (never) is easy to subsume
+        if let ClockExpr::Cl(x) = ce {
+            if let Some((ty, _)) = ctx.get_binding(x) {
+                if !matches!(ty, Type::TLater(..)) {
+                    return true;
+                }
+            }
+        }
+        if outer.contains(ce) {
+            return true;
+        }
+
+        outer.iter().any(|outer_ce| {
+            if let ClockExpr::Cl(v) = outer_ce {
+                if let Some((Type::TLater(_, v_clock), _)) = ctx.get_binding(v) {
+                    return v_clock.contains(ce);
+                }
+            }
+            false
+        })
+    })
 }
 
 struct Inference {
@@ -353,6 +400,18 @@ impl Inference {
                 _ => panic!("Failed to infer type of IfThenElse"),
             },
             Expr::Delay(e, clock) => {
+                // cl(v) should reference a delayed variable
+                for ce in &clock {
+                    if let ClockExpr::Cl(var) = ce {
+                        if let Some((ty, _)) = context.get_binding(var) {
+                            if !matches!(ty, Type::TLater(..)) {
+                                eprintln!(
+                                    "warning: cl({var}) in delay clock, but `{var}` has non-delayed type `{ty}` meaning it never fires."
+                                );
+                            }
+                        }
+                    }
+                }
                 // Introduce a tick given the clock
                 let context = context.promote_tick(&clock);
                 // Call recursively, propagate constraints
@@ -391,10 +450,19 @@ impl Inference {
             // The input channels of this clock can change at runtime, but at comptime we need
             // to do some checking.
             Expr::Advance(name) => match context.attempt_advance(&name) {
-                Type::TLater(box ty, _clock) => (
-                    ty.clone(),
-                    TypeOutput::new(Vec::new(), TypedExpr::TAdvance(name, ty)),
-                ),
+                Type::TLater(box ty, adv_clock) => {
+                    if let Some(tick_clock) = context.tick_clock() {
+                        if !clock_subsumed_by(&adv_clock, tick_clock, &context) {
+                            panic!(
+                                "clock error: `advance {name}` requires clock {adv_clock:?} to be a subset of tick clock {tick_clock:?}"
+                            );
+                        }
+                    }
+                    (
+                        ty.clone(),
+                        TypeOutput::new(Vec::new(), TypedExpr::TAdvance(name, ty)),
+                    )
+                }
                 expr => panic!("Cannot advance arbitrary expr {expr}"),
             },
             // TODO we must not allow functions under a tick
