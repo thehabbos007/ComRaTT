@@ -129,6 +129,14 @@ fn pure_run(vm: &mut VM<WasmtimeBackend>, fn_map: &HashMap<String, FunRef>, raw_
         FunRef::Wasm(idx) => Value::I32(vm.call_wasm(idx, &runtime_args)),
         FunRef::Bytecode(idx) => {
             let args: Vec<Value> = runtime_args.iter().map(|&v| Value::I32(v)).collect();
+            let num_args = args.len();
+            let param_count = vm.bytecode_fns[idx as usize].param_count as usize;
+            assert!(
+                num_args == param_count,
+                "Cannot call bytecode main function expecting {} args with {}",
+                param_count,
+                num_args
+            );
             vm.execute(idx, args)
         }
     };
