@@ -44,7 +44,8 @@
             # Wasm
             pkgs.wasmtime
             pkgs.wabt
-	    pkgs.lldb
+            pkgs.lldb
+            pkgs.wasm-bindgen-cli_0_2_100
           ];
           buildInputs = [
             toolchain
