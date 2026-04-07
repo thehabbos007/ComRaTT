@@ -1,4 +1,5 @@
 use crate::{
+    passes::Pass,
     source::Type,
     types::{
         build_function_type, find_free_vars, tfun_len_n, BindingContext, BindingKind, TypedExpr,
@@ -7,8 +8,6 @@ use crate::{
 };
 use itertools::Itertools;
 use std::collections::{HashMap, HashSet};
-
-use super::Pass;
 
 #[derive(Debug)]
 pub struct LambdaLift {

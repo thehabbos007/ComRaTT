@@ -7,11 +7,6 @@ edition = "2021"
 name = "comratt"
 path = "src/bin.rs"
 
-[[bin]]
-name = "vm_bin"
-path = "src/vm_bin.rs"
-
-
 [dependencies]
 comratt-vm = { path = "crates/comratt-vm" }
 anyhow = "1"

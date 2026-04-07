@@ -3,7 +3,6 @@ use std::fmt::Display;
 use itertools::Itertools;
 
 use crate::{
-    anf::{AExpr, AnfExpr, AnfProg, AnfToplevel, CExpr},
     source::*,
     types::{TypedExpr, TypedProg, TypedToplevel},
 };
@@ -300,93 +299,5 @@ impl Display for TypedProg {
         }
 
         writeln!(f)
-    }
-}
-
-impl Display for AnfProg {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for p in self.iter() {
-            writeln!(f, "{}", p)?;
-        }
-
-        writeln!(f)
-    }
-}
-impl Display for AnfToplevel {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            AnfToplevel::FunDef(name, params, body, ret_ty) => {
-                let param_str = params
-                    .iter()
-                    .map(|(name, ty)| format!("{}: {}", name, ty))
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                writeln!(f, "def {}({}) : {} =\n  {}", name, param_str, ret_ty, body)
-            }
-            AnfToplevel::Channel(name, typ) => writeln!(f, "channel {} : {};", name, typ),
-            AnfToplevel::Output(name, aexpr) => writeln!(f, "{} <- {};", name, aexpr),
-        }
-    }
-}
-
-impl Display for AnfExpr {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            AnfExpr::AExpr(a) => write!(f, "{}", a),
-            AnfExpr::CExp(c) => write!(f, "{}", c),
-            AnfExpr::Let(name, _, rhs, body) => {
-                write!(f, "let {} = {} in {}", name, rhs, body)
-            }
-        }
-    }
-}
-
-impl Display for AExpr {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            AExpr::Const(c, _) => write!(f, "{}", c),
-            // AExpr::Var(s, t) => write!(f, "{}: {}", s, t),
-            AExpr::Var(s, _) => write!(f, "{}", s),
-            AExpr::LaterClosure(body, clock, _) => {
-                write!(f, "(⨂{{{:?}}} -> {})", clock, body)
-            }
-            AExpr::Closure(args, body, _) => {
-                let args_str = args
-                    .iter()
-                    .map(|ty| (&ty).to_string())
-                    .collect::<Vec<_>>()
-                    .join(" ");
-                write!(f, "(Clos {} -> {})", args_str, body)
-            }
-            AExpr::Wait(name, _) => write!(f, "wait_ffi {}", &name),
-        }
-    }
-}
-
-impl Display for CExpr {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            CExpr::Prim(op, a1, a2, _) => write!(f, "{} {} {}", a1, op, a2),
-            CExpr::App(fun, args, _) => {
-                let args_str = args
-                    .iter()
-                    .map(|a| a.to_string())
-                    .collect::<Vec<_>>()
-                    .join(" ");
-                write!(f, "{} ({})", fun, args_str)
-            }
-            CExpr::Tuple(elems, _) => {
-                let elems_str = elems
-                    .iter()
-                    .map(|e| e.to_string())
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                write!(f, "({})", elems_str)
-            }
-            CExpr::Access(tup, idx, _) => write!(f, "{}.{}", tup, idx),
-            CExpr::IfThenElse(cond, then_branch, else_branch, _) => {
-                write!(f, "if {} then {} else {}", cond, then_branch, else_branch)
-            }
-        }
     }
 }
