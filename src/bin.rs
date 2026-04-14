@@ -5,8 +5,8 @@ use comratt::{
     hybrid::{self, FunRef},
     infer::infer_all,
     source::Prog,
-    wasm_backend::WasmtimeBackend,
 };
+use comratt_backend::wasmtime_backend::WasmtimeBackend;
 use comratt_vm::{Value, VM};
 
 fn main() {

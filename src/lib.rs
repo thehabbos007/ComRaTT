@@ -9,4 +9,3 @@ pub mod parse;
 pub mod passes;
 pub mod source;
 pub mod types;
-pub mod wasm_backend;
