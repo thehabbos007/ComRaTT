@@ -10,18 +10,11 @@ path = "src/bin.rs"
 [dependencies]
 comratt-vm = { path = "crates/comratt-vm" }
 anyhow = "1"
-annotate-snippets = "0.11"
-lexopt = "0.3"
-map_box = "0.2.2"
 itertools = "0.14.0"
 wasm-encoder = { version = "0.225.0", features = ["wasmparser"] }
-wasmparser = "0.225.0"
-wasmprinter = "0.225.0"
 wat = "1.225.0"
 ena = "0.14.3"
 wasmtime = "33"
 pest = { version = "2.6", features = ["miette-error"] }
 miette = "7.5"
 pest_derive = "2.6"
-tokio = { version = "1.44.2", features = ["full"] }
-getch = "0.3.1"
