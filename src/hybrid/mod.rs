@@ -6,6 +6,7 @@ use std::collections::{HashMap, HashSet};
 use comratt_vm::bytecode;
 
 use crate::{
+    passes::{steal_lambda::StealLambda, lambda_lift::LambdaLift, Pass},
     source::Type,
     types::{Sym, TypedExpr, TypedProg, TypedToplevel},
 };
@@ -74,10 +75,14 @@ pub fn compile(prog: &TypedProg) -> HybridProgram {
         if reactive_names.contains(&name) {
             reactive_fns.push((name, args, body));
         } else {
-            let fun_ref = FunRef::Wasm(pure_fns.len() as u32);
-            fn_map.insert(name.clone(), fun_ref);
             pure_fns.push((name, args, body));
         }
+    }
+
+    let pure_fns = run_pure_passes(pure_fns);
+
+    for (i, (name, _, _)) in pure_fns.iter().enumerate() {
+        fn_map.insert(name.clone(), FunRef::Wasm(i as u32));
     }
 
     let pure_fn_names: Vec<String> = pure_fns.iter().map(|(n, ..)| n.clone()).collect();
@@ -106,6 +111,33 @@ pub fn compile(prog: &TypedProg) -> HybridProgram {
         channel_indices,
         outputs,
     }
+}
+
+fn run_pure_passes(pure_fns: Vec<FunctionPrototype>) -> Vec<FunctionPrototype> {
+    let defs: Vec<TypedToplevel> = pure_fns
+        .into_iter()
+        .map(|(name, args, body)| {
+            let ret_ty = body.ty();
+            TypedToplevel::TFunDef(name, args, Box::new(body), ret_ty)
+        })
+        .collect();
+
+    let prog = TypedProg {
+        defs,
+        sorted_inputs: vec![],
+    };
+    let prog = StealLambda::new().run(prog);
+    let prog = LambdaLift::new().run(prog);
+
+    prog.defs
+        .into_iter()
+        .map(|d| {
+            let TypedToplevel::TFunDef(n, a, b, _) = d else {
+                unreachable!("should not have non-function.");
+            };
+            (n, a, *b)
+        })
+        .collect()
 }
 
 fn is_reactive(expr: &TypedExpr) -> bool {
