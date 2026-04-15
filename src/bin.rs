@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 use std::io::BufRead;
 
-use comratt::{
+use comratt_backend::wasmtime_backend::WasmtimeBackend;
+use comratt_compiler::{
     hybrid::{self, FunRef},
     infer::infer_all,
     source::Prog,
 };
-use comratt_backend::wasmtime_backend::WasmtimeBackend;
 use comratt_vm::{Value, VM};
 
 fn main() {

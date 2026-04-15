@@ -147,14 +147,8 @@ name = "comratt"
 version = "0.1.0"
 dependencies = [
  "comratt-backend",
+ "comratt-compiler",
  "comratt-vm",
- "ena",
- "itertools",
- "miette",
- "pest",
- "pest_derive",
- "wasm-encoder 0.225.0",
- "wat",
 ]
 
 [[package]]
@@ -164,6 +158,22 @@ dependencies = [
  "anyhow",
  "comratt-vm",
  "wasmtime",
+]
+
+[[package]]
+name = "comratt-compiler"
+version = "0.1.0"
+dependencies = [
+ "comratt-vm",
+ "ena",
+ "itertools",
+ "js-sys",
+ "miette",
+ "pest",
+ "pest_derive",
+ "wasm-bindgen",
+ "wasm-encoder 0.225.0",
+ "wat",
 ]
 
 [[package]]
