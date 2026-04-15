@@ -183,9 +183,13 @@ impl LambdaLift {
                 let orig_arg_len = args.len();
                 let (return_typ, _) = tfun_len_n(typ.clone(), orig_arg_len);
                 let mut new_args = free_vars.iter().cloned().collect_vec();
-                new_args.extend(args);
+                new_args.extend(args.iter().cloned());
 
-                let (lifted_body, mut lifted_defs) = self.lift_lambdas(*body, bound);
+                let mut inner_bound = bound;
+                for arg in &args {
+                    inner_bound.insert(arg.clone(), BindingKind::Local);
+                }
+                let (lifted_body, mut lifted_defs) = self.lift_lambdas(*body, inner_bound);
 
                 let lambda_def = TypedToplevel::TFunDef(
                     fun_name.clone(),
@@ -231,9 +235,13 @@ impl LambdaLift {
                 let orig_arg_len = args.len();
                 let (return_typ, _) = tfun_len_n(typ.clone(), orig_arg_len);
                 let mut new_args = free_vars.iter().cloned().collect_vec();
-                new_args.extend(args);
+                new_args.extend(args.iter().cloned());
 
-                let (lifted_body, mut lifted_defs) = self.lift_lambdas(*body, bound);
+                let mut inner_bound = bound;
+                for arg in &args {
+                    inner_bound.insert(arg.clone(), BindingKind::Local);
+                }
+                let (lifted_body, mut lifted_defs) = self.lift_lambdas(*body, inner_bound);
 
                 let lambda_def = TypedToplevel::TFunDef(
                     fun_name.clone(),
