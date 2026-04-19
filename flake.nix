@@ -38,6 +38,7 @@
             # Rust stuff
             rust-analyzer-unwrapped
             cargo-flamegraph
+            pkgs.cargo-machete
             # Nix stuff
             pkgs.nixd
             pkgs.nil
@@ -46,6 +47,10 @@
             pkgs.wabt
             pkgs.lldb
             pkgs.wasm-bindgen-cli_0_2_100
+	    # pest
+            pkgs.pest-ide-tools
+	    # http serve
+	    pkgs.miniserve
           ];
           buildInputs = [
             toolchain
