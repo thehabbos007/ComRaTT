@@ -46,7 +46,7 @@
             pkgs.wasmtime
             pkgs.wabt
             pkgs.lldb
-            pkgs.wasm-bindgen-cli_0_2_100
+            pkgs.wasm-bindgen-cli_0_2_108
 	    # pest
             pkgs.pest-ide-tools
 	    # http serve
