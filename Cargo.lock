@@ -171,6 +171,8 @@ dependencies = [
  "miette",
  "pest",
  "pest_derive",
+ "postcard",
+ "serde",
  "wasm-bindgen",
  "wasm-encoder 0.225.0",
  "wat",
@@ -181,6 +183,8 @@ name = "comratt-vm"
 version = "0.1.0"
 dependencies = [
  "js-sys",
+ "postcard",
+ "serde",
  "wasm-bindgen",
 ]
 

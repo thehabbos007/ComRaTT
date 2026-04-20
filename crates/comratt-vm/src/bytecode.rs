@@ -1,4 +1,4 @@
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, serde::Deserialize, serde::Serialize)]
 pub enum Op {
     ConstI32(i32),
     ConstBool(bool),
@@ -32,7 +32,7 @@ pub enum Op {
     Force,
 }
 
-#[derive(Debug)]
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
 pub struct Function {
     pub name: String,
     pub param_count: u16,
