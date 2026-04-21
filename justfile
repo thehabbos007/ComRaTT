@@ -22,10 +22,10 @@ build-comp:
  just build-wasm "comratt-compiler"
 
 bindgen-vm:
- wasm-bindgen target/wasm32-unknown-unknown/release/comratt_vm.wasm --out-dir bindgen-out --target web --no-typescript
+ wasm-bindgen target/wasm32-unknown-unknown/release/comratt_vm.wasm --out-dir bindgen-out/vm --target web --no-typescript
 
 bindgen-comp:
- wasm-bindgen target/wasm32-unknown-unknown/release/comratt_compiler.wasm --out-dir bindgen-out --target web --no-typescript
+ wasm-bindgen target/wasm32-unknown-unknown/release/comratt_compiler.wasm --out-dir bindgen-out/compiler --target web --no-typescript
 
 serve:
  miniserve . --port 8080

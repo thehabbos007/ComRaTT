@@ -1,4 +1,4 @@
-bindgen-out/*.js
+bindgen-out/*
 .vscode
 .direnv
 

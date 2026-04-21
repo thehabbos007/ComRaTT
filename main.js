@@ -1,5 +1,5 @@
-import init_comp, { compile } from './bindgen-out/comratt_compiler.js';
-import init_vm, { vm_entrypoint } from './bindgen-out/comratt_vm.js';
+import init_comp, { compile } from './bindgen-out/compiler/comratt_compiler.js';
+import init_vm, { WasmVM } from './bindgen-out/vm/comratt_vm.js';
 await init_comp();
 await init_vm();
 
@@ -13,6 +13,11 @@ def fact n =
 main : int -> int
 def main x = fact x;
 `;
+
+function wasmCallback(fun_index, ...args) {
+    console.log("callback", fun_index, args);
+}
+
 window.handleSubmit = function(event) {
     event.preventDefault();
 
@@ -27,7 +32,16 @@ window.handleSubmit = function(event) {
         const output_labels = program.output_labels();
         console.log("WASM functions:", pure_fn_names);
 
-        vm_entrypoint(serialized_bytecode, () => { console.log("Hi from js callback")});
+        if(output_labels.length != 0) {
+            console.log("Output labels exist, reactive loop")
+        } else {
+            console.log("Output labels dont exist, pure run")
+        }
+
+        const vm = new WasmVM(serialized_bytecode, wasmCallback);
+        // Test out the callback
+        vm.call_wasm(89, new Int32Array([5, 2]));
+
     } catch (e) {
         console.error("compile error:", e.message);
     }
