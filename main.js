@@ -14,11 +14,7 @@ main : int -> int
 def main x = fact x;
 `;
 
-function wasmCallback(fun_index, ...args) {
-    console.log("callback", fun_index, args);
-}
-
-window.handleSubmit = function(event) {
+window.handleSubmit = async function(event) {
     event.preventDefault();
 
     const source = document.getElementById("source").value;
@@ -38,9 +34,25 @@ window.handleSubmit = function(event) {
             console.log("Output labels dont exist, pure run")
         }
 
-        const vm = new WasmVM(serialized_bytecode, wasmCallback);
+
+        // Instantiate the wasm bytes from compiling source
+        const { instance, module } = await WebAssembly.instantiate(wasm_bytes);
+
+        // Define callback here to capture the functions exported from wasm
+        const callback = (fun_index, args) => {
+            // instance.exports is an object, so we cannot directly use fun_index in a stable way,
+            // hence the "lookup" via pure_fn_names
+            // TODO: We do have an issue when giving no args to a
+            // function that expects args e.g. if test_prog fact is called
+            // with no args, it returns 1.
+            const fun_name = pure_fn_names[fun_index];
+            const result = instance.exports[fun_name](args);
+            return result;
+        };
+
+        const vm = new WasmVM(serialized_bytecode, callback);
         // Test out the callback
-        vm.call_wasm(89, new Int32Array([5, 2]));
+        console.log(vm.call_wasm(1, new Int32Array([5])));
 
     } catch (e) {
         console.error("compile error:", e.message);
