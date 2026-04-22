@@ -17,9 +17,13 @@ def main x = fact x;
 window.handleSubmit = async function(event) {
     event.preventDefault();
 
-    const source = document.getElementById("source").value;
+    var source = document.getElementById("source").value;
 
     try {
+        if(source == "") {
+            source = test_prog;
+        }
+
         const program = compile(source);
         const pure_fn_names = program.pure_fn_names();
         const channel_names = program.channel_names();
