@@ -43,15 +43,17 @@ window.handleSubmit = async function(event) {
         const { instance, module } = await WebAssembly.instantiate(wasm_bytes);
 
         // Define callback here to capture the functions exported from wasm
-        const callback = (fun_index, args) => {
+        const callback = (fun_index, ...args) => {
             // instance.exports is an object, so we cannot directly use fun_index in a stable way,
             // hence the "lookup" via pure_fn_names
-            // TODO: We do have an issue when giving no args to a
-            // function that expects args e.g. if test_prog fact is called
-            // with no args, it returns 1.
             const fun_name = pure_fn_names[fun_index];
-            const result = instance.exports[fun_name](args);
-            return result;
+            const fun_to_call = instance.exports[fun_name];
+            if (args.length != fun_to_call.length)
+            {
+                console.log("Argument count mismatch when calling exported function '%s', got: %d, expected: %d", fun_name, args.length, fun_to_call.length);
+                throw new Error("Argument count mismatch");
+            }
+            return fun_to_call(args);
         };
 
         const vm = new WasmVM(serialized_bytecode, callback);
