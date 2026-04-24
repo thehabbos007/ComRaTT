@@ -1,13 +1,13 @@
 use std::collections::HashMap;
 use std::io::BufRead;
 
-use comratt_backend::wasmtime_backend::WasmtimeBackend;
 use comratt_compiler::{
     hybrid::{self, FunRef},
     infer::infer_all,
     source::Prog,
 };
 use comratt_vm::{Value, VM};
+use comratt_wasmtime_backend::wasmtime_backend::WasmtimeBackend;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();

@@ -146,18 +146,9 @@ dependencies = [
 name = "comratt"
 version = "0.1.0"
 dependencies = [
- "comratt-backend",
  "comratt-compiler",
  "comratt-vm",
-]
-
-[[package]]
-name = "comratt-backend"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "comratt-vm",
- "wasmtime",
+ "comratt-wasmtime-backend",
 ]
 
 [[package]]
@@ -186,6 +177,15 @@ dependencies = [
  "postcard",
  "serde",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "comratt-wasmtime-backend"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "comratt-vm",
+ "wasmtime",
 ]
 
 [[package]]

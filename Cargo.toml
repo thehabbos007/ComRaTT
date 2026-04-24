@@ -9,5 +9,5 @@ path = "src/bin.rs"
 
 [dependencies]
 comratt-vm = { path = "crates/comratt-vm" }
-comratt-backend = { path = "crates/comratt-backend" }
+comratt-wasmtime-backend = { path = "crates/comratt-wasmtime-backend" }
 comratt-compiler = { path = "crates/comratt-compiler" }
