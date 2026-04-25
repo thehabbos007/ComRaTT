@@ -68,8 +68,10 @@ fn reactive_loop(
         })
         .collect();
 
-    eprintln!("Channels: {channel_names:?}");
-    eprintln!("Int per line:");
+    for (i, name) in channel_names.iter().enumerate() {
+        eprintln!("  [{i}] {name}");
+    }
+    eprintln!("Input channel data: <channel_idx> <int_value>");
 
     let stdin = std::io::stdin();
     for line in stdin.lock().lines() {
@@ -78,17 +80,26 @@ fn reactive_loop(
         if line.is_empty() {
             continue;
         }
-        let val: i32 = match line.parse() {
-            Ok(v) => v,
-            Err(_) => {
-                eprintln!("expected integer, got {line:?}");
-                continue;
-            }
+        let mut parts = line.split_ascii_whitespace();
+        let (Some(idx_tok), Some(val_tok), None) = (parts.next(), parts.next(), parts.next())
+        else {
+            eprintln!("expected '<channel_idx> <value>', got {line:?}");
+            continue;
         };
+        let (Ok(channel_idx), Ok(val)) = (idx_tok.parse::<usize>(), val_tok.parse::<i32>()) else {
+            eprintln!("could not parse '{idx_tok} {val_tok}'");
+            continue;
+        };
+        if channel_idx >= vm.channels.len() {
+            eprintln!(
+                "channel {channel_idx}/{} out of range",
+                vm.channels.len()
+            );
+            continue;
+        }
 
-        // we just support one channel, 0, for now...
-        vm.channels[0] = val;
-        let channel_mask: u32 = 1;
+        vm.channels[channel_idx] = val;
+        let channel_mask: u32 = 1u32 << channel_idx;
 
         for (i, thunk) in thunks.iter_mut().enumerate() {
             if thunk.clock() & channel_mask == 0 {
