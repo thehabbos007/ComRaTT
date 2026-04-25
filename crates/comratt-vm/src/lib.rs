@@ -45,20 +45,17 @@ pub mod wasm_exports {
             match value {
                 Value::I32(n) => JsValue::from(n),
                 Value::Bool(b) => JsValue::from(b),
-                Value::Unit => todo!(),
-                Value::Thunk {
-                    fun_idx,
-                    captures,
-                    clock,
-                } => todo!(),
-                Value::Wait { channel_idx, clock } => todo!(),
-                Value::Tuple(values) => todo!(),
+                Value::Unit => JsValue::NULL,
+                rest => JsValue::from_str(&format!("Opaque value: {rest:?}")),
             }
         }
     }
 
     #[wasm_bindgen]
-    pub struct WasmVM(VM<JsWasmBackend>);
+    pub struct WasmVM {
+        vm: VM<JsWasmBackend>,
+        output_thunks: Vec<Value>,
+    }
 
     #[wasm_bindgen]
     impl WasmVM {
@@ -73,19 +70,75 @@ pub mod wasm_exports {
             let js_backend = JsWasmBackend { callback };
             let vm = VM::new(deserialized_bytecode_functions, js_backend);
 
-            Ok(WasmVM(vm))
+            Ok(WasmVM {
+                vm,
+                output_thunks: vec![],
+            })
         }
 
         #[wasm_bindgen]
         pub fn execute(&mut self, fn_idx: u32, args: &[i32]) -> JsValue {
-            self.0
+            self.vm
                 .execute(fn_idx, args.into_iter().map(|v| Value::I32(*v)).collect())
                 .into()
         }
 
         #[wasm_bindgen]
         pub fn call_wasm(&mut self, idx: u32, args: &[i32]) -> JsValue {
-            self.0.call_wasm(idx, args).into()
+            self.vm.call_wasm(idx, args).into()
+        }
+
+        #[wasm_bindgen]
+        pub fn init_channels(&mut self, count: usize) {
+            self.vm.init_channels(count);
+        }
+
+        #[wasm_bindgen]
+        pub fn init_output(&mut self, init_fn_idx: u32) {
+            self.output_thunks
+                .push(self.vm.execute(init_fn_idx, vec![]));
+        }
+
+        /// JS output `[output_idx, value]` row per output that ticked.
+        #[wasm_bindgen]
+        pub fn step(&mut self, channel_idx: usize, val: i32) -> js_sys::Array {
+            self.vm.channels[channel_idx] = val;
+            let mask: u32 = 1u32 << channel_idx;
+            let updates = js_sys::Array::new();
+            let WasmVM { vm, output_thunks } = self;
+            for (i, thunk) in output_thunks.iter_mut().enumerate() {
+                if thunk.clock() & mask == 0 {
+                    continue;
+                }
+                let stepped = match std::mem::replace(thunk, Value::Unit) {
+                    Value::Thunk {
+                        fun_idx, captures, ..
+                    } => vm.execute(fun_idx, captures.into_vec()),
+                    other => panic!("expected thunk at output {i}, got {other:?}"),
+                };
+                let row = js_sys::Array::new();
+                row.push(&JsValue::from(i as u32));
+                match stepped {
+                    Value::Tuple(elems) => {
+                        let mut elems = elems.into_vec();
+                        let next = elems.remove(1);
+                        row.push(&elems.remove(0).into());
+                        *thunk = next;
+                    }
+                    other => {
+                        row.push(&other.into());
+                    }
+                }
+                updates.push(&row);
+            }
+            updates
+        }
+
+        #[wasm_bindgen]
+        pub fn run_bytecode_main(&mut self, idx: u32, args: &[i32]) -> JsValue {
+            let args = args.iter().map(|&v| Value::I32(v)).collect();
+            let v = self.vm.execute(idx, args);
+            self.vm.force_all(v).into()
         }
     }
 }

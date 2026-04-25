@@ -1,9 +1,22 @@
 <!DOCTYPE html>
 <html>
-    <form onsubmit="handleSubmit(event)">
-        <textarea id="source" rows="10" cols="50" placeholder="Enter program"></textarea>
+    <form id="run">
+        <textarea id="source" rows="14" cols="60">
+fact : int -> int
+def fact n =
+  if n <= 1
+  then 1
+  else n * (fact (n - 1));
+
+main : int -> int
+def main x = fact x;
+</textarea>
         <br>
-        <button type="submit">Submit</button>
+        <input id="main_args" placeholder="main args *empty is ok*" size="50">
+        <br>
+        <button type="submit">Run</button>
     </form>
+    <div id="inputs"></div>
+    <pre id="log"></pre>
     <script type="module" src="main.js"></script>
 </html>

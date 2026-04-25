@@ -17,7 +17,7 @@ pub mod wasm_exports {
     use wasm_bindgen::prelude::*;
 
     use crate::{
-        hybrid::{self, HybridProgram},
+        hybrid::{self, FunRef, HybridProgram},
         infer::infer_all,
         source::Prog,
     };
@@ -58,6 +58,24 @@ pub mod wasm_exports {
                 .iter()
                 .map(|n| JsValue::from_str(n))
                 .collect()
+        }
+
+        pub fn output_init_indices(&self) -> Vec<u32> {
+            (0..self.0.outputs.len())
+                .map(|i| format!("#output_init_{i}"))
+                .map(|output_name| match self.0.fn_map.get(&output_name) {
+                    Some(FunRef::Bytecode(idx)) => *idx,
+                    other => panic!("output init: {output_name:?} is a: {other:?}"),
+                })
+                .collect()
+        }
+
+        /// None if no main function is present/main is wasm-compiled
+        pub fn main_bytecode_idx(&self) -> Option<u32> {
+            match self.0.fn_map.get("main")? {
+                FunRef::Bytecode(idx) => Some(*idx),
+                FunRef::Wasm(_) => None,
+            }
         }
     }
 
