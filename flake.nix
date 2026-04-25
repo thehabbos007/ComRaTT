@@ -9,7 +9,6 @@
       url = "github:oxalica/rust-overlay";
       inputs = {
         nixpkgs.follows = "nixpkgs";
-        flake-utils.follows = "flake-utils";
       };
     };
   };
@@ -51,6 +50,7 @@
             pkgs.pest-ide-tools
 	    # http serve
 	    pkgs.miniserve
+					pkgs.just
           ];
           buildInputs = [
             toolchain
