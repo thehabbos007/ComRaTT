@@ -1,18 +1,7 @@
 #[derive(Debug, Clone, Copy, serde::Deserialize, serde::Serialize)]
 pub enum Op {
-    ConstI32(i32),
-    ConstBool(bool),
-    ConstUnit,
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Eq,
-    Neq,
-    Lt,
-    Lte,
-    Gt,
-    Gte,
+    ConstI32(i32), ConstBool(bool), ConstUnit,
+    Add, Sub, Mul, Div, Eq, Neq, Lt, Lte, Gt, Gte, BitOr,
     Load(u16),
     Store(u16),
     JumpIfFalse(u32),
@@ -23,7 +12,6 @@ pub enum Op {
     ConstClock(u32),
     MakeTuple(u8),
     AccessTuple(u8),
-    BitOr,
     Return,
     /// (Function index, capture count)
     Thunk(u32, u8),

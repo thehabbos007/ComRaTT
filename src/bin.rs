@@ -15,7 +15,11 @@ fn main() {
     let source_path = &args[1];
     let source = std::fs::read_to_string(source_path).expect("failed to read file");
 
-    let prog = Prog::parse(&source).expect("parse error");
+    let prog = Prog::parse(&source).unwrap_or_else(|e| {
+        eprintln!("parse error!\n {e}");
+        std::process::exit(1);
+    });
+
     let typed = infer_all(prog);
     let compiled = hybrid::compile(&typed);
 
@@ -91,10 +95,7 @@ fn reactive_loop(
             continue;
         };
         if channel_idx >= vm.channels.len() {
-            eprintln!(
-                "channel {channel_idx}/{} out of range",
-                vm.channels.len()
-            );
+            eprintln!("channel {channel_idx}/{} out of range", vm.channels.len());
             continue;
         }
 

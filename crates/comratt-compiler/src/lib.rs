@@ -81,7 +81,7 @@ pub mod wasm_exports {
 
     #[wasm_bindgen]
     pub fn compile(source: &str) -> Result<BrowserProgram, JsError> {
-        let prog = Prog::parse(&source).expect("parse error");
+        let prog = Prog::parse(&source).map_err(|e| JsError::new(&e))?;
         let typed = infer_all(prog);
         let compiled = hybrid::compile(&typed);
 

@@ -7,7 +7,7 @@ toplevel = _{
 function_args = { identifier* }
 
 function_def = {
-    identifier ~ ":" ~ type_expr ~ "def" ~ identifier ~ function_args ~ "=" ~ expr
+    identifier ~ ":" ~ type_expr ~ "def" ~ identifier ~ function_args ~ eq ~ expr
 }
 channel_def  = { "chan" ~ identifier ~ ":" ~ type_expr }
 output_def   = { identifier ~ "<-" ~ expr }
@@ -40,9 +40,9 @@ clock_wait  = { "wait" ~ (!"cl(") ~ identifier }
 clock_base  = { "cl(" ~ (clock_wait | identifier) ~ ")" | "(" ~ clock_base ~ ")" }
 clock_expr  = { clock_base ~ (clock_union ~ clock_base)* }
 
-let_expr     = { "let" ~ identifier ~ "=" ~ expr ~ "in" ~ expr }
+let_expr     = { "let" ~ identifier ~ eq ~ expr ~ in_ ~ expr }
 fun_expr     = { "fun" ~ function_args ~ "->" ~ expr }
-if_expr      = { "if" ~ expr ~ "then" ~ expr ~ "else" ~ expr }
+if_expr      = { "if" ~ expr ~ then ~ expr ~ else_ ~ expr }
 delay_expr   = { "delay" ~ "{" ~ clock_expr ~ "}" ~ expr }
 advance_expr = { "advance" ~ identifier }
 wait_expr    = { "wait" ~ identifier }
@@ -92,6 +92,11 @@ integer    = @{ "-"? ~ ("0" | ASCII_NONZERO_DIGIT ~ ASCII_DIGIT*) }
 true_lit   =  { "true" }
 false_lit  =  { "false" }
 unit_lit   =  { "()" }
+
+eq    = @{ "=" }
+in_   = @{ "in" }
+then  = @{ "then" }
+else_ = @{ "else" }
 
 keyword = _{
     ( "def"

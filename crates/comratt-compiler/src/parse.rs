@@ -2,9 +2,7 @@ use std::{assert_matches::assert_matches, collections::BTreeSet, sync::LazyLock}
 
 use itertools::Itertools;
 use pest::{
-    iterators::{Pair, Pairs},
-    pratt_parser::{Assoc, Op, PrattParser},
-    Parser,
+    Parser, error::ErrorVariant::ParsingError, iterators::{Pair, Pairs}, pratt_parser::{Assoc, Op, PrattParser}
 };
 use pest_derive::Parser;
 
@@ -38,9 +36,15 @@ impl Prog {
     pub fn parse(input: &str) -> Result<Prog, String> {
         let pairs = match ComRaTTParser::parse(Rule::program, input) {
             Ok(pairs) => pairs,
-            Err(error) => {
-                let error = miette::Error::new(error.into_miette());
-                return Err(format!("{error:?}"));
+            Err(mut error) => {
+                if let ParsingError { positives, negatives } = &mut error.variant {
+                    let mut seen = std::collections::HashSet::new();
+                    positives.retain(|r| seen.insert(rule_label(r)));
+                    seen.clear();
+                    negatives.retain(|r| seen.insert(rule_label(r)));
+                }
+                let error = error.renamed_rules(rule_label);
+                return Err(format!("{:?}", miette::Error::new(error.into_miette())));
             }
         };
 
@@ -67,6 +71,8 @@ impl Prog {
                         .map(|arg| arg.as_str().to_string())
                         .collect_vec();
 
+                    // skip the eq named match for =
+                    let _eq = pairs.next();
                     // The last item should be the expression
                     let expr = parse_expression(pairs.next().unwrap().into_inner());
 
@@ -90,6 +96,54 @@ impl Prog {
         }
 
         Ok(Prog(toplevels))
+    }
+}
+
+fn rule_label(rule: &Rule) -> String {
+    use Rule::*;
+    match rule {
+        expr | term | tuple_access => "expression".into(),
+        type_expr => "type".into(),
+        clock_expr | clock_base => "clock expression".into(),
+        function_args => "argument list".into(),
+        function_def => "function definition".into(),
+        channel_def => "channel declaration".into(),
+        output_def => "output binding".into(),
+        identifier => "identifier".into(),
+        integer => "integer".into(),
+
+        let_expr => "`let`".into(),
+        fun_expr => "`fun`".into(),
+        if_expr => "`if`".into(),
+        delay_expr => "`delay`".into(),
+        advance_expr => "`advance`".into(),
+        wait_expr | clock_wait => "`wait`".into(),
+        box_expr => "`box`".into(),
+        unbox_expr => "`unbox`".into(),
+        never_expr => "`never`".into(),
+        parenthesis_or_tuple | parenthesis_or_tuple_type => "`(`".into(),
+        true_lit => "`true`".into(),
+        false_lit => "`false`".into(),
+        unit_lit | unit_type => "`()`".into(),
+        int_type => "`int`".into(),
+        bool_type => "`bool`".into(),
+        later => "`O`".into(),
+        signal => "`Sig`".into(),
+        box_type => "`Box`".into(),
+
+        arrow => "`->`".into(),
+        eq => "`=`".into(),
+        in_ => "`in`".into(),
+        then => "`then`".into(),
+        else_ => "`else`".into(),
+        clock_union => "`U`".into(),
+        sig_cons => "`::`".into(),
+        equality_op => "`=` or `<>`".into(),
+        relational_op => "`<`, `<=`, `>`, or `>=`".into(),
+        add_op => "`+` or `-`".into(),
+        mul_op => "`*` or `/`".into(),
+
+        other => format!("{other:?}"),
     }
 }
 
@@ -187,7 +241,9 @@ fn parse_expression_atom(pair: Pair<Rule>) -> Expr {
         Rule::let_expr => {
             let mut pairs = pair.into_inner();
             let var_name = pairs.next().unwrap().as_str().to_string();
+            let _eq = pairs.next();
             let bind_expr = parse_expression(pairs.next().unwrap().into_inner());
+            let _in = pairs.next();
             let body_expr = parse_expression(pairs.next().unwrap().into_inner());
             Expr::Let(var_name, Box::new(bind_expr), Box::new(body_expr))
         }
@@ -209,7 +265,9 @@ fn parse_expression_atom(pair: Pair<Rule>) -> Expr {
         Rule::if_expr => {
             let mut pairs = pair.into_inner();
             let cond = parse_expression(pairs.next().unwrap().into_inner());
+            let _then = pairs.next();
             let then_branch = parse_expression(pairs.next().unwrap().into_inner());
+            let _else = pairs.next();
             let else_branch = parse_expression(pairs.next().unwrap().into_inner());
             Expr::IfThenElse(Box::new(cond), Box::new(then_branch), Box::new(else_branch))
         }
