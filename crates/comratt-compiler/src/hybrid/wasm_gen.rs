@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 use wasm_encoder::{
-    BlockType, CodeSection, ExportKind, ExportSection, Function, FunctionSection, GlobalSection,
-    GlobalType, Instruction, MemorySection, MemoryType, Module, TypeSection, ValType,
+    BlockType, CodeSection, EntityType, ExportKind, ExportSection, Function, FunctionSection,
+    GlobalSection, GlobalType, ImportSection, Instruction, MemorySection, MemoryType, Module,
+    TypeSection, ValType,
 };
 
 use crate::source::{Binop, Const};
@@ -10,6 +11,10 @@ use crate::types::{collect_local_names, max_tuple_depth, TypedExpr};
 use super::FunctionPrototype;
 
 const HEAP_PTR_GLOBAL: u32 = 0;
+
+const CLOSURE_NEW: u32 = 0;
+const CLOSURE_APPLY: u32 = 1;
+const IMPORT_COUNT: u32 = 2;
 
 pub fn compile_pure(fns: &[FunctionPrototype]) -> Vec<u8> {
     let mut module = Module::new();
@@ -38,17 +43,28 @@ pub fn compile_pure(fns: &[FunctionPrototype]) -> Vec<u8> {
         &wasm_encoder::ConstExpr::i32_const(0),
     );
 
+    let mut imports = ImportSection::new();
+    types
+        .ty()
+        .function(vec![ValType::I32, ValType::I32], vec![ValType::I32]);
+    imports.import("env", "closure_new", EntityType::Function(0));
+    imports.import("env", "closure_apply", EntityType::Function(0));
+
     let fn_indices: HashMap<&str, u32> = fns
         .iter()
         .enumerate()
         .map(|(i, (name, _, _))| (name.as_str(), i as u32))
         .collect();
+    let fn_arities: HashMap<&str, u32> = fns
+        .iter()
+        .map(|(name, params, _)| (name.as_str(), params.len() as u32))
+        .collect();
 
     for (i, (name, params, body)) in fns.iter().enumerate() {
         let param_types: Vec<ValType> = params.iter().map(|_| ValType::I32).collect();
         types.ty().function(param_types, vec![ValType::I32]);
-        functions.function(i as u32);
-        exports.export(name, ExportKind::Func, i as u32);
+        functions.function(i as u32 + 1);
+        exports.export(name, ExportKind::Func, i as u32 + IMPORT_COUNT);
 
         let mut locals_map: HashMap<&str, u32> = HashMap::new();
         for (j, (pname, _)) in params.iter().enumerate() {
@@ -80,6 +96,7 @@ pub fn compile_pure(fns: &[FunctionPrototype]) -> Vec<u8> {
         let mut ctx = EmitCtx {
             locals_map: &locals_map,
             fn_indices: &fn_indices,
+            fn_arities: &fn_arities,
             tuple_base_start,
             tuple_depth: 0,
         };
@@ -105,6 +122,7 @@ pub fn compile_pure(fns: &[FunctionPrototype]) -> Vec<u8> {
     }
 
     module.section(&types);
+    module.section(&imports);
     module.section(&functions);
     module.section(&memory);
     module.section(&globals);
@@ -116,11 +134,18 @@ pub fn compile_pure(fns: &[FunctionPrototype]) -> Vec<u8> {
 struct EmitCtx<'a> {
     locals_map: &'a HashMap<&'a str, u32>,
     fn_indices: &'a HashMap<&'a str, u32>,
+    fn_arities: &'a HashMap<&'a str, u32>,
     tuple_base_start: u32,
     tuple_depth: u32,
 }
 
 impl EmitCtx<'_> {
+    fn emit_closure_new(&self, func: &mut Function, name: &str, idx: u32) {
+        func.instruction(&Instruction::I32Const(idx as i32));
+        func.instruction(&Instruction::I32Const(self.fn_arities[name] as i32));
+        func.instruction(&Instruction::Call(CLOSURE_NEW));
+    }
+
     fn emit_expr(&mut self, func: &mut Function, expr: &TypedExpr) {
         match expr {
             TypedExpr::TConst(Const::CInt(n), _) => {
@@ -136,6 +161,8 @@ impl EmitCtx<'_> {
             TypedExpr::TName(name, _) => {
                 if let Some(&idx) = self.locals_map.get(name.as_str()) {
                     func.instruction(&Instruction::LocalGet(idx));
+                } else if let Some(&idx) = self.fn_indices.get(name.as_str()) {
+                    self.emit_closure_new(func, name, idx);
                 } else {
                     panic!("unbound variable in WASM: {name}");
                 }
@@ -175,17 +202,20 @@ impl EmitCtx<'_> {
             }
 
             TypedExpr::TApp(f, args, _) => {
-                if let TypedExpr::TName(name, _) = f.as_ref() {
+                if let TypedExpr::TName(name, _) = f.as_ref()
+                    && let Some(&idx) = self.fn_indices.get(name.as_str())
+                    && args.len() as u32 == self.fn_arities[name.as_str()]
+                {
                     for a in args {
                         self.emit_expr(func, a);
                     }
-                    let idx = self
-                        .fn_indices
-                        .get(name.as_str())
-                        .unwrap_or_else(|| panic!("unknown function in WASM: {name}"));
-                    func.instruction(&Instruction::Call(*idx));
+                    func.instruction(&Instruction::Call(idx + IMPORT_COUNT));
                 } else {
-                    panic!("unsupported application in WASM: {f:?}");
+                    self.emit_expr(func, f);
+                    for a in args {
+                        self.emit_expr(func, a);
+                        func.instruction(&Instruction::Call(CLOSURE_APPLY));
+                    }
                 }
             }
 

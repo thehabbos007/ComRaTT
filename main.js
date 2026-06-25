@@ -28,7 +28,25 @@ document.getElementById('run').addEventListener('submit', async (event) => {
     const main_bc = program.main_bytecode_idx();
 
     // Instantiate the wasm bytes from compiling source
-    const { instance } = await WebAssembly.instantiate(program.wasm_bytes());
+    const closures = [];
+    const env = {
+        closure_new: (fn_idx, arity) => {
+            const handle = closures.length;
+            closures.push({ fn_idx, arity, args: [] });
+            return handle;
+        },
+        closure_apply: (handle, arg) => {
+            const c = closures[handle];
+            const args = c.args.concat([arg]);
+            if (args.length === c.arity) {
+                return instance.exports[pure_fn_names[c.fn_idx]](...args);
+            }
+            const new_handle = closures.length;
+            closures.push({ fn_idx: c.fn_idx, arity: c.arity, args });
+            return new_handle;
+        },
+    };
+    const { instance } = await WebAssembly.instantiate(program.wasm_bytes(), { env });
     // Define callback here to capture the functions exported from wasm
     const callback = (fun_index, ...args) =>
         // instance.exports is an object, so we cannot directly use fun_index in a stable way,

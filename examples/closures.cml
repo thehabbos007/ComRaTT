@@ -1,0 +1,11 @@
+add : int -> int -> int
+def add x y = x + y;
+
+add3 : int -> int -> int -> int
+def add3 x y z = x + y + z;
+
+main : int -> int
+def main x =
+    let f = add x in
+    let g = add3 x 1 in
+    (f 10) + (g 2);
