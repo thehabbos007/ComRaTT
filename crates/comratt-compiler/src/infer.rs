@@ -2054,4 +2054,52 @@ mod tests {
         let (_, texp) = inference.substitute_texp(output.texp);
         assert_eq!(ty, fun_type);
     }
+
+    #[test]
+    fn infer_let_bound_hof_function_application_tuple_access() {
+        let tuple_fn_type = Type::TFun(
+            Type::TInt.b(),
+            Type::TProduct(vec![Type::TInt, Type::TBool]).b(),
+        );
+        let result_type = Type::TProduct(vec![Type::TInt, Type::TBool]);
+
+        let expr = Expr::Let(
+            "t".to_owned(),
+            Expr::App(
+                Expr::Var("tuple".to_owned()).b(),
+                vec![Expr::Const(Const::CInt(42))],
+            )
+            .b(),
+            Expr::Access(Expr::Var("t".to_owned()).b(), 0).b(),
+        );
+
+        let context = HashMap::from([("tuple".to_owned(), (tuple_fn_type.clone(), None))]);
+
+        let mut inference = Inference {
+            unification_table: InPlaceUnificationTable::default(),
+        };
+
+        let (ty, output) = inference.infer(BindingContext::Bindings(context).into(), expr);
+
+        assert_eq!(ty, Type::TInt);
+
+        let expected = TypedExpr::TLet(
+            "t".to_owned(),
+            Type::TInt,
+            TypedExpr::TApp(
+                TypedExpr::TName("tuple".to_owned(), tuple_fn_type).b(),
+                vec![TypedExpr::TConst(Const::CInt(42), Type::TInt)],
+                result_type.clone(),
+            )
+            .b(),
+            TypedExpr::TAccess(
+                TypedExpr::TName("t".to_owned(), result_type).b(),
+                0,
+                Type::TInt,
+            )
+            .b(),
+        );
+
+        assert_eq!(output.texp, expected);
+    }
 }
