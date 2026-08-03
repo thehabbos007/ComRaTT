@@ -487,6 +487,11 @@ impl Inference {
             }
             Expr::Let(name, box rhs, body) => {
                 let (rhs_type, mut rhs_output) = self.infer(context.clone(), rhs);
+                self.unification(&rhs_output.constraints)
+                    .expect("Failed to solve Let binding RHS constraints");
+                let (_, rhs_type) = self.substitute(rhs_type);
+                let (_, rhs_texp) = self.substitute_texp(rhs_output.texp);
+
                 let _ = context.insert_binding(name.clone(), rhs_type);
                 let (body_type, mut body_output) = self.infer(context, *body);
                 let mut constraints = Vec::new();
@@ -496,7 +501,7 @@ impl Inference {
                     body_type.clone(),
                     TypeOutput::new(
                         constraints,
-                        TypedExpr::TLet(name, body_type, rhs_output.texp.b(), body_output.texp.b()),
+                        TypedExpr::TLet(name, body_type, rhs_texp.b(), body_output.texp.b()),
                     ),
                 )
             }
