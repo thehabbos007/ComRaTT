@@ -1,0 +1,7 @@
+tuple : (int -> (int * bool))
+def tuple = fun x -> (x, true);
+
+main : int
+def main =
+    let t = tuple 42 in
+    t.0;
