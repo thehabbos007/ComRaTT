@@ -1387,6 +1387,31 @@ mod tests {
         let (ty, output) = inference.infer(context.into(), expr);
     }
 
+    // Test case based on 'examples/sigrec.cml'
+    // let kb_v = wait keyboard in
+    // delay {cl(kb_v)} (
+    //     advance kb_v
+    // )
+    #[test]
+    fn infer_advance_name_bound_to_clockof_matching_tick() {
+        let wait_clock = ClockExpr::Wait("keyboard".to_owned());
+        let wait = Expr::Wait("keyboard".to_owned());
+        let mut context = Context::default();
+        context.insert_channel("keyboard".to_owned(), Type::TInt);
+
+        let delay = Expr::Delay(
+            Expr::Advance("kb_v".to_owned()).b(),
+            ClockExpr::Cl("kb_v".to_owned()).into(),
+        );
+        let expr = Expr::Let("kb_v".to_owned(), wait.b(), delay.b());
+
+        let mut inference = Inference {
+            unification_table: InPlaceUnificationTable::default(),
+        };
+
+        let (ty, output) = inference.infer(context.into(), expr);
+    }
+
     #[test]
     #[should_panic]
     fn infer_advance_name_bound_to_thunk_in_context_but_no_tick() {
