@@ -201,40 +201,68 @@ impl From<HashMap<Sym, Binding>> for BindingContext {
     }
 }
 
-/// Returns true if inner ⊆ outer
-fn clock_subsumed_by(inner: &ClockExprs, outer: &ClockExprs, ctx: &Context) -> bool {
-    // never-clock always subsumes
-    if inner.is_empty() {
-        return true;
-    };
+/// Returns true if inner exactly matches outer
+// Comparing lengths here does not make sense as something like
+// inner = { Cl("x") } and outer = { Wait("k1"), Wait("k2") }
+// with x bound to a delayed computation depending on the clock consisting of { Wait("k1"), Wait("k2") }
+// is semantically the same.
+fn clock_exactly_matches(inner: &ClockExprs, outer: &ClockExprs, ctx: &Context) -> bool {
+    // Canonicalize/resolve the clocks for semantic comparison
+    let resolved_inner: ClockExprs = inner.iter().flat_map(|ce| resolve_clock(ce, ctx)).collect();
+    let resolved_outer: ClockExprs = outer.iter().flat_map(|ce| resolve_clock(ce, ctx)).collect();
 
-    // can't determine statically
-    if inner.contains(&ClockExpr::Symbolic) || outer.contains(&ClockExpr::Symbolic) {
+    // Can't determine symbolic clocks statically
+    // true is used to pass typing and let it be determined at runtime
+    if resolved_inner.contains(&ClockExpr::Symbolic)
+        || resolved_outer.contains(&ClockExpr::Symbolic)
+    {
         return true;
     }
 
-    inner.iter().all(|ce| {
-        // cl(x) where x is non-delay (never) is easy to subsume
-        if let ClockExpr::Cl(x) = ce {
-            if let Some((ty, _)) = ctx.get_binding(x) {
-                if !matches!(ty, Type::TLater(..)) {
-                    return true;
-                }
-            }
-        }
-        if outer.contains(ce) {
-            return true;
-        }
+    resolved_inner == resolved_outer
+}
 
-        outer.iter().any(|outer_ce| {
-            if let ClockExpr::Cl(v) = outer_ce {
-                if let Some((Type::TLater(_, v_clock), _)) = ctx.get_binding(v) {
-                    return v_clock.contains(ce);
-                }
+fn resolve_clock(ce: &ClockExpr, ctx: &Context) -> ClockExprs {
+    // Keep track of the names visited on the current recursion path
+    let mut resolving = HashSet::new();
+    resolve_clock_inner(ce, ctx, &mut resolving)
+}
+
+fn resolve_clock_inner(
+    ce: &ClockExpr,
+    ctx: &Context,
+    resolving: &mut HashSet<String>,
+) -> ClockExprs {
+    // Only Cl(v) expressions are interesting to examine
+    match ce {
+        ClockExpr::Symbolic | ClockExpr::Wait(_) => ce.clone().into(),
+        ClockExpr::Cl(v) => {
+            // Prevent cycles by skipping names we've seen before in this
+            // recursion path
+            if !resolving.insert(v.clone()) {
+                // TODO: should we handle a cycle this way? or should it be rejected?
+                return ce.clone().into();
             }
-            false
-        })
-    })
+
+            // Look up the binding
+            let resolved = match ctx.get_binding(v) {
+                // Name is bound to a delayed expression, resolve the clock recursively
+                Some((Type::TLater(_, clock), _)) => clock
+                    .iter()
+                    .flat_map(|ce| resolve_clock_inner(ce, ctx, resolving))
+                    .collect(),
+                // Name is not bound to a delayed expression aka there is no clock aka empty clock
+                Some(_) => ClockExprs::new(),
+                // TODO: Name is not bound, is that an error?
+                None => todo!("Failed to look up binding '{}' during clock resolution", v),
+            };
+
+            // Remove v as to avoid skipping it later on other branches
+            resolving.remove(v);
+
+            resolved
+        }
+    }
 }
 
 struct Inference {
@@ -452,9 +480,9 @@ impl Inference {
             Expr::Advance(name) => match context.attempt_advance(&name) {
                 Type::TLater(box ty, adv_clock) => {
                     if let Some(tick_clock) = context.tick_clock() {
-                        if !clock_subsumed_by(&adv_clock, tick_clock, &context) {
+                        if !clock_exactly_matches(&adv_clock, tick_clock, &context) {
                             panic!(
-                                "clock error: `advance {name}` requires clock {adv_clock:?} to be a subset of tick clock {tick_clock:?}"
+                                "clock error: `advance {name}` requires clock {adv_clock:?} to be an exact match of tick clock {tick_clock:?}"
                             );
                         }
                     }
