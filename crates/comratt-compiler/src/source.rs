@@ -59,6 +59,7 @@ pub enum Expr {
     IfThenElse(Box<Expr>, Box<Expr>, Box<Expr>),
     Delay(Box<Expr>, ClockExprs),
     Advance(String),
+    Select(String, String, Box<[(String, String, Expr); 3]>),
     Wait(String),
     Tuple(Vec<Expr>),
     Sig(Box<Expr>, Box<Expr>),

@@ -33,6 +33,8 @@ pub enum TypedExpr {
     TDelay(Box<TypedExpr>, ClockExprs, Type),
     /// Advance a delayed value with (name, result type => inner type after unwrapping TLater)
     TAdvance(Sym, Type),
+    /// Select on two delayed values with (first name, second name, [left, right, both] branches as (binder, binder, body), result type)
+    TSelect(Sym, Sym, Box<[(Sym, Sym, TypedExpr); 3]>, Type),
 }
 
 impl TypedExpr {
@@ -54,6 +56,7 @@ impl TypedExpr {
             TypedExpr::TWait(_, ty) => ty.clone(),
             TypedExpr::TDelay(_, _, ty) => ty.clone(),
             TypedExpr::TAdvance(_, ty) => ty.clone(),
+            TypedExpr::TSelect(_, _, _, ty) => ty.clone(),
         }
     }
 }

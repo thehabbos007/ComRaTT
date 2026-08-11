@@ -46,6 +46,13 @@ if_expr      = { "if" ~ expr ~ then ~ expr ~ else_ ~ expr }
 delay_expr   = { "delay" ~ "{" ~ clock_expr ~ "}" ~ expr }
 advance_expr = { "advance" ~ identifier }
 wait_expr    = { "wait" ~ identifier }
+select_expr  = {
+    "select" ~ identifier ~ identifier ~ "{"
+      ~ left_ ~ identifier ~ identifier ~ "->" ~ expr
+      ~ right_ ~ identifier ~ identifier ~ "->" ~ expr
+      ~ both_ ~ identifier ~ identifier ~ "->" ~ expr
+    ~ "}"
+}
 box_expr     = { "box" ~ expr }
 unbox_expr   = { "unbox" ~ expr }
 never_expr   = { "never"}
@@ -57,6 +64,7 @@ primary = _{
   | delay_expr
   | advance_expr
   | wait_expr
+  | select_expr
   | parenthesis_or_tuple
   | integer
   | true_lit
@@ -93,10 +101,13 @@ true_lit   =  { "true" }
 false_lit  =  { "false" }
 unit_lit   =  { "()" }
 
-eq    = @{ "=" }
-in_   = @{ "in" }
-then  = @{ "then" }
-else_ = @{ "else" }
+eq     = @{ "=" }
+in_    = @{ "in" }
+then   = @{ "then" }
+else_  = @{ "else" }
+left_  = @{ "left" }
+right_ = @{ "right" }
+both_  = @{ "both" }
 
 keyword = _{
     ( "def"
@@ -118,6 +129,10 @@ keyword = _{
     | "Sig"
     | "O"
     | "never"
+    | "select"
+    | "left"
+    | "right"
+    | "both"
     ) ~ !(ASCII_ALPHANUMERIC | "_")
 }
 

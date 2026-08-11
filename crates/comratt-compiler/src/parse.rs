@@ -118,6 +118,10 @@ fn rule_label(rule: &Rule) -> String {
         delay_expr => "`delay`".into(),
         advance_expr => "`advance`".into(),
         wait_expr | clock_wait => "`wait`".into(),
+        select_expr => "`select`".into(),
+        left_ => "`left`".into(),
+        right_ => "`right`".into(),
+        both_ => "`both`".into(),
         box_expr => "`box`".into(),
         unbox_expr => "`unbox`".into(),
         never_expr => "`never`".into(),
@@ -286,6 +290,19 @@ fn parse_expression_atom(pair: Pair<Rule>) -> Expr {
         Rule::wait_expr => {
             let channel = pair.into_inner().next().unwrap().as_str().to_string();
             Expr::Wait(channel)
+        }
+        Rule::select_expr => {
+            let mut pairs = pair.into_inner();
+            let fst = pairs.next().unwrap().as_str().to_string();
+            let snd = pairs.next().unwrap().as_str().to_string();
+            let mut arm = || {
+                let _kw = pairs.next();
+                let a = pairs.next().unwrap().as_str().to_string();
+                let b = pairs.next().unwrap().as_str().to_string();
+                let body = parse_expression(pairs.next().unwrap().into_inner());
+                (a, b, body)
+            };
+            Expr::Select(fst, snd, Box::new([arm(), arm(), arm()]))
         }
         Rule::parenthesis_or_tuple => {
             let mut exprs = pair
