@@ -343,6 +343,15 @@ impl LambdaLift {
 
                 (TypedExpr::TTuple(lifted_exprs, typ), all_defs)
             }
+            TypedExpr::TSelect(fst, snd, arms, typ) => {
+                let mut defs = vec![];
+                let arms = (*arms).map(|(a, b, body)| {
+                    let (lifted, arm_defs) = self.lift_lambdas(body, bound.clone());
+                    defs.extend(arm_defs);
+                    (a, b, lifted)
+                });
+                (TypedExpr::TSelect(fst, snd, Box::new(arms), typ), defs)
+            }
             TypedExpr::TAccess(expr, idx, typ) => {
                 let (lifted_expr, defs) = self.lift_lambdas(*expr, bound);
                 (TypedExpr::TAccess(Box::new(lifted_expr), idx, typ), defs)

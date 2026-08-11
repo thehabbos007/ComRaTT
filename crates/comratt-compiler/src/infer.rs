@@ -493,6 +493,7 @@ impl Inference {
                 }
                 expr => panic!("Cannot advance arbitrary expr {expr}"),
             },
+            Expr::Select(..) => todo!("select typing"),
             // TODO we must not allow functions under a tick
             // also, if there is a tick we need to insert to the right of the tick
             // also, if the binding rhs is a delayed computation, we need to also
@@ -973,6 +974,7 @@ impl Inference {
                 let (unbound, ty) = self.substitute(ty);
                 (unbound, TypedExpr::TAdvance(name, ty))
             }
+            TypedExpr::TSelect(..) => todo!("select substitution"),
         }
     }
 

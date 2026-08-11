@@ -175,6 +175,8 @@ impl Compiler {
                 panic!("unsupported in hybrid bytecode: TLam (use top-level functions)")
             }
 
+            TypedExpr::TSelect(..) => todo!("select codegen"),
+
             other => panic!("unsupported in hybrid bytecode: {other:?}"),
         }
     }

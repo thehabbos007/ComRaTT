@@ -35,6 +35,14 @@ impl TypedExpr {
             TypedExpr::TWait(name, _) => Expr::Wait(name.clone()),
             TypedExpr::TDelay(body, clock, _) => Expr::Delay(body.untyped().b(), clock.clone()),
             TypedExpr::TAdvance(name, _) => Expr::Advance(name.clone()),
+            TypedExpr::TSelect(n1, n2, arms, _) => Expr::Select(
+                n1.clone(),
+                n2.clone(),
+                Box::new(
+                    arms.each_ref()
+                        .map(|(a, b, body)| (a.clone(), b.clone(), body.untyped())),
+                ),
+            ),
         }
     }
 }
@@ -163,6 +171,14 @@ impl Expr {
             }
             Expr::Delay(e, c) => format!("delay {{{:?}}} {}", c, e),
             Expr::Advance(x) => format!("advance {}", x),
+            Expr::Select(n1, n2, arms) => {
+                let arms = ["left", "right", "both"]
+                    .iter()
+                    .zip(arms.iter())
+                    .map(|(tag, (a, b, body))| format!("{} {} {} -> {}", tag, a, b, body))
+                    .join(" ");
+                format!("select {} {} {{ {} }}", n1, n2, arms)
+            }
             Expr::Sig(e1, e2) => {
                 format!("{} :: {}", e1, e2)
             }
@@ -271,6 +287,14 @@ impl Display for TypedExpr {
             TypedExpr::TWait(name, _) => write!(f, "wait {}", name),
             TypedExpr::TDelay(body, clock, _) => write!(f, "delay {{{:?}}} {}", clock, body),
             TypedExpr::TAdvance(name, _) => write!(f, "advance {}", name),
+            TypedExpr::TSelect(n1, n2, arms, _) => {
+                let arms = ["left", "right", "both"]
+                    .iter()
+                    .zip(arms.iter())
+                    .map(|(tag, (a, b, body))| format!("{} {} {} -> {}", tag, a, b, body))
+                    .join(" ");
+                write!(f, "select {} {} {{ {} }}", n1, n2, arms)
+            }
         }
     }
 }

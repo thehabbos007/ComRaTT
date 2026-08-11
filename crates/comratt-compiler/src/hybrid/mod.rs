@@ -143,6 +143,7 @@ fn run_pure_passes(pure_fns: Vec<FunctionPrototype>) -> Vec<FunctionPrototype> {
 fn is_reactive(expr: &TypedExpr) -> bool {
     match expr {
         TypedExpr::TDelay(..) | TypedExpr::TAdvance(..) | TypedExpr::TWait(..) => true,
+        TypedExpr::TSelect(..) => true,
         TypedExpr::TApp(f, args, _) => is_reactive(f) || args.iter().any(is_reactive),
         TypedExpr::TLam(_, body, _, _) => is_reactive(body),
         TypedExpr::TPrim(_, l, r, _) => is_reactive(l) || is_reactive(r),

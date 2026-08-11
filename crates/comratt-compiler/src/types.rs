@@ -200,6 +200,11 @@ pub fn traverse_locals<'a>(expr: &'a TypedExpr, locals: &mut Vec<(&'a str, Type)
         TypedExpr::TDelay(body, _, _) => {
             traverse_locals(body, locals);
         }
+        TypedExpr::TSelect(_, _, arms, _) => {
+            for (_, _, body) in arms.iter() {
+                traverse_locals(body, locals);
+            }
+        }
         TypedExpr::TConst(_, _)
         | TypedExpr::TName(_, _)
         | TypedExpr::TApp(_, _, _)
@@ -254,6 +259,20 @@ pub fn find_free_var_names(expr: &TypedExpr, bound: &HashSet<String>) -> HashSet
             .collect(),
         TypedExpr::TAccess(e, _, _) => find_free_var_names(e, bound),
         TypedExpr::TDelay(body, _, _) => find_free_var_names(body, bound),
+        TypedExpr::TSelect(n1, n2, arms, _) => {
+            let mut s: HashSet<String> = [n1, n2]
+                .into_iter()
+                .filter(|n| !bound.contains(*n))
+                .cloned()
+                .collect();
+            for (a, b, body) in arms.iter() {
+                let mut b2 = bound.clone();
+                b2.insert(a.clone());
+                b2.insert(b.clone());
+                s.extend(find_free_var_names(body, &b2));
+            }
+            s
+        }
     }
 }
 
@@ -332,6 +351,22 @@ pub fn find_free_vars(
                 set
             }
         }
+        TypedExpr::TSelect(n1, n2, arms, ty) => {
+            let mut free = HashSet::new();
+            for n in [n1, n2] {
+                if !bound.contains(&(n.clone(), ty.clone())) {
+                    free.insert((n.clone(), ty.clone()));
+                }
+            }
+            for (a, b, body) in arms.iter() {
+                free.extend(
+                    find_free_vars(body, bound)
+                        .into_iter()
+                        .filter(|(n, _)| n != a && n != b),
+                );
+            }
+            free
+        }
     }
 }
 
@@ -396,6 +431,23 @@ pub fn substitute_binding(bind_old: &str, bind_new: &str, expr: TypedExpr) -> Ty
         ),
         TypedExpr::TAdvance(name, ty) if name == bind_old => {
             TypedExpr::TAdvance(bind_new.to_string(), ty)
+        }
+        TypedExpr::TSelect(n1, n2, arms, ty) => {
+            let rename = |n: String| {
+                if n == bind_old {
+                    bind_new.to_string()
+                } else {
+                    n
+                }
+            };
+            let arms = (*arms).map(|(a, b, body)| {
+                if a == bind_old || b == bind_old {
+                    (a, b, body)
+                } else {
+                    (a, b, substitute_binding(bind_old, bind_new, body))
+                }
+            });
+            TypedExpr::TSelect(rename(n1), rename(n2), Box::new(arms), ty)
         }
         TypedExpr::TName(_, _) => expr,
         TypedExpr::TConst(_, _) => expr,
