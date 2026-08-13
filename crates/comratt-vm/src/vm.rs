@@ -16,7 +16,6 @@ pub enum Value {
     },
     Wait {
         channel_idx: u16,
-        clock: u32,
     },
     // We don't intend on resizing, so boxed slice is sufficient
     Tuple(Box<[Value]>),
@@ -35,7 +34,7 @@ impl Value {
     pub fn clock(&self) -> u32 {
         match self {
             Value::Thunk { clock, .. } => *clock,
-            Value::Wait { clock, .. } => *clock,
+            Value::Wait { channel_idx } => 1u32 << channel_idx,
             _ => 0x00000000,
         }
     }
@@ -187,10 +186,7 @@ impl<W: WasmBackend> VM<W> {
                 }
 
                 Op::Wait(channel_idx) => {
-                    self.stack.push(Value::Wait {
-                        channel_idx,
-                        clock: 1u32 << channel_idx,
-                    });
+                    self.stack.push(Value::Wait { channel_idx });
                 }
 
                 Op::Force => match self.stack.pop().unwrap() {
@@ -202,7 +198,7 @@ impl<W: WasmBackend> VM<W> {
                         let result = self.execute(thunk_idx, captures.into_vec());
                         self.stack.push(result);
                     }
-                    Value::Wait { channel_idx, .. } => {
+                    Value::Wait { channel_idx } => {
                         let val = self.channels[channel_idx as usize];
                         self.stack.push(Value::I32(val));
                     }
@@ -220,7 +216,7 @@ impl<W: WasmBackend> VM<W> {
                 } => {
                     val = self.execute(fun_idx, captures.into_vec());
                 }
-                Value::Wait { channel_idx, .. } => {
+                Value::Wait { channel_idx } => {
                     val = Value::I32(self.channels[channel_idx as usize]);
                 }
                 _ => return val,
