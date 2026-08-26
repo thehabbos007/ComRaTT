@@ -3,6 +3,7 @@
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
     ops::Deref,
+    todo,
 };
 
 use ena::unify::InPlaceUnificationTable;
@@ -493,7 +494,37 @@ impl Inference {
                 }
                 expr => panic!("Cannot advance arbitrary expr {expr}"),
             },
-            Expr::Select(..) => todo!("select typing"),
+            Expr::Select(
+                v1,
+                v2,
+                box [(v1_left, v2_left, left_comp), (v1_right, v2_right, right_comp), (v1_both, v2_both, both_comp)],
+            ) => {
+                let Some((Type::TLater(v1_inner_ty, v1_clock), _)) = context.get_binding(&v1)
+                else {
+                    panic!("v1 argument to select is not a delayed expression bound to a variable");
+                };
+
+                let Some((Type::TLater(v2_inner_ty, v2_clock), _)) = context.get_binding(&v2)
+                else {
+                    panic!("v2 argument to select is not a delayed expression bound to a variable");
+                };
+
+                let (left_type, left_output) = self.infer(context.clone(), left_comp);
+                let (right_type, right_output) = self.infer(context.clone(), right_comp);
+                let (both_type, both_output) = self.infer(context.clone(), both_comp);
+                let branches = Box::new([
+                    (v1_left, v2_left, left_output.texp),
+                    (v1_right, v2_right, right_output.texp),
+                    (v1_both, v2_both, both_output.texp),
+                ]);
+
+                let union_clock: ClockExprs = v1_clock.union(v2_clock).cloned().collect();
+
+                let result_type = todo!();
+
+                let te = TypedExpr::TSelect(v1, v2, branches, result_type);
+                todo!("select typing")
+            }
             // TODO we must not allow functions under a tick
             // also, if there is a tick we need to insert to the right of the tick
             // also, if the binding rhs is a delayed computation, we need to also
