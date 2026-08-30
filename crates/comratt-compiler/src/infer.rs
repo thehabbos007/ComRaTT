@@ -509,21 +509,36 @@ impl Inference {
                     panic!("v2 argument to select is not a delayed expression bound to a variable");
                 };
 
-                let (left_type, left_output) = self.infer(context.clone(), left_comp);
-                let (right_type, right_output) = self.infer(context.clone(), right_comp);
-                let (both_type, both_output) = self.infer(context.clone(), both_comp);
+                let (left_type, mut left_output) = self.infer(context.clone(), left_comp);
+                let (right_type, mut right_output) = self.infer(context.clone(), right_comp);
+                let (both_type, mut both_output) = self.infer(context.clone(), both_comp);
+
+                // Limitation: All branches need to return the same type
+                // in this initial version
+                let mut constraints = Vec::new();
+                constraints.push(Constraint::TypeEqual(left_type, right_type.clone()));
+                constraints.push(Constraint::TypeEqual(right_type, both_type.clone()));
+                constraints.append(&mut left_output.constraints);
+                constraints.append(&mut right_output.constraints);
+                constraints.append(&mut both_output.constraints);
+
                 let branches = Box::new([
                     (v1_left, v2_left, left_output.texp),
                     (v1_right, v2_right, right_output.texp),
                     (v1_both, v2_both, both_output.texp),
                 ]);
 
+                // TODO: This might not be relevant here
                 let union_clock: ClockExprs = v1_clock.union(v2_clock).cloned().collect();
 
-                let result_type = todo!();
-
-                let te = TypedExpr::TSelect(v1, v2, branches, result_type);
-                todo!("select typing")
+                let result_type = both_type;
+                (
+                    result_type.clone(),
+                    TypeOutput::new(
+                        constraints,
+                        TypedExpr::TSelect(v1, v2, branches, result_type),
+                    ),
+                )
             }
             // TODO we must not allow functions under a tick
             // also, if there is a tick we need to insert to the right of the tick
@@ -1005,7 +1020,34 @@ impl Inference {
                 let (unbound, ty) = self.substitute(ty);
                 (unbound, TypedExpr::TAdvance(name, ty))
             }
-            TypedExpr::TSelect(..) => todo!("select substitution"),
+            TypedExpr::TSelect(
+                v1,
+                v2,
+                box [(v1_l, v2_l, l_texp), (v1_r, v2_r, r_texp), (v1_b, v2_b, b_texp)],
+                ty,
+            ) => {
+                let (mut unbound_l, l_texp) = self.substitute_texp(l_texp);
+                let (unbound_r, r_texp) = self.substitute_texp(r_texp);
+                let (unbound_b, b_texp) = self.substitute_texp(b_texp);
+                let (unbound_ty, ty) = self.substitute(ty);
+                unbound_l.extend(unbound_r);
+                unbound_l.extend(unbound_b);
+                unbound_l.extend(unbound_ty);
+
+                (
+                    unbound_l,
+                    TypedExpr::TSelect(
+                        v1,
+                        v2,
+                        Box::new([
+                            (v1_l, v2_l, l_texp),
+                            (v1_r, v2_r, r_texp),
+                            (v1_b, v2_b, b_texp),
+                        ]),
+                        ty,
+                    ),
+                )
+            }
         }
     }
 
