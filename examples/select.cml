@@ -1,0 +1,16 @@
+chan A1 : int;
+chan A2 : int;
+
+react : O int
+def react =
+    let a1 = wait A1 in
+    let a2 = wait A2 in
+    delay {cl(a1) U cl(a2)} (
+    select a1 a2 {
+        left l1 l2 -> 1
+        right r1 r2 -> 2
+        both b1 b2 -> 3
+    });
+
+
+print <- react;
