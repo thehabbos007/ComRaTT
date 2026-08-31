@@ -212,6 +212,11 @@ impl<W: WasmBackend> VM<W> {
                     };
                     self.stack.push(Value::I32(active_channel as i32));
                 }
+                Op::BitAnd => {
+                    let r = self.stack.pop().unwrap().as_i32();
+                    let l = self.stack.pop().unwrap().as_i32();
+                    self.stack.push(Value::I32(l & r));
+                }
             }
         }
     }

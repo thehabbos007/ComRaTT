@@ -19,6 +19,7 @@ pub enum Op {
     Wait(u16),
     Force,
     PushTick,
+    BitAnd,
 }
 
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
