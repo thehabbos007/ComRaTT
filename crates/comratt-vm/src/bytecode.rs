@@ -18,6 +18,7 @@ pub enum Op {
     /// (Channel index)
     Wait(u16),
     Force,
+    PushTick,
 }
 
 #[derive(Debug, serde::Deserialize, serde::Serialize)]

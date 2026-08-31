@@ -101,6 +101,7 @@ fn reactive_loop(
 
         vm.channels[channel_idx] = val;
         let channel_mask: u32 = 1u32 << channel_idx;
+        vm.current_tick = Some(channel_mask);
 
         for (i, thunk) in thunks.iter_mut().enumerate() {
             if thunk.clock() & channel_mask == 0 {
@@ -126,6 +127,7 @@ fn reactive_loop(
                 }
             }
         }
+        vm.current_tick = None;
     }
 }
 

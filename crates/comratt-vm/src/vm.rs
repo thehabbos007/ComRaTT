@@ -53,6 +53,7 @@ pub struct VM<W: WasmBackend> {
     stack: Vec<Value>,
     wasm_backend: W,
     pub channels: Vec<i32>,
+    pub current_tick: Option<u32>,
 }
 
 fn bin_i32(stack: &mut Vec<Value>, f: impl FnOnce(i32, i32) -> Value) {
@@ -68,6 +69,7 @@ impl<W: WasmBackend> VM<W> {
             stack: Vec::with_capacity(64),
             wasm_backend,
             channels: vec![],
+            current_tick: None,
         }
     }
 
@@ -204,6 +206,12 @@ impl<W: WasmBackend> VM<W> {
                     }
                     other => panic!("Tried to force on non-thunk: {other:?}"),
                 },
+                Op::PushTick => {
+                    let Some(active_channel) = self.current_tick else {
+                        unreachable!("This should not be called when no channel is active");
+                    };
+                    self.stack.push(Value::I32(active_channel as i32));
+                }
             }
         }
     }
