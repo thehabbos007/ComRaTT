@@ -175,7 +175,7 @@ impl Compiler {
                 panic!("unsupported in hybrid bytecode: TLam (use top-level functions)")
             }
 
-            TypedExpr::TSelect(v1, v2, branches, ty) => {
+            TypedExpr::TSelect(v1, v2, branches, _) => {
                 // Start by getting the indices of the args
                 let Some(&v1_idx) = self.locals.get(v1) else {
                     unreachable!("Unbound v1 variable in select");
