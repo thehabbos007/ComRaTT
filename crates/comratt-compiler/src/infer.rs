@@ -499,19 +499,30 @@ impl Inference {
                 v2,
                 box [(v1_left, v2_left, left_comp), (v1_right, v2_right, right_comp), (v1_both, v2_both, both_comp)],
             ) => {
-                let Some((Type::TLater(v1_inner_ty, v1_clock), _)) = context.get_binding(&v1)
+                let Some((v1_outer_ty @ Type::TLater(v1_inner_ty, v1_clock), _)) =
+                    context.get_binding(&v1)
                 else {
                     panic!("v1 argument to select is not a delayed expression bound to a variable");
                 };
 
-                let Some((Type::TLater(v2_inner_ty, v2_clock), _)) = context.get_binding(&v2)
+                let Some((v2_outer_ty @ Type::TLater(v2_inner_ty, v2_clock), _)) =
+                    context.get_binding(&v2)
                 else {
                     panic!("v2 argument to select is not a delayed expression bound to a variable");
                 };
 
-                let (left_type, mut left_output) = self.infer(context.clone(), left_comp);
-                let (right_type, mut right_output) = self.infer(context.clone(), right_comp);
-                let (both_type, mut both_output) = self.infer(context.clone(), both_comp);
+                let mut left_context = context.clone();
+                left_context.insert_binding(v1_left.clone(), *v1_inner_ty.clone());
+                left_context.insert_binding(v2_left.clone(), v2_outer_ty.clone());
+                let mut right_context = context.clone();
+                right_context.insert_binding(v1_right.clone(), v1_outer_ty.clone());
+                right_context.insert_binding(v2_right.clone(), *v2_inner_ty.clone());
+                let mut both_context = context.clone();
+                both_context.insert_binding(v1_both.clone(), *v1_inner_ty.clone());
+                both_context.insert_binding(v2_both.clone(), *v2_inner_ty.clone());
+                let (left_type, mut left_output) = self.infer(left_context, left_comp);
+                let (right_type, mut right_output) = self.infer(right_context, right_comp);
+                let (both_type, mut both_output) = self.infer(both_context, both_comp);
 
                 // Limitation: All branches need to return the same type
                 // in this initial version
