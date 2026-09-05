@@ -588,9 +588,6 @@ impl Inference {
                     (v1_both, v2_both, converted_both_texp),
                 ]);
 
-                // TODO: This might not be relevant here
-                let union_clock: ClockExprs = v1_clock.union(v2_clock).cloned().collect();
-
                 let result_type = both_type;
                 (
                     result_type.clone(),
