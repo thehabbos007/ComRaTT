@@ -7,8 +7,8 @@ def react =
     let a2 = wait A2 in
     delay {cl(a1) U cl(a2)} (
         select a1 a2 {
-            left f s -> 1 :: react
-            right f s -> 2 :: react
+            left f s -> f :: react
+            right f s -> s :: react
             both f s -> 42 :: react
         }
     )
