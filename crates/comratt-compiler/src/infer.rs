@@ -533,10 +533,59 @@ impl Inference {
                 constraints.append(&mut right_output.constraints);
                 constraints.append(&mut both_output.constraints);
 
+                // To make sure that the local bindings of each arm can be used,
+                // the body of each arm is transformed from `expr` to
+                // `let name1 = v1 in let name2 = v2 in expr` i.e. let bindings representing the
+                // arm local variables before the body.
+                // To produce the values necessary in the arms (i.e. one in each of left and right and two in both)
+                // an `advance` expression is inserted where needed.
+
+                // let l1 = advance v1 in let l2 = v2 in BODY
+                let converted_left_texp = TypedExpr::TLet(
+                    v1_left.clone(),
+                    *v1_inner_ty.clone(),
+                    TypedExpr::TAdvance(v1.clone(), *v1_inner_ty.clone()).b(),
+                    TypedExpr::TLet(
+                        v2_left.clone(),
+                        v2_outer_ty.clone(),
+                        TypedExpr::TName(v2.clone(), v2_outer_ty.clone()).b(),
+                        left_output.texp.b(),
+                    )
+                    .b(),
+                );
+
+                // let r1 = v1 in let r2 = advance v2 in BODY
+                let converted_right_texp = TypedExpr::TLet(
+                    v1_right.clone(),
+                    v1_outer_ty.clone(),
+                    TypedExpr::TName(v1.clone(), v1_outer_ty.clone()).b(),
+                    TypedExpr::TLet(
+                        v2_right.clone(),
+                        *v2_inner_ty.clone(),
+                        TypedExpr::TAdvance(v2.clone(), *v2_inner_ty.clone()).b(),
+                        right_output.texp.b(),
+                    )
+                    .b(),
+                );
+
+                // let b1 = advance v1 in let b2 = advance v2 in BODY
+                let converted_both_texp = TypedExpr::TLet(
+                    v1_both.clone(),
+                    *v1_inner_ty.clone(),
+                    TypedExpr::TAdvance(v1.clone(), *v1_inner_ty.clone()).b(),
+                    TypedExpr::TLet(
+                        v2_both.clone(),
+                        *v2_inner_ty.clone(),
+                        TypedExpr::TAdvance(v2.clone(), *v2_inner_ty.clone()).b(),
+                        both_output.texp.b(),
+                    )
+                    .b(),
+                );
+
                 let branches = Box::new([
-                    (v1_left, v2_left, left_output.texp),
-                    (v1_right, v2_right, right_output.texp),
-                    (v1_both, v2_both, both_output.texp),
+                    (v1_left, v2_left, converted_left_texp),
+                    (v1_right, v2_right, converted_right_texp),
+                    (v1_both, v2_both, converted_both_texp),
                 ]);
 
                 // TODO: This might not be relevant here
