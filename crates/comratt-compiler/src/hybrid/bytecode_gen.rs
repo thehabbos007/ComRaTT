@@ -178,11 +178,11 @@ impl Compiler {
             TypedExpr::TSelect(v1, v2, branches, _) => {
                 // Start by getting the indices of the args
                 let Some(&v1_idx) = self.locals.get(v1) else {
-                    unreachable!("Unbound v1 variable in select");
+                    unreachable!("Unbound v1 variable in select: {}", v1);
                 };
 
                 let Some(&v2_idx) = self.locals.get(v2) else {
-                    unreachable!("Unbound v2 variable in select");
+                    unreachable!("Unbound v2 variable in select: {}", v2);
                 };
 
                 // Push the current ticking clock
