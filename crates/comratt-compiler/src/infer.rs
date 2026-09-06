@@ -1177,11 +1177,12 @@ impl Inference {
                     let mut context = context.clone();
                     let (expr_type, mut output) = self.infer(context, expr);
                     let output_ty = Type::TVar(self.fresh_ty_var());
-                    // push Later int constraint, because we want a delayed closure
-                    let expected_type = Type::TLater(output_ty.b(), ClockExpr::Symbolic.into());
-                    output
-                        .constraints
-                        .push(Constraint::TypeEqual(expr_type.clone(), expected_type));
+                    // We optionally require the output type to be dealyed. But it really can be anything
+                    // so we do not push a constraint on the expected type of the output to be a TLater
+                    // let expected_type = Type::TLater(output_ty.b(), ClockExpr::Symbolic.into());
+                    // output
+                    //    .constraints
+                    //    .push(Constraint::TypeEqual(expr_type.clone(), expected_type));
 
                     if self.unification(&output.constraints).is_ok() {
                         let (mut unbound, ty) = self.substitute(expr_type);

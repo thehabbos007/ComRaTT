@@ -31,11 +31,39 @@ impl Value {
         }
     }
 
-    pub fn clock(&self) -> u32 {
+    pub fn clock(&self) -> Option<u32> {
         match self {
-            Value::Thunk { clock, .. } => *clock,
-            Value::Wait { channel_idx } => 1u32 << channel_idx,
-            _ => 0x00000000,
+            Value::Thunk { clock, .. } => Some(*clock),
+            Value::Wait { channel_idx } => Some(1u32 << channel_idx),
+            _ => None,
+        }
+    }
+
+    pub fn is_later(&self) -> bool {
+        match self {
+            Value::Thunk { .. } |
+            Value::Wait { .. } => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_sig(&self) -> bool {
+        match self {
+            Value::Tuple(box [_, tail]) if tail.is_later() => true,
+            _ => false
+        }
+    }
+
+    /// Advance a signal by either pulling out result or passing value directly
+    pub fn advance_sig(self, thunk: &mut Value) -> Value {
+        match self {
+            Value::Tuple(elems) => {
+                let mut elems = elems.into_vec();
+                let next = elems.remove(1);
+                *thunk = next;
+                elems.remove(0)
+            }
+            other => other
         }
     }
 
@@ -53,7 +81,7 @@ pub struct VM<W: WasmBackend> {
     stack: Vec<Value>,
     wasm_backend: W,
     pub channels: Vec<i32>,
-    pub current_tick: Option<u32>,
+    current_tick: Option<u32>,
 }
 
 fn bin_i32(stack: &mut Vec<Value>, f: impl FnOnce(i32, i32) -> Value) {
@@ -73,12 +101,57 @@ impl<W: WasmBackend> VM<W> {
         }
     }
 
+    pub fn current_tick(&self) -> Option<u32> { self.current_tick }
+
     pub fn init_channels(&mut self, count: usize) {
         self.channels = vec![0; count];
     }
 
     pub fn call_wasm(&mut self, idx: u32, args: &[i32]) -> i32 {
         self.wasm_backend.call(idx, args)
+    }
+
+    /// Step the VM one tick
+    /// produces a list of updates containing output indices and their output values
+    pub fn step(&mut self, output_thunks: &mut Vec<Value>, channel_idx: usize, val: i32) -> Vec<(u32, Value)> {
+        let mut updates = Vec::with_capacity(output_thunks.len());
+        self.channels[channel_idx] = val;
+        let mask: u32 = 1u32 << channel_idx;
+        for (i, thunk) in output_thunks.iter_mut().enumerate() {
+            if thunk.clock().map(|clock| clock & mask == 0).unwrap_or_default() {
+                continue;
+            }
+
+            self.current_tick = Some(mask);
+
+            let stepped = match std::mem::replace(thunk, Value::Unit) {
+                Value::Thunk {
+                    fun_idx, captures, ..
+                } => self.execute(fun_idx, captures.into_vec()),
+                other if other.is_sig() => other,
+                other => panic!("expected thunk at output {i}, got {other:?}"),
+            };
+
+            updates.push((i as u32, stepped.advance_sig(thunk)));
+            self.current_tick = None;
+        }
+        updates
+    }
+
+    pub fn force_all(&mut self, mut val: Value) -> Value {
+        loop {
+            match val {
+                Value::Thunk {
+                    fun_idx, captures, ..
+                } => {
+                    val = self.execute(fun_idx, captures.into_vec());
+                }
+                Value::Wait { channel_idx } => {
+                    val = Value::I32(self.channels[channel_idx as usize]);
+                }
+                _ => return val,
+            }
+        }
     }
 
     pub fn execute(&mut self, fn_idx: u32, args: Vec<Value>) -> Value {
@@ -134,7 +207,7 @@ impl<W: WasmBackend> VM<W> {
 
                 Op::GetClock => {
                     let val = self.stack.pop().unwrap();
-                    self.stack.push(Value::I32(val.clock() as i32));
+                    self.stack.push(Value::I32(val.clock().unwrap_or_default() as i32));
                 }
 
                 Op::ConstClock(mask) => {
@@ -217,22 +290,6 @@ impl<W: WasmBackend> VM<W> {
                     let l = self.stack.pop().unwrap().as_i32();
                     self.stack.push(Value::I32(l & r));
                 }
-            }
-        }
-    }
-
-    pub fn force_all(&mut self, mut val: Value) -> Value {
-        loop {
-            match val {
-                Value::Thunk {
-                    fun_idx, captures, ..
-                } => {
-                    val = self.execute(fun_idx, captures.into_vec());
-                }
-                Value::Wait { channel_idx } => {
-                    val = Value::I32(self.channels[channel_idx as usize]);
-                }
-                _ => return val,
             }
         }
     }

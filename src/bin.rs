@@ -99,35 +99,15 @@ fn reactive_loop(
             continue;
         }
 
-        vm.channels[channel_idx] = val;
-        let channel_mask: u32 = 1u32 << channel_idx;
-        vm.current_tick = Some(channel_mask);
-
-        for (i, thunk) in thunks.iter_mut().enumerate() {
-            if thunk.clock() & channel_mask == 0 {
-                continue;
-            }
-            let stepped = match std::mem::replace(thunk, Value::Unit) {
-                Value::Thunk {
-                    fun_idx, captures, ..
-                } => vm.execute(fun_idx, captures.into_vec()),
-                other => panic!("expected thunk at output {i}, got {other:?}"),
-            };
-            match stepped {
-                Value::Tuple(elems) => {
-                    let mut elems = elems.into_vec();
-                    assert_eq!(elems.len(), 2, "signals should produce 2-tuple");
-                    let next = elems.remove(1);
-                    let out_val = elems.remove(0);
-                    println!("[{}] {}: {}", i, output_labels[i], out_val.as_i32());
-                    *thunk = next;
-                }
-                other => {
-                    println!("[{}] {}: {other:?}", i, output_labels[i]);
-                }
-            }
-        }
-        vm.current_tick = None;
+        let updates = vm.step(&mut thunks, channel_idx, val);
+        updates.iter().for_each(|(i, out_val)| {
+            println!(
+                "[{}] {}: {}",
+                i,
+                output_labels[*i as usize],
+                out_val.as_i32()
+            );
+        });
     }
 }
 
