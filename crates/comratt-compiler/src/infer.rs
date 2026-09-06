@@ -2,6 +2,7 @@
 
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
+    default,
     ops::Deref,
     todo,
 };
@@ -214,8 +215,8 @@ fn clock_exactly_matches(inner: &ClockExprs, outer: &ClockExprs, ctx: &Context) 
 
     // Can't determine symbolic clocks statically
     // true is used to pass typing and let it be determined at runtime
-    if resolved_inner.contains(&ClockExpr::Symbolic)
-        || resolved_outer.contains(&ClockExpr::Symbolic)
+    if resolved_inner.contains(&ClockExpr::Universal)
+        || resolved_outer.contains(&ClockExpr::Universal)
     {
         return true;
     }
@@ -236,7 +237,7 @@ fn resolve_clock_inner(
 ) -> ClockExprs {
     // Only Cl(v) expressions are interesting to examine
     match ce {
-        ClockExpr::Symbolic | ClockExpr::Wait(_) => ce.clone().into(),
+        ClockExpr::Universal | ClockExpr::Wait(_) => ce.clone().into(),
         ClockExpr::Cl(v) => {
             // Prevent cycles by skipping names we've seen before in this
             // recursion path
@@ -263,14 +264,51 @@ fn resolve_clock_inner(
 
             resolved
         }
+        ClockExpr::Var(_) => todo!(),
     }
 }
 
+#[derive(Debug, Default)]
 struct Inference {
     unification_table: InPlaceUnificationTable<TypeVar>,
+    clock_vars: HashMap<u32, ClockExprs>,
+    next_clock_var: u32,
 }
 
 impl Inference {
+    fn fresh_clock_var(&mut self) -> u32 {
+        let id = self.next_clock_var;
+        self.next_clock_var += 1;
+        id
+    }
+
+    fn add_clock_constraint(&mut self, var_id: u32, clock: &ClockExprs) {
+        self.clock_vars
+            .entry(var_id)
+            .or_default()
+            .extend(clock.iter().cloned());
+    }
+
+    /// Substitute `Var(id)` with its clocks.
+    /// A var with no constraints becomes universal
+    fn resolve_clock(&self, clock: &ClockExprs) -> ClockExprs {
+        let mut result = ClockExprs::new();
+        for ce in clock {
+            match ce {
+                ClockExpr::Var(id) => match self.clock_vars.get(id) {
+                    Some(resolved) => result.extend(resolved.iter().cloned()),
+                    None => {
+                        result.insert(ClockExpr::Universal);
+                    }
+                },
+                other => {
+                    result.insert(other.clone());
+                }
+            }
+        }
+        result
+    }
+
     fn fresh_ty_var(&mut self) -> TypeVar {
         self.unification_table.new_key(None)
     }
@@ -338,7 +376,7 @@ impl Inference {
                     let typ = if idx == 0 {
                         *t
                     } else {
-                        Type::TLater(Type::TSig(t).b(), ClockExpr::Symbolic.into())
+                        Type::TLater(Type::TSig(t).b(), ClockExpr::Universal.into())
                     };
                     (
                         typ.clone(),
@@ -386,7 +424,7 @@ impl Inference {
                     later_ty.clone(),
                     Type::TLater(
                         Type::TSig(val_ty.clone().b()).b(),
-                        ClockExpr::Symbolic.into(),
+                        ClockExpr::Universal.into(),
                     ),
                 ));
 
@@ -430,6 +468,13 @@ impl Inference {
             },
             Expr::Delay(e, clock) => {
                 // cl(v) should reference a delayed variable
+                let (clock, infer_var) = if clock.is_empty() {
+                    let var_id = self.fresh_clock_var();
+                    (ClockExpr::Var(var_id).into(), Some(var_id))
+                } else {
+                    (clock, None)
+                };
+
                 for ce in &clock {
                     if let ClockExpr::Cl(var) = ce {
                         if let Some((ty, _)) = context.get_binding(var) {
@@ -445,12 +490,19 @@ impl Inference {
                 let context = context.promote_tick(&clock);
                 // Call recursively, propagate constraints
                 let (ty, type_output) = self.infer(context, *e);
-                let later_ty = Type::TLater(ty.clone().b(), clock.clone());
+
+                let resolved_clock = if infer_var.is_some() {
+                    self.resolve_clock(&clock)
+                } else {
+                    clock
+                };
+
+                let later_ty = Type::TLater(ty.clone().b(), resolved_clock.clone());
                 (
                     later_ty.clone(),
                     TypeOutput::new(
                         type_output.constraints,
-                        TypedExpr::TDelay(type_output.texp.b(), clock, later_ty),
+                        TypedExpr::TDelay(type_output.texp.b(), resolved_clock, later_ty),
                     ),
                 )
             }
@@ -481,6 +533,13 @@ impl Inference {
             Expr::Advance(name) => match context.attempt_advance(&name) {
                 Type::TLater(box ty, adv_clock) => {
                     if let Some(tick_clock) = context.tick_clock() {
+                        // Feed advance clock into any inferred clock vars on the tick
+                        for ce in tick_clock {
+                            if let ClockExpr::Var(id) = ce {
+                                self.add_clock_constraint(*id, &adv_clock);
+                            }
+                        }
+
                         if !clock_exactly_matches(&adv_clock, tick_clock, &context) {
                             panic!(
                                 "clock error: `advance {name}` requires clock {adv_clock:?} to be an exact match of tick clock {tick_clock:?}"
@@ -1236,9 +1295,7 @@ fn get_with_custom_message(opt: Option<(Type, TypedExpr)>, message: String) -> (
 pub fn infer_all(prog: Prog) -> TypedProg {
     let toplevels = prog.0;
 
-    let mut inference = Inference {
-        unification_table: InPlaceUnificationTable::default(),
-    };
+    let mut inference = Inference::default();
 
     let (typed_toplevels, sorted_channels) =
         inference.infer_all_toplevels(toplevels, Default::default());

@@ -104,9 +104,10 @@ impl Display for Const {
 impl Display for ClockExpr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ClockExpr::Symbolic => write!(f, "SYMBOLIC"),
+            ClockExpr::Universal => write!(f, "Universal"),
             ClockExpr::Cl(v) => write!(f, "cl({v})"),
             ClockExpr::Wait(v) => write!(f, "cl(wait_{v})"),
+            ClockExpr::Var(id) => write!(f, "?clock{id}"),
         }
     }
 }

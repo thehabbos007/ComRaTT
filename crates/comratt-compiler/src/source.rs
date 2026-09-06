@@ -31,12 +31,14 @@ impl From<ClockExpr> for ClockExprs {
 /// Clock Expr. 𝜃 ::= cl (𝑣) | 𝜃 ⊔ 𝜃 ′
 #[derive(PartialEq, Eq, Debug, Clone, PartialOrd, Ord, Hash)]
 pub enum ClockExpr {
-    /// Symbolic clock that is evaluated at runtime
-    Symbolic,
+    /// Any clock/Unknown clock
+    Universal,
     /// Cl(v) where v is a binding
     Cl(String),
     /// Cl(v) special case, where v is the name of a channel
     Wait(String),
+    /// Clock inference variable
+    Var(u32),
 }
 
 #[derive(PartialEq, Eq, Debug, Clone)]

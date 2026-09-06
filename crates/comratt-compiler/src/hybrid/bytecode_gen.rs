@@ -300,8 +300,11 @@ impl Compiler {
                         self.emit(Op::ConstClock(0x0));
                     }
                 }
-                ClockExpr::Symbolic => {
+                ClockExpr::Universal => {
                     panic!("Tried to generate clock from symbolic clockexpr")
+                }
+                ClockExpr::Var(v) => {
+                    panic!("Received clock expression, should have been resolved {v:?}")
                 }
             }
             if !first {

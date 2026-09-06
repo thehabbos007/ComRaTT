@@ -163,7 +163,7 @@ fn parse_type(pairs: Pairs<Rule>) -> Type {
         .map_primary(|primary| parse_type_atom(primary))
         .map_prefix(|op, typ| match op.as_rule() {
             Rule::signal => Type::TSig(Box::new(typ)),
-            Rule::later => Type::TLater(Box::new(typ), ClockExpr::Symbolic.into()),
+            Rule::later => Type::TLater(Box::new(typ), ClockExpr::Universal.into()),
             Rule::box_type => Type::TBox(Box::new(typ)),
             _ => unreachable!(),
         })
