@@ -4,15 +4,15 @@ pub mod bytecode;
 pub mod vm;
 
 pub use bytecode::{Function, Op};
-pub use vm::{Value, VM};
+pub use vm::{VM, Value};
 
 // LSP in Zed goes out the window
 // with this cfg. Too lazy to find a fix atm.
 //#[cfg(target_arch = "wasm32")]
 pub mod wasm_exports {
     use crate::{
-        vm::{WasmBackend, VM},
         Function, Value,
+        vm::{VM, WasmBackend},
     };
     use postcard;
     use wasm_bindgen::prelude::*;

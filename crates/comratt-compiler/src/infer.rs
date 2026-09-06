@@ -497,7 +497,11 @@ impl Inference {
             Expr::Select(
                 v1,
                 v2,
-                box [(v1_left, v2_left, left_comp), (v1_right, v2_right, right_comp), (v1_both, v2_both, both_comp)],
+                box [
+                    (v1_left, v2_left, left_comp),
+                    (v1_right, v2_right, right_comp),
+                    (v1_both, v2_both, both_comp),
+                ],
             ) => {
                 let Some((v1_outer_ty @ Type::TLater(v1_inner_ty, v1_clock), _)) =
                     context.get_binding(&v1)
@@ -677,15 +681,18 @@ impl Inference {
             },
             Expr::Prim(op, left, right) => match op {
                 Binop::Add | Binop::Mul | Binop::Div | Binop::Sub => {
-                    match (self.infer(context.clone(), *left), self.infer(context, *right)) {
+                    match (
+                        self.infer(context.clone(), *left),
+                        self.infer(context, *right),
+                    ) {
                         ((left_ty, mut left_output), (right_ty, mut right_output)) => {
                             let Ok(_) = self.unify_ty_ty(&left_ty, &Type::TInt) else {
-                                panic!("Failed to unify operand of primitive arithmetic operation with int type")
-
+                                panic!(
+                                    "Failed to unify operand of primitive arithmetic operation with int type"
+                                )
                             };
                             let Ok(_) = self.unify_ty_ty(&left_ty, &right_ty) else {
                                 panic!("Failed to unify operands of primitive operations")
-
                             };
                             let mut constraints = Vec::new();
                             constraints.append(&mut left_output.constraints);
@@ -702,7 +709,7 @@ impl Inference {
                                     ),
                                 ),
                             )
-                        },
+                        }
                         _ => panic!(
                             "Failed to infer type of primitive expression. Use of operator {:?} is only allowed on either two int or two bool operands",
                             op
@@ -710,15 +717,18 @@ impl Inference {
                     }
                 }
                 Binop::Lt | Binop::Lte | Binop::Gt | Binop::Gte => {
-                    match (self.infer(context.clone(), *left), self.infer(context, *right)) {
+                    match (
+                        self.infer(context.clone(), *left),
+                        self.infer(context, *right),
+                    ) {
                         ((left_ty, mut left_output), (right_ty, mut right_output)) => {
                             let Ok(_) = self.unify_ty_ty(&left_ty, &Type::TInt) else {
-                                panic!("Failed to unify operand of primitive comparison operation with bool type")
-
+                                panic!(
+                                    "Failed to unify operand of primitive comparison operation with bool type"
+                                )
                             };
                             let Ok(_) = self.unify_ty_ty(&left_ty, &right_ty) else {
                                 panic!("Failed to unify operands of primitive operations")
-
                             };
                             let mut constraints = Vec::new();
                             constraints.append(&mut left_output.constraints);
@@ -744,7 +754,10 @@ impl Inference {
                 }
 
                 Binop::Eq | Binop::Neq => {
-                    match (self.infer(context.clone(), *left), self.infer(context, *right)) {
+                    match (
+                        self.infer(context.clone(), *left),
+                        self.infer(context, *right),
+                    ) {
                         ((left_ty, mut left_output), (right_ty, mut right_output)) => {
                             let Ok(_) = self.unify_ty_ty(&left_ty, &right_ty) else {
                                 panic!("Failed to unify operands of primitive operations")
@@ -765,7 +778,7 @@ impl Inference {
                                     ),
                                 ),
                             )
-                        },
+                        }
                         _ => panic!(
                             "Failed to infer type of primitive expression. Use of operator {:?} is only allowed on either two int or two bool operands",
                             op
@@ -1080,7 +1093,11 @@ impl Inference {
             TypedExpr::TSelect(
                 v1,
                 v2,
-                box [(v1_l, v2_l, l_texp), (v1_r, v2_r, r_texp), (v1_b, v2_b, b_texp)],
+                box [
+                    (v1_l, v2_l, l_texp),
+                    (v1_r, v2_r, r_texp),
+                    (v1_b, v2_b, b_texp),
+                ],
                 ty,
             ) => {
                 let (mut unbound_l, l_texp) = self.substitute_texp(l_texp);

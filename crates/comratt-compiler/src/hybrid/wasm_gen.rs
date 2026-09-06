@@ -6,7 +6,7 @@ use wasm_encoder::{
 };
 
 use crate::source::{Binop, Const};
-use crate::types::{collect_local_names, max_tuple_depth, TypedExpr};
+use crate::types::{TypedExpr, collect_local_names, max_tuple_depth};
 
 use super::FunctionPrototype;
 

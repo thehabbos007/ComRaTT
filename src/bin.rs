@@ -6,7 +6,7 @@ use comratt_compiler::{
     infer::infer_all,
     source::Prog,
 };
-use comratt_vm::{Value, VM};
+use comratt_vm::{VM, Value};
 use comratt_wasmtime_backend::wasmtime_backend::WasmtimeBackend;
 
 fn main() {

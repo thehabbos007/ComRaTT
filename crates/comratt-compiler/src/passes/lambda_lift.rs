@@ -2,8 +2,8 @@ use crate::{
     passes::Pass,
     source::Type,
     types::{
-        build_function_type, find_free_vars, tfun_len_n, BindingContext, BindingKind, TypedExpr,
-        TypedProg, TypedToplevel,
+        BindingContext, BindingKind, TypedExpr, TypedProg, TypedToplevel, build_function_type,
+        find_free_vars, tfun_len_n,
     },
 };
 use itertools::Itertools;

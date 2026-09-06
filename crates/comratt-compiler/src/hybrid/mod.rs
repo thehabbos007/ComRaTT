@@ -6,7 +6,7 @@ use std::collections::{HashMap, HashSet};
 use comratt_vm::bytecode;
 
 use crate::{
-    passes::{steal_lambda::StealLambda, lambda_lift::LambdaLift, Pass},
+    passes::{Pass, lambda_lift::LambdaLift, steal_lambda::StealLambda},
     source::Type,
     types::{Sym, TypedExpr, TypedProg, TypedToplevel},
 };

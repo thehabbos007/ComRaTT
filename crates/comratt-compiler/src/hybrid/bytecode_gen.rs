@@ -1,5 +1,5 @@
 use crate::source::{Binop, ClockExpr, Const, Type};
-use crate::types::{find_free_var_names, Sym, TypedExpr};
+use crate::types::{Sym, TypedExpr, find_free_var_names};
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 pub use comratt_vm::bytecode::{Function, Op};

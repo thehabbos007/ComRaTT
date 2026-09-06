@@ -41,8 +41,7 @@ impl Value {
 
     pub fn is_later(&self) -> bool {
         match self {
-            Value::Thunk { .. } |
-            Value::Wait { .. } => true,
+            Value::Thunk { .. } | Value::Wait { .. } => true,
             _ => false,
         }
     }
@@ -50,7 +49,7 @@ impl Value {
     pub fn is_sig(&self) -> bool {
         match self {
             Value::Tuple(box [_, tail]) if tail.is_later() => true,
-            _ => false
+            _ => false,
         }
     }
 
@@ -63,7 +62,7 @@ impl Value {
                 *thunk = next;
                 elems.remove(0)
             }
-            other => other
+            other => other,
         }
     }
 
@@ -101,7 +100,9 @@ impl<W: WasmBackend> VM<W> {
         }
     }
 
-    pub fn current_tick(&self) -> Option<u32> { self.current_tick }
+    pub fn current_tick(&self) -> Option<u32> {
+        self.current_tick
+    }
 
     pub fn init_channels(&mut self, count: usize) {
         self.channels = vec![0; count];
@@ -113,12 +114,21 @@ impl<W: WasmBackend> VM<W> {
 
     /// Step the VM one tick
     /// produces a list of updates containing output indices and their output values
-    pub fn step(&mut self, output_thunks: &mut Vec<Value>, channel_idx: usize, val: i32) -> Vec<(u32, Value)> {
+    pub fn step(
+        &mut self,
+        output_thunks: &mut Vec<Value>,
+        channel_idx: usize,
+        val: i32,
+    ) -> Vec<(u32, Value)> {
         let mut updates = Vec::with_capacity(output_thunks.len());
         self.channels[channel_idx] = val;
         let mask: u32 = 1u32 << channel_idx;
         for (i, thunk) in output_thunks.iter_mut().enumerate() {
-            if thunk.clock().map(|clock| clock & mask == 0).unwrap_or_default() {
+            if thunk
+                .clock()
+                .map(|clock| clock & mask == 0)
+                .unwrap_or_default()
+            {
                 continue;
             }
 
@@ -207,7 +217,8 @@ impl<W: WasmBackend> VM<W> {
 
                 Op::GetClock => {
                     let val = self.stack.pop().unwrap();
-                    self.stack.push(Value::I32(val.clock().unwrap_or_default() as i32));
+                    self.stack
+                        .push(Value::I32(val.clock().unwrap_or_default() as i32));
                 }
 
                 Op::ConstClock(mask) => {

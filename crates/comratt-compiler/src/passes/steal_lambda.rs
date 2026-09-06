@@ -3,7 +3,6 @@ use crate::{
     types::{TypedExpr, TypedProg, TypedToplevel},
 };
 
-
 /// Steal lambda from top level def:
 ///
 ///   def f x = fun y z -> e
