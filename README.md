@@ -1,3 +1,11 @@
+# Experimental VM
+
+Run demo with 
+
+```
+cargo run --bin vm_bin
+```
+
 # ComRaTT - Compiled Async RaTT
 
 ComRaTT is a functional reactive programming language that compiles to WebAssembly. This implementation is part of a thesis project demonstrating the feasibility of compiling Async RaTT to WASM with support for modal types and reactive semantics.

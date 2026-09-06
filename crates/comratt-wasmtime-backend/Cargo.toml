@@ -1,0 +1,9 @@
+[package]
+name = "comratt-wasmtime-backend"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+comratt-vm = { path = "../comratt-vm" }
+anyhow = "1"
+wasmtime = "33"

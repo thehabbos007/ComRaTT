@@ -1,0 +1,44 @@
+chan keyboard : int;
+
+next_sum : int -> int -> int
+def next_sum acc x = acc + x;
+
+next_max : int -> int -> int
+def next_max acc x = if x > acc then x else acc;
+
+next_count : int -> int -> int
+def next_count n x = n + 1;
+
+sum : int -> O Sig int
+def sum acc =
+    let v = wait keyboard in
+    delay {cl(v)} (
+        let x = advance v in
+        let new_acc = next_sum acc x in
+        new_acc :: sum new_acc
+    )
+;
+
+running_max : int -> O Sig int
+def running_max acc =
+    let v = wait keyboard in
+    delay {cl(v)} (
+        let x = advance v in
+        let new_acc = next_max acc x in
+        new_acc :: running_max new_acc
+    )
+;
+
+count : int -> O Sig int
+def count n =
+    let v = wait keyboard in
+    delay {cl(v)} (
+        let x = advance v in
+        let new_n = next_count n x in
+        new_n :: count new_n
+    )
+;
+
+print <- sum 0;
+print <- running_max 0;
+print <- count 0;

@@ -1,0 +1,30 @@
+chan A1 : int;
+chan A2 : int;
+
+c1 : O Sig int
+def c1 =
+    let v1 = wait A1 in
+    let v2 = wait A2 in
+    delay {cl(v1) U cl(v2)} (
+        let a1 = advance v1 in
+        let a2 = advance v2 in
+        (a1 * a1 * 3 + a2 * a2 * 3) :: c1
+    )
+;
+
+next_count : int -> int -> int
+def next_count n x = n + 1;
+
+c2 : int -> O Sig int
+def c2 n =
+    let v = wait A2 in
+    delay {cl(v)} (
+        let x = advance v in
+        let new_n = next_count n x in
+        new_n :: c2 new_n
+    )
+;
+
+
+print <- c1;
+print <- c2 0;

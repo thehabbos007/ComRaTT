@@ -1,0 +1,143 @@
+program = _{ SOI ~ toplevel* ~ EOI }
+
+toplevel = _{
+    (function_def | channel_def | output_def) ~ ";"
+}
+
+function_args = { identifier* }
+
+function_def = {
+    identifier ~ ":" ~ type_expr ~ "def" ~ identifier ~ function_args ~ eq ~ expr
+}
+channel_def  = { "chan" ~ identifier ~ ":" ~ type_expr }
+output_def   = { identifier ~ "<-" ~ expr }
+
+// Types
+type_expr  =  { type_prefix* ~ type_primary ~ (type_infix ~ type_prefix* ~ type_primary)* }
+type_infix = _{ arrow }
+
+type_prefix = _{ later | signal | box_type }
+later       =  { "O" }
+signal      =  { "Sig" }
+box_type    =  { "Box" | "□" }
+
+type_primary = _{ int_type | bool_type | unit_type | parenthesis_or_tuple_type }
+int_type     =  { "int" }
+bool_type    =  { "bool" }
+unit_type    =  { "()" }
+arrow        =  { "->" }
+
+parenthesis_or_tuple_type = {
+    "(" ~ type_expr ~ ("*" ~ type_expr)* ~ ")"
+}
+
+tuple_access = { primary ~ ("." ~ integer)* }
+term         = { tuple_access+ }
+expr         = { (term ~ (infix ~ term)*) }
+
+clock_union = { "U" | "⊔" }
+clock_wait  = { "wait" ~ (!"cl(") ~ identifier }
+clock_base  = { "cl(" ~ (clock_wait | identifier) ~ ")" | "(" ~ clock_base ~ ")" }
+clock_expr  = { clock_base ~ (clock_union ~ clock_base)* }
+
+let_expr     = { "let" ~ identifier ~ eq ~ expr ~ in_ ~ expr }
+fun_expr     = { "fun" ~ function_args ~ "->" ~ expr }
+if_expr      = { "if" ~ expr ~ then ~ expr ~ else_ ~ expr }
+delay_expr   = { "delay" ~ "{" ~ clock_expr ~ "}" ~ expr }
+advance_expr = { "advance" ~ identifier }
+wait_expr    = { "wait" ~ identifier }
+select_expr  = {
+    "select" ~ identifier ~ identifier ~ "{"
+      ~ left_ ~ identifier ~ identifier ~ "->" ~ expr
+      ~ right_ ~ identifier ~ identifier ~ "->" ~ expr
+      ~ both_ ~ identifier ~ identifier ~ "->" ~ expr
+    ~ "}"
+}
+box_expr     = { "box" ~ expr }
+unbox_expr   = { "unbox" ~ expr }
+never_expr   = { "never"}
+
+primary = _{
+    let_expr
+  | fun_expr
+  | if_expr
+  | delay_expr
+  | advance_expr
+  | wait_expr
+  | select_expr
+  | parenthesis_or_tuple
+  | integer
+  | true_lit
+  | false_lit
+  | unit_lit
+  | identifier
+  | box_expr
+  | unbox_expr
+  | never_expr
+}
+
+parenthesis_or_tuple = {
+    "(" ~ expr ~ ("," ~ expr)* ~ ")"
+}
+
+infix = _{
+    sig_cons
+  | equality_op
+  | relational_op
+  | add_op
+  | mul_op
+}
+
+sig_cons      = { "::" }
+equality_op   = { "<>" | "=" }
+relational_op = { "<=" | ">=" | "<" | ">" }
+add_op        = { "+" | "-" }
+mul_op        = { "*" | "/" }
+
+// Terminals
+identifier = @{ !keyword ~ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+integer    = @{ "-"? ~ ("0" | ASCII_NONZERO_DIGIT ~ ASCII_DIGIT*) }
+true_lit   =  { "true" }
+false_lit  =  { "false" }
+unit_lit   =  { "()" }
+
+eq     = @{ "=" }
+in_    = @{ "in" }
+then   = @{ "then" }
+else_  = @{ "else" }
+left_  = @{ "left" }
+right_ = @{ "right" }
+both_  = @{ "both" }
+
+keyword = _{
+    ( "def"
+    | "let"
+    | "in"
+    | "if"
+    | "then"
+    | "else"
+    | "fun"
+    | "chan"
+    | "delay"
+    | "advance"
+    | "wait"
+    | "true"
+    | "false"
+    | "box"
+    | "unbox"
+    | "Box"
+    | "Sig"
+    | "O"
+    | "never"
+    | "select"
+    | "left"
+    | "right"
+    | "both"
+    ) ~ !(ASCII_ALPHANUMERIC | "_")
+}
+
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
+COMMENT    = _{
+    "/*" ~ (!"*/" ~ ANY)* ~ "*/"
+  | "//" ~ (!("\n") ~ ANY)*
+}

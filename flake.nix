@@ -9,7 +9,6 @@
       url = "github:oxalica/rust-overlay";
       inputs = {
         nixpkgs.follows = "nixpkgs";
-        flake-utils.follows = "flake-utils";
       };
     };
   };
@@ -38,13 +37,20 @@
             # Rust stuff
             rust-analyzer-unwrapped
             cargo-flamegraph
+            pkgs.cargo-machete
             # Nix stuff
             pkgs.nixd
             pkgs.nil
             # Wasm
             pkgs.wasmtime
             pkgs.wabt
-	    pkgs.lldb
+            pkgs.lldb
+            pkgs.wasm-bindgen-cli_0_2_108
+	    # pest
+            pkgs.pest-ide-tools
+	    # http serve
+	    pkgs.miniserve
+					pkgs.just
           ];
           buildInputs = [
             toolchain
