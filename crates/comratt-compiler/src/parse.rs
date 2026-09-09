@@ -2,7 +2,10 @@ use std::{assert_matches::assert_matches, collections::BTreeSet, sync::LazyLock}
 
 use itertools::Itertools;
 use pest::{
-    Parser, error::ErrorVariant::ParsingError, iterators::{Pair, Pairs}, pratt_parser::{Assoc, Op, PrattParser}
+    Parser,
+    error::ErrorVariant::ParsingError,
+    iterators::{Pair, Pairs},
+    pratt_parser::{Assoc, Op, PrattParser},
 };
 use pest_derive::Parser;
 
@@ -37,7 +40,11 @@ impl Prog {
         let pairs = match ComRaTTParser::parse(Rule::program, input) {
             Ok(pairs) => pairs,
             Err(mut error) => {
-                if let ParsingError { positives, negatives } = &mut error.variant {
+                if let ParsingError {
+                    positives,
+                    negatives,
+                } = &mut error.variant
+                {
                     let mut seen = std::collections::HashSet::new();
                     positives.retain(|r| seen.insert(rule_label(r)));
                     seen.clear();

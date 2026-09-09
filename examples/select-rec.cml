@@ -1,0 +1,63 @@
+chan A1 : int;
+chan A2 : int;
+chan A3 : int;
+
+first : O Sig int
+def first =
+    let a1 = wait A1 in
+    delay {cl(a1)} (
+        let recv = advance a1 in
+        recv :: first
+    )
+;
+
+second : O Sig int
+def second =
+    let a2 = wait A2 in
+    delay {cl(a2)} (
+        let recv = advance a2 in
+        recv :: second
+    )
+;
+
+third : O Sig int
+def third =
+    let a3 = wait A3 in
+    delay {cl(a3)} (
+        let recv = advance a3 in
+        recv :: third
+    )
+;
+
+react : O Sig int
+def react =
+    let first = first in
+    let second = second in
+    let third = third in
+    let fs = delay {cl(first) U cl(second)} (
+        select first second {
+            left first second -> first
+            right first second -> second
+            // should not be possible
+            both first second -> first
+        }
+    )
+    in
+    let st = delay {cl(second) U cl(third)} (
+        select second third {
+            left first second -> first
+            right first second -> second
+            // should not be possible
+            both first second -> first
+        }
+    )
+    in
+    delay {cl(fs) U cl(st)} (
+    select fs st {
+        left first second -> first
+        right first second -> second
+        both first second -> first
+    });
+
+
+print <- react;

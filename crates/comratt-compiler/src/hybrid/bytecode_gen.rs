@@ -1,5 +1,5 @@
 use crate::source::{Binop, ClockExpr, Const, Type};
-use crate::types::{find_free_var_names, Sym, TypedExpr};
+use crate::types::{Sym, TypedExpr, find_free_var_names};
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 pub use comratt_vm::bytecode::{Function, Op};
@@ -175,7 +175,75 @@ impl Compiler {
                 panic!("unsupported in hybrid bytecode: TLam (use top-level functions)")
             }
 
-            TypedExpr::TSelect(..) => todo!("select codegen"),
+            TypedExpr::TSelect(v1, v2, branches, _) => {
+                // Start by getting the indices of the args
+                let Some(&v1_idx) = self.locals.get(v1) else {
+                    unreachable!("Unbound v1 variable in select: {}", v1);
+                };
+
+                let Some(&v2_idx) = self.locals.get(v2) else {
+                    unreachable!("Unbound v2 variable in select: {}", v2);
+                };
+
+                // Push the current ticking clock
+                self.emit(Op::PushTick);
+
+                // Compare v1 clock with current tick using bitwise AND
+                self.emit(Op::Load(v1_idx));
+                self.emit(Op::GetClock);
+                self.emit(Op::BitAnd);
+
+                // If we jump here we know that the active channel is
+                // not in the clock of v1 and so it must be in the clock
+                // of v2.
+                // Save the position and emit a JIF placeholder.
+                let jif_v2_only = self.pos();
+                self.emit(Op::JumpIfFalse(0));
+
+                // Here we did not jump so the active channel
+                // is in the clock of v1.
+                // Now check v2 also.
+                self.emit(Op::PushTick);
+                self.emit(Op::Load(v2_idx));
+                self.emit(Op::GetClock);
+                self.emit(Op::BitAnd);
+
+                // If we jump here we know that the active channel
+                // is not in the clock of v2, only v1.
+                // Save the position and emit a JIF placeholder.
+                let jif_v1_only = self.pos();
+                self.emit(Op::JumpIfFalse(0));
+
+                // At this point we did not jump and know that
+                // the both case is relevant
+                self.compile_expr(&branches[2].2);
+
+                // Jump end target for the both case
+                let jmp_end_both = self.pos();
+                self.emit(Op::Jump(0));
+
+                // Actual JIF target for v2 only
+                let v2_only = self.pos();
+                self.compile_expr(&branches[1].2);
+
+                // Jump end target for v2 only
+                let jmp_end_v2_only = self.pos();
+                self.emit(Op::Jump(0));
+
+                // Actual JIF target for v1 only
+                let v1_only = self.pos();
+                self.compile_expr(&branches[0].2);
+
+                // Jump end target for all branches
+                let end = self.pos();
+
+                // Fix up placeholder jumping points
+                self.ops[jif_v2_only as usize] = Op::JumpIfFalse(v2_only);
+                self.ops[jif_v1_only as usize] = Op::JumpIfFalse(v1_only);
+
+                self.ops[jmp_end_both as usize] = Op::Jump(end);
+                self.ops[jmp_end_v2_only as usize] = Op::Jump(end);
+            }
 
             other => panic!("unsupported in hybrid bytecode: {other:?}"),
         }

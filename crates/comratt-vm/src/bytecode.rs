@@ -1,7 +1,19 @@
 #[derive(Debug, Clone, Copy, serde::Deserialize, serde::Serialize)]
 pub enum Op {
-    ConstI32(i32), ConstBool(bool), ConstUnit,
-    Add, Sub, Mul, Div, Eq, Neq, Lt, Lte, Gt, Gte, BitOr,
+    ConstI32(i32),
+    ConstBool(bool),
+    ConstUnit,
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Eq,
+    Neq,
+    Lt,
+    Lte,
+    Gt,
+    Gte,
+    BitOr,
     Load(u16),
     Store(u16),
     JumpIfFalse(u32),
@@ -18,6 +30,8 @@ pub enum Op {
     /// (Channel index)
     Wait(u16),
     Force,
+    PushTick,
+    BitAnd,
 }
 
 #[derive(Debug, serde::Deserialize, serde::Serialize)]

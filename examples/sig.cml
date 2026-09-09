@@ -1,0 +1,8 @@
+chan A1 : int;
+
+sig : Sig int
+def sig  =
+    1 :: delay {cl(A1)} (sig)
+;
+
+print <- sig;

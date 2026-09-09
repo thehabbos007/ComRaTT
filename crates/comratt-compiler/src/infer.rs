@@ -3,6 +3,7 @@
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
     ops::Deref,
+    todo,
 };
 
 use ena::unify::InPlaceUnificationTable;
@@ -493,7 +494,113 @@ impl Inference {
                 }
                 expr => panic!("Cannot advance arbitrary expr {expr}"),
             },
-            Expr::Select(..) => todo!("select typing"),
+            Expr::Select(
+                v1,
+                v2,
+                box [
+                    (v1_left, v2_left, left_comp),
+                    (v1_right, v2_right, right_comp),
+                    (v1_both, v2_both, both_comp),
+                ],
+            ) => {
+                let Some((v1_outer_ty @ Type::TLater(v1_inner_ty, v1_clock), _)) =
+                    context.get_binding(&v1)
+                else {
+                    panic!("v1 argument to select is not a delayed expression bound to a variable");
+                };
+
+                let Some((v2_outer_ty @ Type::TLater(v2_inner_ty, v2_clock), _)) =
+                    context.get_binding(&v2)
+                else {
+                    panic!("v2 argument to select is not a delayed expression bound to a variable");
+                };
+
+                let mut left_context = context.clone();
+                left_context.insert_binding(v1_left.clone(), *v1_inner_ty.clone());
+                left_context.insert_binding(v2_left.clone(), v2_outer_ty.clone());
+                let mut right_context = context.clone();
+                right_context.insert_binding(v1_right.clone(), v1_outer_ty.clone());
+                right_context.insert_binding(v2_right.clone(), *v2_inner_ty.clone());
+                let mut both_context = context.clone();
+                both_context.insert_binding(v1_both.clone(), *v1_inner_ty.clone());
+                both_context.insert_binding(v2_both.clone(), *v2_inner_ty.clone());
+                let (left_type, mut left_output) = self.infer(left_context, left_comp);
+                let (right_type, mut right_output) = self.infer(right_context, right_comp);
+                let (both_type, mut both_output) = self.infer(both_context, both_comp);
+
+                // Limitation: All branches need to return the same type
+                // in this initial version
+                let mut constraints = Vec::new();
+                constraints.push(Constraint::TypeEqual(left_type, right_type.clone()));
+                constraints.push(Constraint::TypeEqual(right_type, both_type.clone()));
+                constraints.append(&mut left_output.constraints);
+                constraints.append(&mut right_output.constraints);
+                constraints.append(&mut both_output.constraints);
+
+                // To make sure that the local bindings of each arm can be used,
+                // the body of each arm is transformed from `expr` to
+                // `let name1 = v1 in let name2 = v2 in expr` i.e. let bindings representing the
+                // arm local variables before the body.
+                // To produce the values necessary in the arms (i.e. one in each of left and right and two in both)
+                // an `advance` expression is inserted where needed.
+
+                // let l1 = advance v1 in let l2 = v2 in BODY
+                let converted_left_texp = TypedExpr::TLet(
+                    v1_left.clone(),
+                    *v1_inner_ty.clone(),
+                    TypedExpr::TAdvance(v1.clone(), *v1_inner_ty.clone()).b(),
+                    TypedExpr::TLet(
+                        v2_left.clone(),
+                        v2_outer_ty.clone(),
+                        TypedExpr::TName(v2.clone(), v2_outer_ty.clone()).b(),
+                        left_output.texp.b(),
+                    )
+                    .b(),
+                );
+
+                // let r1 = v1 in let r2 = advance v2 in BODY
+                let converted_right_texp = TypedExpr::TLet(
+                    v1_right.clone(),
+                    v1_outer_ty.clone(),
+                    TypedExpr::TName(v1.clone(), v1_outer_ty.clone()).b(),
+                    TypedExpr::TLet(
+                        v2_right.clone(),
+                        *v2_inner_ty.clone(),
+                        TypedExpr::TAdvance(v2.clone(), *v2_inner_ty.clone()).b(),
+                        right_output.texp.b(),
+                    )
+                    .b(),
+                );
+
+                // let b1 = advance v1 in let b2 = advance v2 in BODY
+                let converted_both_texp = TypedExpr::TLet(
+                    v1_both.clone(),
+                    *v1_inner_ty.clone(),
+                    TypedExpr::TAdvance(v1.clone(), *v1_inner_ty.clone()).b(),
+                    TypedExpr::TLet(
+                        v2_both.clone(),
+                        *v2_inner_ty.clone(),
+                        TypedExpr::TAdvance(v2.clone(), *v2_inner_ty.clone()).b(),
+                        both_output.texp.b(),
+                    )
+                    .b(),
+                );
+
+                let branches = Box::new([
+                    (v1_left, v2_left, converted_left_texp),
+                    (v1_right, v2_right, converted_right_texp),
+                    (v1_both, v2_both, converted_both_texp),
+                ]);
+
+                let result_type = both_type;
+                (
+                    result_type.clone(),
+                    TypeOutput::new(
+                        constraints,
+                        TypedExpr::TSelect(v1, v2, branches, result_type),
+                    ),
+                )
+            }
             // TODO we must not allow functions under a tick
             // also, if there is a tick we need to insert to the right of the tick
             // also, if the binding rhs is a delayed computation, we need to also
@@ -574,15 +681,18 @@ impl Inference {
             },
             Expr::Prim(op, left, right) => match op {
                 Binop::Add | Binop::Mul | Binop::Div | Binop::Sub => {
-                    match (self.infer(context.clone(), *left), self.infer(context, *right)) {
+                    match (
+                        self.infer(context.clone(), *left),
+                        self.infer(context, *right),
+                    ) {
                         ((left_ty, mut left_output), (right_ty, mut right_output)) => {
                             let Ok(_) = self.unify_ty_ty(&left_ty, &Type::TInt) else {
-                                panic!("Failed to unify operand of primitive arithmetic operation with int type")
-
+                                panic!(
+                                    "Failed to unify operand of primitive arithmetic operation with int type"
+                                )
                             };
                             let Ok(_) = self.unify_ty_ty(&left_ty, &right_ty) else {
                                 panic!("Failed to unify operands of primitive operations")
-
                             };
                             let mut constraints = Vec::new();
                             constraints.append(&mut left_output.constraints);
@@ -599,7 +709,7 @@ impl Inference {
                                     ),
                                 ),
                             )
-                        },
+                        }
                         _ => panic!(
                             "Failed to infer type of primitive expression. Use of operator {:?} is only allowed on either two int or two bool operands",
                             op
@@ -607,15 +717,18 @@ impl Inference {
                     }
                 }
                 Binop::Lt | Binop::Lte | Binop::Gt | Binop::Gte => {
-                    match (self.infer(context.clone(), *left), self.infer(context, *right)) {
+                    match (
+                        self.infer(context.clone(), *left),
+                        self.infer(context, *right),
+                    ) {
                         ((left_ty, mut left_output), (right_ty, mut right_output)) => {
                             let Ok(_) = self.unify_ty_ty(&left_ty, &Type::TInt) else {
-                                panic!("Failed to unify operand of primitive comparison operation with bool type")
-
+                                panic!(
+                                    "Failed to unify operand of primitive comparison operation with bool type"
+                                )
                             };
                             let Ok(_) = self.unify_ty_ty(&left_ty, &right_ty) else {
                                 panic!("Failed to unify operands of primitive operations")
-
                             };
                             let mut constraints = Vec::new();
                             constraints.append(&mut left_output.constraints);
@@ -641,7 +754,10 @@ impl Inference {
                 }
 
                 Binop::Eq | Binop::Neq => {
-                    match (self.infer(context.clone(), *left), self.infer(context, *right)) {
+                    match (
+                        self.infer(context.clone(), *left),
+                        self.infer(context, *right),
+                    ) {
                         ((left_ty, mut left_output), (right_ty, mut right_output)) => {
                             let Ok(_) = self.unify_ty_ty(&left_ty, &right_ty) else {
                                 panic!("Failed to unify operands of primitive operations")
@@ -662,7 +778,7 @@ impl Inference {
                                     ),
                                 ),
                             )
-                        },
+                        }
                         _ => panic!(
                             "Failed to infer type of primitive expression. Use of operator {:?} is only allowed on either two int or two bool operands",
                             op
@@ -974,7 +1090,38 @@ impl Inference {
                 let (unbound, ty) = self.substitute(ty);
                 (unbound, TypedExpr::TAdvance(name, ty))
             }
-            TypedExpr::TSelect(..) => todo!("select substitution"),
+            TypedExpr::TSelect(
+                v1,
+                v2,
+                box [
+                    (v1_l, v2_l, l_texp),
+                    (v1_r, v2_r, r_texp),
+                    (v1_b, v2_b, b_texp),
+                ],
+                ty,
+            ) => {
+                let (mut unbound_l, l_texp) = self.substitute_texp(l_texp);
+                let (unbound_r, r_texp) = self.substitute_texp(r_texp);
+                let (unbound_b, b_texp) = self.substitute_texp(b_texp);
+                let (unbound_ty, ty) = self.substitute(ty);
+                unbound_l.extend(unbound_r);
+                unbound_l.extend(unbound_b);
+                unbound_l.extend(unbound_ty);
+
+                (
+                    unbound_l,
+                    TypedExpr::TSelect(
+                        v1,
+                        v2,
+                        Box::new([
+                            (v1_l, v2_l, l_texp),
+                            (v1_r, v2_r, r_texp),
+                            (v1_b, v2_b, b_texp),
+                        ]),
+                        ty,
+                    ),
+                )
+            }
         }
     }
 
@@ -1047,11 +1194,12 @@ impl Inference {
                     let mut context = context.clone();
                     let (expr_type, mut output) = self.infer(context, expr);
                     let output_ty = Type::TVar(self.fresh_ty_var());
-                    // push Later int constraint, because we want a delayed closure
-                    let expected_type = Type::TLater(output_ty.b(), ClockExpr::Symbolic.into());
-                    output
-                        .constraints
-                        .push(Constraint::TypeEqual(expr_type.clone(), expected_type));
+                    // We optionally require the output type to be dealyed. But it really can be anything
+                    // so we do not push a constraint on the expected type of the output to be a TLater
+                    // let expected_type = Type::TLater(output_ty.b(), ClockExpr::Symbolic.into());
+                    // output
+                    //    .constraints
+                    //    .push(Constraint::TypeEqual(expr_type.clone(), expected_type));
 
                     if self.unification(&output.constraints).is_ok() {
                         let (mut unbound, ty) = self.substitute(expr_type);

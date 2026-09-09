@@ -1,16 +1,18 @@
+#![feature(box_patterns)]
+
 pub mod bytecode;
 pub mod vm;
 
 pub use bytecode::{Function, Op};
-pub use vm::{Value, VM};
+pub use vm::{VM, Value};
 
 // LSP in Zed goes out the window
 // with this cfg. Too lazy to find a fix atm.
 //#[cfg(target_arch = "wasm32")]
 pub mod wasm_exports {
     use crate::{
-        vm::{WasmBackend, VM},
         Function, Value,
+        vm::{VM, WasmBackend},
     };
     use postcard;
     use wasm_bindgen::prelude::*;
@@ -102,36 +104,16 @@ pub mod wasm_exports {
         /// JS output `[output_idx, value]` row per output that ticked.
         #[wasm_bindgen]
         pub fn step(&mut self, channel_idx: usize, val: i32) -> js_sys::Array {
-            self.vm.channels[channel_idx] = val;
-            let mask: u32 = 1u32 << channel_idx;
-            let updates = js_sys::Array::new();
-            let WasmVM { vm, output_thunks } = self;
-            for (i, thunk) in output_thunks.iter_mut().enumerate() {
-                if thunk.clock() & mask == 0 {
-                    continue;
-                }
-                let stepped = match std::mem::replace(thunk, Value::Unit) {
-                    Value::Thunk {
-                        fun_idx, captures, ..
-                    } => vm.execute(fun_idx, captures.into_vec()),
-                    other => panic!("expected thunk at output {i}, got {other:?}"),
-                };
+            let updates = self.vm.step(&mut self.output_thunks, channel_idx, val);
+            let js_updates = js_sys::Array::new();
+            updates.into_iter().for_each(|(output_idx, value)| {
                 let row = js_sys::Array::new();
-                row.push(&JsValue::from(i as u32));
-                match stepped {
-                    Value::Tuple(elems) => {
-                        let mut elems = elems.into_vec();
-                        let next = elems.remove(1);
-                        row.push(&elems.remove(0).into());
-                        *thunk = next;
-                    }
-                    other => {
-                        row.push(&other.into());
-                    }
-                }
-                updates.push(&row);
-            }
-            updates
+                row.push(&JsValue::from(output_idx));
+                row.push(&value.into());
+                js_updates.push(&row);
+            });
+
+            js_updates
         }
 
         #[wasm_bindgen]
