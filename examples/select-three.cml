@@ -1,0 +1,39 @@
+chan A1 : int;
+chan A2 : int;
+chan A3 : int;
+
+react : O Sig int
+def react =
+    let a1 = wait A1 in
+    let a2 = wait A2 in
+    let a3 = wait A3 in
+    let s1 = delay {cl(a1) U cl(a2)} (
+        select a1 a2 {
+            left f s -> f :: react
+            right f s -> s :: react
+            // should not happen
+            both f s -> 42 :: react
+        }
+    ) in
+    let s2 = delay {cl(a2) U cl(a3)} (
+        select a1 a2 {
+            left f s -> f :: react
+            right f s -> s :: react
+            // should not happen
+            both f s -> 42 :: react
+        }
+    ) in
+    delay {cl(s1) U cl(s2)} (
+        select s1 s2 {
+            // Using f in left and s in right is currently
+            // not supported. They need advancing
+            // which we do not handle.
+            left f s -> 23 :: react
+            right f s -> 25 :: react
+            // can happen with input on A2
+            both f s -> 900 :: react
+        }
+    )
+;
+
+print <- react;
