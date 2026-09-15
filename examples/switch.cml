@@ -1,0 +1,36 @@
+chan A1 : int;
+chan A2 : int;
+
+switch : Sig int -> O Sig int -> Sig int
+def switch sig d =
+    // We cannot destructure the signal directly
+    // in the signature so we do it here.
+    // Also we do not support "'" in names
+    // so "p" is for prime, following the
+    // example in the Async RaTT paper.
+    let x = sig.0 in
+    let xs = sig.1 in
+    x :: delay {cl(xs) U cl(d)} (
+        select xs d {
+            left xsp dp -> switch xsp dp
+            right _ dp -> dp
+            both _ dp -> dp
+        }
+    )
+;
+
+sig : Sig int
+def sig =
+    let a1 = wait A1 in
+    1 :: delay {cl(a1)} (sig)
+;
+
+delayedsig : O Sig int
+def delayedsig =
+    let a2 = wait A2 in
+    delay {cl(a2)} (
+        advance a2 :: delayedsig
+    )
+;
+
+print <- switch sig delayedsig;
